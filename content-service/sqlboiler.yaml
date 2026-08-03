@@ -1,0 +1,53 @@
+output: "drivers/dbmodels"
+wipe: false
+no-tests: true
+pkgname: "dbmodels"
+
+psql:
+  dbname: "postgres"
+  user: "postgres"
+  pass: "postgres"
+  host: "localhost"
+  port: "5432"
+  schema: "public"
+  sslmode: "disable"
+  whitelist:
+    - "posts"
+    - "post_photos"
+    - "photos"
+    - "comments"
+    - "post_votes"
+    - "comment_votes"
+    - "user_seen_posts"
+    - "saved_posts"
+    - "users"
+    - "comment_votes"
+    - "saved_posts"
+    - "notifications"
+    - "user_devices"
+
+aliases:
+  tables:
+    posts:
+      relationships:
+        comments:
+          local: "RelatedComments"
+          foreign: "Post"
+    comments:
+      relationships:
+        comments.comment_id:
+          local: "ParentComment"
+          foreign: "ChildComments"
+
+types:
+  - tables:
+      - "posts"
+    match:
+      db_type: "USER-DEFINED"
+      name: "location"
+      nullable: true
+    replace:
+      type: "geotypes.NullPoint"
+    imports:
+      third_party:
+        - '"github.com/beka-birhanu/yetbota/content-service/drivers/geotypes"'

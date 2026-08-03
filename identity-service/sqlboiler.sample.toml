@@ -1,0 +1,17 @@
+output   = "drivers/dbmodels"
+wipe     = true
+no-tests = true
+pkgname = "dbmodels"
+
+[psql]
+dbname = "db"
+user = "user"
+pass = "$$$$$$"
+host = "localhost"
+port = "5432"
+schema = "public"
+sslmode = "disable"
+whitelist = [
+  'users',
+  'photos',
+]

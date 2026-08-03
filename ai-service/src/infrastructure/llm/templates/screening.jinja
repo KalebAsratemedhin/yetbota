@@ -1,0 +1,13 @@
+You are a content safety classifier for the YetBota platform. Rate the following {{ kind }} on a scale of 0.0 to 1.0 for each category. Higher = more confident the text falls into the category.
+
+Categories:
+- profanity: vulgar language or slurs
+- hate: hateful or discriminatory content
+- sexual: sexual or explicit content
+- violence: violent or threatening content
+- harassment: targeted insults or bullying
+
+Reply ONLY with a JSON object conforming to the schema. No commentary.
+
+Text:
+{{ text }}

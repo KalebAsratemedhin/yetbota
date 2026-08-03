@@ -1,0 +1,182 @@
+# Local development: infrastructure + app services.
+# App services read per-service env files; compose substitution uses backend/.env:
+#   docker compose --env-file .env up -d --build
+# Reset data volumes (e.g. Postgres major version bump):
+#   docker compose --env-file .env down -v
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: yetbota-postgres
+    ports:
+      - "${postgresPort:-5432}:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: yetbota-redis
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${redisPassword:-redispass}",
+      ]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${redisPassword:-redispass}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  surrealdb:
+    image: surrealdb/surrealdb:v2
+    container_name: yetbota-surrealdb
+    user: root
+    command: start --log info --user root --pass root file:/data/database.db
+    ports:
+      - "${SURREALDB_PORT:-8000}:8000"
+    volumes:
+      - surrealdb_data:/data
+    healthcheck:
+      test: ["CMD", "/surreal", "isready", "--endpoint", "http://127.0.0.1:8000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: yetbota-rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${rabbitmqUser:-guest}
+      RABBITMQ_DEFAULT_PASS: ${rabbitmqPassword:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  identity-service:
+    build:
+      context: ./identity-service
+      dockerfile: Dockerfile
+    container_name: yetbota-identity-service
+    ports:
+      - "${IDENTITY_PORT:-6699}:6699"
+    env_file:
+      - ./identity-service/.env
+    environment:
+      postgresHost: postgres
+      postgresUser: postgres
+      postgresPassword: postgres
+      postgresDB: postgres
+      postgresSslMode: disable
+      redisAddress: redis:6379
+      redisPassword: redispass
+      redisTls: "false"
+      surrealdbUrl: ws://surrealdb:8000
+      surrealdbUser: root
+      surrealdbPassword: root
+      surrealdbNamespace: yetbota
+      surrealdbDatabase: follow
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      surrealdb:
+        condition: service_healthy
+
+  content-service:
+    build:
+      context: ./content-service
+      dockerfile: Dockerfile
+    container_name: yetbota-content-service
+    ports:
+      - "${CONTENT_PORT:-9966}:9966"
+    env_file:
+      - ./content-service/.env
+    environment:
+      postgresHost: postgres
+      postgresUser: postgres
+      postgresPassword: postgres
+      postgresDB: postgres
+      postgresSslMode: disable
+      redisAddress: redis:6379
+      redisPassword: redispass
+      redisTls: "false"
+      rabbitmqUrl: amqp://${rabbitmqUser:-guest}:${rabbitmqPassword:-guest}@rabbitmq:5672/
+      surrealdbUrl: ws://surrealdb:8000
+      surrealdbUser: root
+      surrealdbPassword: root
+      surrealdbNamespace: yetbota
+      surrealdbFollowDatabase: follow
+      surrealdbSimilarityDatabase: similarity
+      aiServiceBaseURL: http://ai-service:8989
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      surrealdb:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: yetbota-ai-service
+    ports:
+      - "${AI_PORT:-8989}:8989"
+    env_file:
+      - ./ai-service/.env
+    environment:
+      postgresHost: postgres
+      postgresUser: postgres
+      postgresPassword: postgres
+      postgresDB: postgres
+      postgresSslMode: disable
+      surrealdbUrl: ws://surrealdb:8000
+      surrealdbUser: root
+      surrealdbPassword: root
+      surrealdbNamespace: yetbota
+      surrealdbDatabase: similarity
+      rabbitmqUrl: amqp://${rabbitmqUser:-guest}:${rabbitmqPassword:-guest}@rabbitmq:5672/
+      contentServiceBaseURL: http://content-service:9966
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      surrealdb:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  surrealdb_data:

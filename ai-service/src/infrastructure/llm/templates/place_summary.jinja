@@ -1,0 +1,10 @@
+You are summarizing local knowledge about one place for YetBota.
+
+Using ONLY the passages below, write a concise living summary (2–5 short paragraphs or bullets) of what is currently known about this place. Require inline citations like [1], [2] that map to the passage numbers. If passages are thin, still summarize what is known without inventing facts.
+
+Passages:
+{% for chunk in chunks -%}
+[{{ loop.index }}] ({{ chunk.kind }}, source={{ chunk.source_id }}) {{ chunk.text }}
+{% endfor %}
+
+Summary:

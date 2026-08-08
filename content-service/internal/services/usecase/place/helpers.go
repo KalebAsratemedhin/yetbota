@@ -43,7 +43,7 @@ func placeFromAddReq(req *AddRequest, userID string) *domainPlace.Place {
 		Address:         null.NewString(strings.TrimSpace(req.Address), strings.TrimSpace(req.Address) != ""),
 		Location:        location,
 		CreatedBy:       userID,
-		Status:          constants.PlaceStatusPending,
+		Status:          constants.PlaceStatusVisible,
 		ConfidenceScore: 0,
 		CreatedAt:       now,
 		UpdatedAt:       now,

@@ -9,6 +9,7 @@ import (
 	"github.com/beka-birhanu/toddler/status"
 	"github.com/beka-birhanu/yetbota/content-service/drivers/validator"
 	domainPlacePhoto "github.com/beka-birhanu/yetbota/content-service/internal/domain/placephoto"
+	"github.com/lib/pq"
 )
 
 type repository struct {
@@ -101,7 +102,7 @@ func (r *repository) List(ctx context.Context, opts *domainPlacePhoto.Options, s
 		return nil, nil
 	}
 
-	args := []any{opts.PlaceIDs}
+	args := []any{pq.Array(opts.PlaceIDs)}
 	where := "pp.place_id = ANY($1)"
 	if opts.PositionEq != nil {
 		args = append(args, *opts.PositionEq)

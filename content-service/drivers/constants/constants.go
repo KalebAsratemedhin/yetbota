@@ -64,6 +64,7 @@ var SkipAuthHTTP = map[string]struct{}{
 	"GET /places/":       {},
 	"GET /places/{id}":   {},
 	"GET /places/{id}/contributions": {},
+	"GET /places/{id}/posts":         {},
 	"GET /questions/":    {},
 	"GET /questions/near": {},
 	"GET /place-feed/":   {},

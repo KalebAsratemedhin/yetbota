@@ -200,6 +200,7 @@ func decodePostListHTTP(ctx context.Context, r *http.Request) (any, error) {
 
 	opts := postSvc.ListOptions{
 		UserID:    q.Get("user_id"),
+		PlaceID:   q.Get("place_id"),
 		Tags:      q["tags"],
 		Search:    q.Get("search"),
 		SortField: mapSortFieldHTTP(q.Get("sort_by")),

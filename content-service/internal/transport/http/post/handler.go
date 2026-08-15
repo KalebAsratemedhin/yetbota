@@ -29,7 +29,7 @@ func NewHandler(cfg *Config) (http.Handler, error) {
 		opts := shared.ServerOptions()
 
 		mux.Handle("POST /", kithttp.NewServer(auth("POST", "/")(cfg.E.PostAdd), decodePostAddHTTP, encodePostAddHTTP, opts...))
-		mux.Handle("GET /", kithttp.NewServer(auth("GET", "/")(cfg.E.PostList), decodePostListHTTP, encodePostListHTTP, opts...))
+		mux.Handle("GET /", kithttp.NewServer(auth("GET", "/")(cfg.E.PostList), decodePostListHTTP, EncodeListHTTP, opts...))
 		mux.Handle("GET /{id}", kithttp.NewServer(auth("GET", "/{id}")(cfg.E.PostRead), decodePostReadHTTP, encodePostReadHTTP, opts...))
 		mux.Handle("PATCH /{id}", kithttp.NewServer(auth("PATCH", "/{id}")(cfg.E.PostUpdate), decodePostUpdateHTTP, encodePostUpdateHTTP, opts...))
 		mux.Handle("POST /{id}/vote", kithttp.NewServer(auth("POST", "/{id}/vote")(cfg.E.PostVote), decodePostVoteHTTP, encodePostVoteHTTP, opts...))

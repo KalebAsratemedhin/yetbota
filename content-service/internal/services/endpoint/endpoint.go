@@ -25,9 +25,7 @@ type Endpoints struct {
 	PostSave   endpoint.Endpoint
 	PostUnsave endpoint.Endpoint
 
-	PlaceAdd           endpoint.Endpoint
 	PlaceRead          endpoint.Endpoint
-	PlaceUpdate        endpoint.Endpoint
 	PlaceList          endpoint.Endpoint
 	PlaceBookmark      endpoint.Endpoint
 	PlaceUnbookmark    endpoint.Endpoint
@@ -100,9 +98,7 @@ func NewEndpoints(c *Config) (*Endpoints, error) {
 		PostSave:   makePostSaveEndpoint(c.PostService),
 		PostUnsave: makePostUnsaveEndpoint(c.PostService),
 
-		PlaceAdd:           makePlaceAddEndpoint(c.PlaceService),
 		PlaceRead:          makePlaceReadEndpoint(c.PlaceService),
-		PlaceUpdate:        makePlaceUpdateEndpoint(c.PlaceService),
 		PlaceList:          makePlaceListEndpoint(c.PlaceService),
 		PlaceBookmark:      makePlaceBookmarkEndpoint(c.PlaceService),
 		PlaceUnbookmark:    makePlaceUnbookmarkEndpoint(c.PlaceService),

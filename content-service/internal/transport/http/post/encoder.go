@@ -38,6 +38,7 @@ type postDTO struct {
 	Location         *coordinateDTO    `json:"location,omitempty"`
 	Address          string            `json:"address,omitempty"`
 	AttachedPostID   string            `json:"attached_post_id,omitempty"`
+	PlaceID          string            `json:"place_id,omitempty"`
 	AttachedPost     *postDTO          `json:"attached_post,omitempty"`
 	Interaction      *string           `json:"interaction,omitempty"`
 	FollowingAuthor  *bool             `json:"following_author,omitempty"`
@@ -98,6 +99,7 @@ func toPostDTO(p *dbmodels.Post, photos []*postSvc.OrderedPhoto) postDTO {
 		Location:         loc,
 		Address:          p.Address.String,
 		AttachedPostID:   p.AttachedPostID.String,
+		PlaceID:          p.PlaceID.String,
 		ModerationStatus: p.ModerationStatus,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
@@ -234,7 +236,8 @@ type listData struct {
 	PageSize int       `json:"page_size"`
 }
 
-func encodePostListHTTP(ctx context.Context, w http.ResponseWriter, resp any) error {
+// EncodeListHTTP encodes a post list response. Exported so place routes can reuse it.
+func EncodeListHTTP(ctx context.Context, w http.ResponseWriter, resp any) error {
 	if te, ok := resp.(*toddlerr.Error); ok {
 		return te
 	}

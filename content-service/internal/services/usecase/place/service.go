@@ -21,10 +21,8 @@ import (
 )
 
 type Service interface {
-	Add(ctx context.Context, ctxSess *ctxRP.Context, req *AddRequest) (*AddResponse, error)
 	Read(ctx context.Context, ctxSess *ctxRP.Context, req *ReadRequest) (*ReadResponse, error)
 	List(ctx context.Context, ctxSess *ctxRP.Context, req *ListRequest) (*ListResponse, error)
-	Update(ctx context.Context, ctxSess *ctxRP.Context, req *UpdateRequest) (*UpdateResponse, error)
 	Bookmark(ctx context.Context, ctxSess *ctxRP.Context, req *BookmarkRequest) (*BookmarkResponse, error)
 	Unbookmark(ctx context.Context, ctxSess *ctxRP.Context, req *UnbookmarkRequest) (*UnbookmarkResponse, error)
 	Confirm(ctx context.Context, ctxSess *ctxRP.Context, req *ConfirmRequest) (*ConfirmResponse, error)

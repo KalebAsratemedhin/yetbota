@@ -20,6 +20,7 @@ import (
 	"github.com/beka-birhanu/yetbota/content-service/drivers/postgres"
 	rabbitmqDriver "github.com/beka-birhanu/yetbota/content-service/drivers/rabbitmq"
 	redisDriver "github.com/beka-birhanu/yetbota/content-service/drivers/redis"
+	placematchDriver "github.com/beka-birhanu/yetbota/content-service/drivers/placematch"
 	"github.com/beka-birhanu/yetbota/content-service/drivers/storage"
 	"github.com/beka-birhanu/yetbota/content-service/drivers/validator"
 	"github.com/pressly/goose"
@@ -354,6 +355,14 @@ func main() {
 		panic(fmt.Errorf("error creating comment repo: %v", err))
 	}
 
+	placeMatcher, err := placematchDriver.NewClient(&placematchDriver.Config{
+		BaseURL:   cfg.AIService.BaseURL,
+		TimeoutMS: cfg.AIService.Timeout,
+	})
+	if err != nil {
+		panic(fmt.Errorf("error creating place match client: %v", err))
+	}
+
 	runtime, err := processors.NewRuntime(&processors.RuntimeConfig{
 		RabbitMQClient:       rabbitClient,
 		PostPhotoRepo:        postPhotoRepo,
@@ -368,6 +377,9 @@ func main() {
 		PlaceRepo:            placeRepo,
 		ContributionRepo:     contributionRepo,
 		ActivityRepo:         placeActivityRepo,
+		PlaceMatcher:         placeMatcher,
+		PlaceLinkMinScore:    cfg.PlaceLinking.MinMatchScoreOrDefault(),
+		PlaceLinkRadiusKm:    cfg.PlaceLinking.LinkRadiusKmOrDefault(),
 		BatchStore:           fanOutBatchStore,
 		SeenCache:            seenCache,
 		SummarizeDebounce:    summarizeDebounce,

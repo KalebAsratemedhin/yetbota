@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/types"
 	toddlerr "github.com/beka-birhanu/toddler/error"
 	"github.com/beka-birhanu/toddler/status"
 	"github.com/beka-birhanu/yetbota/content-service/drivers/constants"
@@ -79,12 +80,21 @@ func postFromAddReq(req *AddRequest) *dbmodels.Post {
 		ID:             uuid.NewString(),
 		Title:          req.Title,
 		Description:    req.Description,
-		Tags:           req.Tags,
+		Tags:           nonNilTags(req.Tags),
 		IsQuestion:     req.IsQuestion,
 		Location:       location,
 		Address:        null.NewString(req.Address, req.Address != ""),
 		AttachedPostID: null.NewString(req.AttachedPostID, req.AttachedPostID != ""),
 	}
+}
+
+// nonNilTags ensures Postgres text[] NOT NULL gets '{}' instead of SQL NULL.
+// sqlboiler StringArray encodes a nil Go slice as NULL.
+func nonNilTags(tags []string) types.StringArray {
+	if tags == nil {
+		return types.StringArray{}
+	}
+	return types.StringArray(tags)
 }
 
 // postPhotos fetches and assembles the ordered photos for a single post.

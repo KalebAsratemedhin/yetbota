@@ -3,6 +3,8 @@ package surrealdb
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/beka-birhanu/yetbota/content-service/drivers/validator"
 	surrealdb "github.com/surrealdb/surrealdb.go"
@@ -26,14 +28,41 @@ func (c *Config) Validate() error {
 	return validator.Validate.Struct(c)
 }
 
+// httpEndpointForGraph prefers HTTP for request/response graph queries.
+// WebSocket works but the Surreal Go WS client logs "unavailable ResponseChannel"
+// whenever a reply arrives after the caller cancelled/returned (orphan RPC id).
+// We do not use LIVE queries, so HTTP is the correct transport.
+func httpEndpointForGraph(raw string) (string, error) {
+	u, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil {
+		return "", fmt.Errorf("parse surrealdb url: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "ws":
+		u.Scheme = "http"
+	case "wss":
+		u.Scheme = "https"
+	case "http", "https":
+		// already correct
+	default:
+		return "", fmt.Errorf("unsupported surrealdb url scheme %q (use http(s) or ws(s))", u.Scheme)
+	}
+	return u.String(), nil
+}
+
 func NewClient(ctx context.Context, c *Config) (*Client, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 
-	db, err := surrealdb.FromEndpointURLString(ctx, c.URL)
+	endpoint, err := httpEndpointForGraph(c.URL)
 	if err != nil {
-		return nil, fmt.Errorf("surrealdb connect: %w", err)
+		return nil, err
+	}
+
+	db, err := surrealdb.FromEndpointURLString(ctx, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("surrealdb connect (%s): %w", endpoint, err)
 	}
 
 	if err := db.Use(ctx, c.Namespace, c.Database); err != nil {

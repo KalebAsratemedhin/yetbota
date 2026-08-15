@@ -12,6 +12,7 @@ import (
 	domainPhoto "github.com/beka-birhanu/yetbota/content-service/internal/domain/photo"
 	domainPlace "github.com/beka-birhanu/yetbota/content-service/internal/domain/place"
 	domainActivity "github.com/beka-birhanu/yetbota/content-service/internal/domain/placeactivity"
+	domainPlaceMatch "github.com/beka-birhanu/yetbota/content-service/internal/domain/placematch"
 	domainPost "github.com/beka-birhanu/yetbota/content-service/internal/domain/post"
 	domainPostphoto "github.com/beka-birhanu/yetbota/content-service/internal/domain/postphoto"
 	domainPostSim "github.com/beka-birhanu/yetbota/content-service/internal/domain/postsimilarity"
@@ -44,6 +45,9 @@ type RuntimeConfig struct {
 	PlaceRepo            domainPlace.Repository
 	ContributionRepo     domainContribution.Repository
 	ActivityRepo         domainActivity.Repository
+	PlaceMatcher         domainPlaceMatch.Client
+	PlaceLinkMinScore    float64
+	PlaceLinkRadiusKm    float64
 	BatchStore           domainStorage.Set          `validate:"required"`
 	SeenCache            domainStorage.Set          `validate:"required"`
 	SummarizeDebounce    domainStorage.Set
@@ -166,6 +170,10 @@ func NewRuntime(cfg *RuntimeConfig) (*Runtime, error) {
 			ActivityRepo:     cfg.ActivityRepo,
 			Consumer:         rabbitmq.NewConsumer(cfg.RabbitMQClient),
 			Publisher:        publisher,
+			Executor:         jobPublisher,
+			PlaceMatcher:     cfg.PlaceMatcher,
+			LinkRadiusKm:     cfg.PlaceLinkRadiusKm,
+			MinMatchScore:    cfg.PlaceLinkMinScore,
 		})
 		if err != nil {
 			return nil, err

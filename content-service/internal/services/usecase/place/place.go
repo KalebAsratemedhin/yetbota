@@ -3,94 +3,16 @@ package place
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/aarondl/null/v8"
 	toddlerr "github.com/beka-birhanu/toddler/error"
 	"github.com/beka-birhanu/toddler/status"
 	"github.com/beka-birhanu/yetbota/content-service/drivers/constants"
-	"github.com/beka-birhanu/yetbota/content-service/drivers/dbmodels"
-	"github.com/beka-birhanu/yetbota/content-service/drivers/geotypes"
-	"github.com/beka-birhanu/yetbota/content-service/drivers/utils"
 	ctxRP "github.com/beka-birhanu/yetbota/content-service/internal/domain/context"
 	domainContribution "github.com/beka-birhanu/yetbota/content-service/internal/domain/contribution"
 	domainContributionVote "github.com/beka-birhanu/yetbota/content-service/internal/domain/contributionvote"
-	domainPlace "github.com/beka-birhanu/yetbota/content-service/internal/domain/place"
 	domainPlacePhoto "github.com/beka-birhanu/yetbota/content-service/internal/domain/placephoto"
-	"github.com/beka-birhanu/yetbota/content-service/internal/domain/processors"
-	domainScreening "github.com/beka-birhanu/yetbota/content-service/internal/domain/screening"
-	repository "github.com/beka-birhanu/yetbota/content-service/internal/services/repository"
-	"github.com/twpayne/go-geom"
 )
-
-func (s *svc) Add(ctx context.Context, ctxSess *ctxRP.Context, req *AddRequest) (*AddResponse, error) {
-	if err := req.Validate(); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if err := utils.AllowAccess(ctxSess); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	screenReq := domainScreeningRequest(req, ctxSess.UserSession.UserID)
-	if err := screenOrReject(ctx, s.screening, &screenReq); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-
-	place := placeFromAddReq(req, ctxSess.UserSession.UserID)
-	uploaded, err := s.uploadPhotos(ctx, place.ID, req.Photos)
-	if err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = s.deleteUploads(ctx, uploaded.photos)
-		}
-	}()
-
-	tx, err := repository.BeginNewTx(ctx)
-	if err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	if err = s.placeRepo.Add(ctx, tx, place); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if len(uploaded.photos) > 0 {
-		if err = s.photoRepo.AddBulk(ctx, tx, uploaded.photos); err != nil {
-			ctxSess.SetErrorMessage(err.Error())
-			return nil, err
-		}
-		if err = s.placePhotoRepo.AddBulk(ctx, tx, uploaded.placePhotos); err != nil {
-			ctxSess.SetErrorMessage(err.Error())
-			return nil, err
-		}
-	}
-	if err = repository.CommitTx(tx); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-
-	ordered, err := s.assembleOrderedPhoto(ctx, uploaded.placePhotos, PhotoResolutionOriginal)
-	if err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if err = s.executor.TriggerPlaceIngestWorkflow(ctx, processors.PlaceIngestWorkflowInput{PlaceID: place.ID}); err != nil {
-		fmt.Printf("unable to trigger place ingest workflow: %s\n", err)
-	}
-	return &AddResponse{Place: place, Photos: ordered}, nil
-}
 
 func (s *svc) Read(ctx context.Context, ctxSess *ctxRP.Context, req *ReadRequest) (*ReadResponse, error) {
 	if err := req.Validate(); err != nil {
@@ -172,10 +94,13 @@ func (s *svc) Read(ctx context.Context, ctxSess *ctxRP.Context, req *ReadRequest
 
 	grouped := make(map[string][]*ContributionView)
 	for _, c := range contribs {
-		grouped[c.Kind] = append(grouped[c.Kind], &ContributionView{
-			Contribution: c,
-			UserVote:     votesByContribution(votes, c.ID),
-		})
+		var userVote *string
+		if v := votes[c.ID]; v != nil {
+			vt := v.VoteType
+			userVote = &vt
+		}
+		item := &ContributionView{Contribution: c, UserVote: userVote}
+		grouped[c.Kind] = append(grouped[c.Kind], item)
 	}
 	return &ReadResponse{
 		Place:               place,
@@ -235,185 +160,4 @@ func (s *svc) List(ctx context.Context, ctxSess *ctxRP.Context, req *ListRequest
 		Page:     req.Page,
 		PageSize: req.PageSize,
 	}, nil
-}
-
-func (s *svc) Update(ctx context.Context, ctxSess *ctxRP.Context, req *UpdateRequest) (*UpdateResponse, error) {
-	if err := req.Validate(); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if err := utils.AllowAccess(ctxSess); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	place, err := s.placeRepo.Read(ctx, req.ID)
-	if err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if !isAdmin(ctxSess) && place.CreatedBy != ctxSess.UserSession.UserID {
-		err = &toddlerr.Error{
-			PublicStatusCode:  status.Forbidden,
-			ServiceStatusCode: status.Forbidden,
-			PublicMessage:     "You do not have access to update this place.",
-			ServiceMessage:    fmt.Sprintf("user %s tried to update place %s", ctxSess.UserSession.UserID, place.ID),
-		}
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-
-	screenReq := domainScreeningRequestUpdate(req, place, ctxSess.UserSession.UserID)
-	if err := screenOrReject(ctx, s.screening, &screenReq); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-
-	var uploaded *uploadPhotosResponse
-	var existing []*domainPlacePhoto.PlacePhoto
-	var oldPhotoURLs []string
-	if len(req.UpsertPhotos) > 0 {
-		uploaded, err = s.uploadPhotos(ctx, place.ID, req.UpsertPhotos)
-		if err != nil {
-			ctxSess.SetErrorMessage(err.Error())
-			return nil, err
-		}
-		defer func() {
-			if err != nil {
-				_ = s.deleteUploads(ctx, uploaded.photos)
-			}
-		}()
-		existing, err = s.placePhotoRepo.List(ctx, &domainPlacePhoto.Options{
-			PlaceIDs:  []string{place.ID},
-			LoadPhoto: true,
-		}, &domainPlacePhoto.SortOptions{
-			Field:     domainPlacePhoto.SortFieldPosition,
-			Direction: domainPlacePhoto.SortDirectionAsc,
-		})
-		if err != nil {
-			ctxSess.SetErrorMessage(err.Error())
-			return nil, err
-		}
-	}
-
-	tx, err := repository.BeginNewTx(ctx)
-	if err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	if req.Name != nil {
-		place.Name = *req.Name
-	}
-	if req.Description != nil {
-		place.Description = *req.Description
-	}
-	if req.Address != nil {
-		trim := strings.TrimSpace(*req.Address)
-		place.Address = null.NewString(trim, trim != "")
-	}
-	if req.Latitude != nil && req.Longitude != nil {
-		place.Location = geotypes.NullPoint{
-			Point: geom.NewPoint(geom.XY).MustSetCoords([]float64{*req.Longitude, *req.Latitude}),
-			Valid: true,
-		}
-	}
-	if req.Status != nil && isAdmin(ctxSess) {
-		place.Status = *req.Status
-	}
-	place.UpdatedAt = time.Now()
-	if err = s.placeRepo.Update(ctx, tx, place); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-
-	if len(req.UpsertPhotos) > 0 {
-		existingByPos := make(map[int]*domainPlacePhoto.PlacePhoto, len(existing))
-		for _, ep := range existing {
-			existingByPos[ep.Position] = ep
-		}
-		for i, newPP := range uploaded.placePhotos {
-			newPhoto := uploaded.photos[i]
-			if current, ok := existingByPos[newPP.Position]; ok {
-				if current.PhotoData != nil {
-					oldPhotoURLs = append(oldPhotoURLs, current.PhotoData.URL)
-				}
-				oldPhotoID := current.PhotoID
-				if err = s.photoRepo.Add(ctx, tx, newPhoto); err != nil {
-					ctxSess.SetErrorMessage(err.Error())
-					return nil, err
-				}
-				current.PhotoID = newPhoto.ID
-				if err = s.placePhotoRepo.Update(ctx, tx, current); err != nil {
-					ctxSess.SetErrorMessage(err.Error())
-					return nil, err
-				}
-				if err = s.photoRepo.Delete(ctx, tx, oldPhotoID); err != nil {
-					ctxSess.SetErrorMessage(err.Error())
-					return nil, err
-				}
-			} else {
-				if err = s.photoRepo.Add(ctx, tx, newPhoto); err != nil {
-					ctxSess.SetErrorMessage(err.Error())
-					return nil, err
-				}
-				if err = s.placePhotoRepo.Add(ctx, tx, newPP); err != nil {
-					ctxSess.SetErrorMessage(err.Error())
-					return nil, err
-				}
-			}
-		}
-	}
-
-	if err = repository.CommitTx(tx); err != nil {
-		ctxSess.SetErrorMessage(err.Error())
-		return nil, err
-	}
-	if len(oldPhotoURLs) > 0 {
-		oldPhotos := make([]*dbmodels.Photo, 0, len(oldPhotoURLs))
-		for _, u := range oldPhotoURLs {
-			oldPhotos = append(oldPhotos, &dbmodels.Photo{URL: u})
-		}
-		if delErr := s.deleteUploads(ctx, oldPhotos); delErr != nil {
-			ctxSess.SetErrorMessage(delErr.Error())
-		}
-	}
-	return &UpdateResponse{Place: place}, nil
-}
-
-func domainScreeningRequest(req *AddRequest, userID string) domainScreening.Request {
-	text := strings.TrimSpace(req.Name)
-	if req.Description != "" {
-		text = strings.TrimSpace(text + "\n\n" + req.Description)
-	}
-	return domainScreening.Request{
-		Kind:   "place",
-		Text:   text,
-		UserID: userID,
-	}
-}
-
-func domainScreeningRequestUpdate(req *UpdateRequest, current *domainPlace.Place, userID string) domainScreening.Request {
-	name := current.Name
-	if req.Name != nil {
-		name = *req.Name
-	}
-	desc := current.Description
-	if req.Description != nil {
-		desc = *req.Description
-	}
-	text := strings.TrimSpace(name)
-	if desc != "" {
-		text = strings.TrimSpace(text + "\n\n" + desc)
-	}
-	return domainScreening.Request{
-		Kind:    "place",
-		Text:    text,
-		UserID:  userID,
-		PlaceID: current.ID,
-	}
 }

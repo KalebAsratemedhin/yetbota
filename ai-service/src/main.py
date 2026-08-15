@@ -9,6 +9,7 @@ import uvicorn
 from application.consult_assistant import ConsultAssistant
 from application.ingest_content import IngestContent
 from application.manage_conversation import ManageConversation
+from application.match_place import MatchPlace
 from application.screen_text import ScreenText
 from application.summarize_place import SummarizePlace
 from infrastructure.chunking import RuneWindowChunker
@@ -151,11 +152,14 @@ async def _serve(settings: Settings) -> None:
             cache_ttl_s=settings.screening.cache_ttl_s,
         )
 
+        place_matcher = MatchPlace(embedder=embedder, vector_store=vector_store)
+
         app = create_app(settings)
         app.state.settings = settings
         app.state.assistant = assistant_use_case
         app.state.conversations = conversation_use_case
         app.state.screening = screening_use_case
+        app.state.place_matcher = place_matcher
         app.state.similarity_graph = similarity_graph
 
         uv_config = uvicorn.Config(

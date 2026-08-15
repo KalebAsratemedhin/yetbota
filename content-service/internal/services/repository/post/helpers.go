@@ -23,6 +23,9 @@ func FilterMods(opts *domainPost.ListOptions) []qm.QueryMod {
 	if opts.UserID != "" {
 		filterMods = append(filterMods, dbmodels.PostWhere.UserID.EQ(opts.UserID))
 	}
+	if opts.PlaceID != "" {
+		filterMods = append(filterMods, dbmodels.PostWhere.PlaceID.EQ(null.StringFrom(opts.PlaceID)))
+	}
 	if opts.Search != "" {
 		pat := fmt.Sprintf("%%%s%%", opts.Search)
 		filterMods = append(filterMods, qm.Expr(

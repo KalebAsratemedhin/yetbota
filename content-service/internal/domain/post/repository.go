@@ -26,6 +26,7 @@ const (
 type ListOptions struct {
 	IDs            []string
 	UserID         string
+	PlaceID        string
 	Tags           []string
 	IsQuestion     *bool
 	AttachedPostID string

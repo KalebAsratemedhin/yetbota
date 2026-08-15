@@ -166,6 +166,7 @@ type UnsaveResponse struct{}
 type ListOptions struct {
 	IDs            []string
 	UserID         string
+	PlaceID        string
 	Tags           []string
 	IsQuestion     *bool
 	AttachedPostID string
@@ -185,6 +186,7 @@ func (r *ListOptions) toDomain(ctxSession *ctxRP.Context) *domainPost.ListOption
 	opts := &domainPost.ListOptions{
 		IDs:            r.IDs,
 		UserID:         r.UserID,
+		PlaceID:        r.PlaceID,
 		Tags:           r.Tags,
 		IsQuestion:     r.IsQuestion,
 		AttachedPostID: r.AttachedPostID,

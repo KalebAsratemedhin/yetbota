@@ -19,12 +19,32 @@ type Configs struct {
 	SurrealDB      *SurrealDB      `yaml:"surrealdb" mapstructure:"surrealdb" validate:"required"`
 	Truth          *Truth          `yaml:"truth" mapstructure:"truth"`
 	Summary        *Summary        `yaml:"summary" mapstructure:"summary"`
+	PlaceLinking   *PlaceLinking   `yaml:"place_linking" mapstructure:"place_linking"`
 }
 
 type Summary struct {
 	DebounceMinutes        int `yaml:"debounce_minutes" mapstructure:"debounce_minutes"`
 	MinContributions       int `yaml:"min_contributions" mapstructure:"min_contributions"`
 	MaxSourceContributions int `yaml:"max_source_contributions" mapstructure:"max_source_contributions"`
+}
+
+type PlaceLinking struct {
+	MinMatchScore float64 `yaml:"min_match_score" mapstructure:"min_match_score"`
+	LinkRadiusKm  float64 `yaml:"link_radius_km" mapstructure:"link_radius_km"`
+}
+
+func (p *PlaceLinking) MinMatchScoreOrDefault() float64 {
+	if p == nil || p.MinMatchScore <= 0 {
+		return 0.75
+	}
+	return p.MinMatchScore
+}
+
+func (p *PlaceLinking) LinkRadiusKmOrDefault() float64 {
+	if p == nil || p.LinkRadiusKm <= 0 {
+		return 0.5
+	}
+	return p.LinkRadiusKm
 }
 
 func (s *Summary) DebounceSecondsOrDefault() int64 {

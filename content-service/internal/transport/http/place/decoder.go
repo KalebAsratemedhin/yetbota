@@ -12,8 +12,10 @@ import (
 	toddlerr "github.com/beka-birhanu/toddler/error"
 	"github.com/beka-birhanu/toddler/status"
 	ctxYB "github.com/beka-birhanu/yetbota/content-service/internal/domain/context"
+	domainPost "github.com/beka-birhanu/yetbota/content-service/internal/domain/post"
 	contributionSvc "github.com/beka-birhanu/yetbota/content-service/internal/services/usecase/contribution"
 	placeSvc "github.com/beka-birhanu/yetbota/content-service/internal/services/usecase/place"
+	postSvc "github.com/beka-birhanu/yetbota/content-service/internal/services/usecase/post"
 )
 
 func decodePlaceAddHTTP(ctx context.Context, r *http.Request) (any, error) {
@@ -205,6 +207,44 @@ func decodePlaceContributionListHTTP(ctx context.Context, r *http.Request) (any,
 		Kind:     strings.ToLower(strings.TrimSpace(q.Get("kind"))),
 		Page:     page,
 		PageSize: pageSize,
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	setCtxRequest(ctx, req)
+	return req, nil
+}
+
+func decodePlacePostListHTTP(ctx context.Context, r *http.Request) (any, error) {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	resolution := strings.ToUpper(strings.TrimSpace(q.Get("resolution")))
+
+	sortField := domainPost.ListSortFieldCreatedAt
+	switch strings.ToLower(q.Get("sort_by")) {
+	case "likes":
+		sortField = domainPost.ListSortFieldLikes
+	case "dislikes":
+		sortField = domainPost.ListSortFieldDislikes
+	case "comments":
+		sortField = domainPost.ListSortFieldComments
+	}
+
+	sortDir := domainPost.ListSortDirDesc
+	if strings.EqualFold(q.Get("sort_dir"), "asc") {
+		sortDir = domainPost.ListSortDirAsc
+	}
+
+	req := &postSvc.ListRequest{
+		ListOptions: postSvc.ListOptions{
+			PlaceID:   r.PathValue("id"),
+			SortField: sortField,
+			SortDir:   sortDir,
+			Page:      page,
+			PageSize:  pageSize,
+		},
+		PhotoResolution: postSvc.PhotoResolution(resolution),
 	}
 	if err := req.Validate(); err != nil {
 		return nil, err

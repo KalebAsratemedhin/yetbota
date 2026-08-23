@@ -1,6 +1,0 @@
--r requirements.txt
--r requirements-build.txt
-
-ruff>=0.7
-mypy>=1.13
-import-linter>=2.1

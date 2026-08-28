@@ -1,0 +1,9 @@
+# Local defaults — override with env where needed.
+http:
+  addr: ":8081"
+postgres:
+  url: "postgres://postgres:postgres@localhost:5432/yetbota?sslmode=disable"
+jwt:
+  secret: "dev-only-change-me"
+  ttl_hours: 24
+migrate_on_start: true

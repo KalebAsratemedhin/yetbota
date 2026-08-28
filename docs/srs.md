@@ -15,8 +15,10 @@ Backend shape: three microservices — `content-service` (Go), `identity-service
 | identity-service | Go | Owns auth (signup / sign-in) |
 | ai-service | Python | |
 | Database | PostgreSQL | One shared database for all services |
-| Migrations (Go) | goose | Versioned SQL under each Go service’s `migrations/` |
+| Migrations (Go) | goose-format SQL | Applied on startup (goose-compatible version table) |
 | Data access (Go) | sqlc + pgx | SQL in `.sql` files → generated Go; pgx driver |
+| Password hashing | bcrypt | identity-service |
+| Auth token | JWT (HS256) | Returned on signup and sign-in |
 | Other | TBD | Messaging, etc. |
 
 ## Functional requirements
@@ -37,9 +39,9 @@ Backend shape: three microservices — `content-service` (Go), `identity-service
 - **Main flow:**
   1. User submits a username and password.
   2. System checks the username is available.
-  3. System stores the new account (password stored securely — mechanism TBD).
-  4. User is signed up (session/token handling TBD).
-- **Success:** Account exists; user can proceed to sign in (or is already authenticated — TBD).
+  3. System stores the new account (password hashed with bcrypt).
+  4. System returns a JWT access token.
+- **Success:** Account exists; client holds a token for authenticated requests.
 - **Related FRs:** FR-001, FR-003
 
 ### UC-002 — Sign in
@@ -49,7 +51,7 @@ Backend shape: three microservices — `content-service` (Go), `identity-service
 - **Main flow:**
   1. User submits username and password.
   2. System verifies the credentials.
-  3. User is signed in (session/token handling TBD).
-- **Success:** User is authenticated for subsequent requests.
+  3. System returns a JWT access token.
+- **Success:** User is authenticated for subsequent requests via the token.
 - **Failures:** Wrong username or password → FR-004
 - **Related FRs:** FR-002, FR-004

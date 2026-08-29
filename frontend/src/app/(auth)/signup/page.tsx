@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AuthCard from "@/components/auth/AuthCard";
 import AuthInput from "@/components/auth/AuthInput";
@@ -16,7 +17,6 @@ export default function SignUpPage() {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
   const [signUp, { isLoading }] = useSignUpMutation();
 
   useEffect(() => {
@@ -27,9 +27,10 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setFormError(null);
     if (password.length < 8) {
-      setFormError("Password must be at least 8 characters");
+      toast.error("Invalid details", {
+        description: "Password must be at least 8 characters",
+      });
       return;
     }
     try {
@@ -38,9 +39,12 @@ export default function SignUpPage() {
         username: username.trim(),
         password,
       }).unwrap();
+      toast.success("Account created", { description: "Welcome to Yet Bota." });
       router.replace("/");
     } catch (err) {
-      setFormError(getApiErrorMessage(err, "Sign up failed"));
+      toast.error("Sign up failed", {
+        description: getApiErrorMessage(err, "Could not create your account."),
+      });
     }
   }
 
@@ -81,8 +85,6 @@ export default function SignUpPage() {
           onChange={(ev) => setPassword(ev.target.value)}
           disabled={isLoading}
         />
-
-        {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         <Button
           type="submit"

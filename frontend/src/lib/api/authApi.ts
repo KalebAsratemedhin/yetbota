@@ -3,9 +3,12 @@ import { clearCredentials, setCredentials } from "@/lib/auth/authSlice";
 import {
   toAuthSession,
   type AuthResponse,
+  type ChangePasswordRequest,
   type LogoutRequest,
   type SignInRequest,
   type SignUpRequest,
+  type StatusOK,
+  type UpdateProfileRequest,
   type UserInfo,
 } from "@/lib/auth/types";
 
@@ -47,7 +50,7 @@ export const authApi = baseApi.injectEndpoints({
         }
       },
     }),
-    logout: build.mutation<{ status: string }, void>({
+    logout: build.mutation<StatusOK, void>({
       queryFn: async (_arg, api, _extra, baseQuery) => {
         const refreshToken = (api.getState() as AuthRoot).auth.refreshToken;
         if (!refreshToken) {
@@ -64,14 +67,51 @@ export const authApi = baseApi.injectEndpoints({
         if (result.error) {
           return { data: { status: "ok" } };
         }
-        return { data: result.data as { status: string } };
+        return { data: result.data as StatusOK };
       },
     }),
     me: build.query<UserInfo, void>({
       query: () => "/auth/me",
       providesTags: ["Me"],
     }),
+    updateProfile: build.mutation<UserInfo, UpdateProfileRequest>({
+      query: (body) => ({
+        url: "/auth/me",
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: ["Me"],
+    }),
+    changePassword: build.mutation<StatusOK, ChangePasswordRequest>({
+      query: (body) => ({
+        url: "/auth/password",
+        method: "POST",
+        body,
+      }),
+    }),
+    deleteAccount: build.mutation<StatusOK, void>({
+      query: () => ({
+        url: "/auth/me",
+        method: "DELETE",
+      }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+        } finally {
+          dispatch(clearCredentials());
+          dispatch(baseApi.util.resetApiState());
+        }
+      },
+    }),
   }),
 });
 
-export const { useSignUpMutation, useSignInMutation, useLogoutMutation, useMeQuery } = authApi;
+export const {
+  useSignUpMutation,
+  useSignInMutation,
+  useLogoutMutation,
+  useMeQuery,
+  useUpdateProfileMutation,
+  useChangePasswordMutation,
+  useDeleteAccountMutation,
+} = authApi;

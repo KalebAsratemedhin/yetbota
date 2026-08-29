@@ -2,18 +2,9 @@ package user
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
-)
-
-var (
-	ErrUsernameTaken      = errors.New("username already taken")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrValidation         = errors.New("validation error")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrNotFound           = errors.New("not found")
 )
 
 type User struct {

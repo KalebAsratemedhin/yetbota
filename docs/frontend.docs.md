@@ -46,6 +46,7 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 | `/` | Landing (navbar → hero → … → footer) |
 | `/signin` | Wired to identity signin |
 | `/signup` | Wired to identity signup (full name + username + password) |
+| `/profile` | Inspo-2 layout: cover header, reputation+badges, contributions; ⚙ → settings |
 | `/forgot-password` | Stub (“reset unavailable”) |
 
 ## Layout
@@ -88,4 +89,4 @@ cd frontend && npm run dev
 
 ## Still TBD
 
-Route guards / middleware, profile edit, Embla champions, live trending places, theme toggle UI, deploy.
+Wire posts/bookmarks/reputation to content-service, Embla champions, live trending places, theme toggle UI, deploy.

@@ -3,8 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +11,7 @@ import (
 	httpserver "github.com/yetbota/identity-service/cmd/http"
 	"github.com/yetbota/identity-service/drivers/auth"
 	"github.com/yetbota/identity-service/drivers/config"
+	"github.com/yetbota/identity-service/drivers/logger"
 	"github.com/yetbota/identity-service/drivers/postgres"
 	"github.com/yetbota/identity-service/internal/services/endpoint"
 	userrepo "github.com/yetbota/identity-service/internal/services/repository/user"
@@ -25,25 +25,40 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
+	log := logger.New()
+	logger.SetDefault(log)
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		log.Error("config_load_failed", "err", err.Error())
+		os.Exit(1)
 	}
+	log.Info("config_loaded",
+		"http_addr", cfg.HTTP.Addr,
+		"migrate_on_start", cfg.MigrateOnStart,
+		"cors_origins", len(cfg.CORS.AllowedOrigins),
+		"access_ttl_minutes", cfg.JWT.AccessTTLMinutes,
+		"refresh_ttl_days", cfg.JWT.RefreshTTLDays,
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if cfg.MigrateOnStart {
 		if err := postgres.Migrate(cfg.Postgres.URL, "migrations"); err != nil {
-			log.Fatalf("migrate: %v", err)
+			log.Error("migrate_failed", "err", err.Error())
+			os.Exit(1)
 		}
+		log.Info("migrate_ok")
 	}
 
 	pool, err := postgres.NewPool(ctx, cfg.Postgres.URL)
 	if err != nil {
-		log.Fatalf("postgres: %v", err)
+		log.Error("postgres_failed", "err", err.Error())
+		os.Exit(1)
 	}
 	defer pool.Close()
+	log.Info("postgres_connected")
 
 	repo := userrepo.New(pool)
 	hasher := auth.NewBcryptHasher()
@@ -63,10 +78,12 @@ func main() {
 	}
 
 	router := httptransport.NewRouter(eps, svc)
-	handler := shared.CORS(cfg.CORS.AllowedOrigins, router)
+	handler := shared.AccessLog(shared.CORS(cfg.CORS.AllowedOrigins, router))
 
-	fmt.Printf("identity-service listening on %s\n", cfg.HTTP.Addr)
+	log.Info("listening", "addr", cfg.HTTP.Addr)
 	if err := httpserver.ListenAndServe(ctx, cfg.HTTP.Addr, handler); err != nil {
-		log.Fatalf("http: %v", err)
+		log.Error("http_server_failed", "err", err.Error())
+		os.Exit(1)
 	}
+	slog.Info("shutdown_complete")
 }

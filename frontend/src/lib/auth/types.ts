@@ -34,8 +34,46 @@ export type UserInfo = {
   bio: string;
 };
 
+export type UpdateProfileRequest = {
+  full_name?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
+};
+
+export type ChangePasswordRequest = {
+  current_password: string;
+  new_password: string;
+};
+
+export type StatusOK = {
+  status: string;
+};
+
+/** OpenAPI Error schema — identity-service structured errors */
+export type ApiErrorCode =
+  | "VALIDATION_FAILED"
+  | "USERNAME_TAKEN"
+  | "INVALID_CREDENTIALS"
+  | "UNAUTHORIZED"
+  | "NOT_FOUND"
+  | "INTERNAL_ERROR"
+  | (string & {});
+
+export type ApiErrorDetail = {
+  field: string;
+  code: string;
+  message: string;
+};
+
+export type ApiErrorPayload = {
+  code: ApiErrorCode;
+  message: string;
+  details?: ApiErrorDetail[];
+};
+
 export type ApiErrorBody = {
-  error: string;
+  error: ApiErrorPayload;
 };
 
 export function toAuthSession(res: AuthResponse) {

@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/yetbota/identity-service/internal/domain/apperr"
 	domain "github.com/yetbota/identity-service/internal/domain/user"
 )
 
@@ -55,7 +55,7 @@ func (i *JWTService) IssueAccess(userID uuid.UUID, username string) (string, dom
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	signed, err := t.SignedString(i.secret)
 	if err != nil {
-		return "", domain.TokenClaims{}, fmt.Errorf("sign jwt: %w", err)
+		return "", domain.TokenClaims{}, apperr.Wrap(err, apperr.CodeInternal, "sign jwt")
 	}
 	return signed, domain.TokenClaims{
 		UserID:    userID,
@@ -68,20 +68,20 @@ func (i *JWTService) IssueAccess(userID uuid.UUID, username string) (string, dom
 func (i *JWTService) ParseAccess(token string) (domain.TokenClaims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &claims{}, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodHS256 {
-			return nil, fmt.Errorf("unexpected signing method")
+			return nil, apperr.ErrUnauthorized
 		}
 		return i.secret, nil
 	})
 	if err != nil || !parsed.Valid {
-		return domain.TokenClaims{}, domain.ErrUnauthorized
+		return domain.TokenClaims{}, apperr.ErrUnauthorized
 	}
 	c, ok := parsed.Claims.(*claims)
 	if !ok || c.ID == "" || c.Subject == "" {
-		return domain.TokenClaims{}, domain.ErrUnauthorized
+		return domain.TokenClaims{}, apperr.ErrUnauthorized
 	}
 	uid, err := uuid.Parse(c.Subject)
 	if err != nil {
-		return domain.TokenClaims{}, domain.ErrUnauthorized
+		return domain.TokenClaims{}, apperr.ErrUnauthorized
 	}
 	var exp time.Time
 	if c.ExpiresAt != nil {
@@ -98,7 +98,7 @@ func (i *JWTService) ParseAccess(token string) (domain.TokenClaims, error) {
 func (i *JWTService) NewRefreshToken() (raw string, hash string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", "", fmt.Errorf("refresh token: %w", err)
+		return "", "", apperr.Wrap(err, apperr.CodeInternal, "generate refresh token")
 	}
 	raw = base64.RawURLEncoding.EncodeToString(b)
 	sum := sha256.Sum256([]byte(raw))

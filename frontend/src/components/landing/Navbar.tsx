@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { LogOut, Menu, User, X } from "lucide-react";
+import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
 import HeaderNavLink from "@/components/shared/HeaderNavLink";
 import { useLogoutMutation } from "@/lib/api/authApi";
@@ -30,7 +31,12 @@ export default function Navbar() {
 
   async function handleSignOut() {
     setMobileOpen(false);
-    await logout();
+    try {
+      await logout().unwrap();
+      toast.success("Signed out", { description: "See you next time." });
+    } catch {
+      toast.success("Signed out", { description: "Local session cleared." });
+    }
   }
 
   return (
@@ -59,12 +65,14 @@ export default function Navbar() {
           <div className="hidden items-center gap-3 lg:flex">
             {isSignedIn ? (
               <>
-                <div
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border-subtle bg-overlay text-[11px] font-bold text-fg"
-                  title={username ?? undefined}
+                <Link
+                  href="/profile"
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border-subtle bg-overlay text-[11px] font-bold text-fg transition-colors hover:bg-overlay-strong"
+                  title={username ?? "Profile"}
+                  aria-label="Open profile"
                 >
                   {initials}
-                </div>
+                </Link>
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -130,10 +138,14 @@ export default function Navbar() {
           </nav>
           {isSignedIn ? (
             <div className="flex flex-col gap-1 border-t border-border-subtle pt-3">
-              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-fg">
-                <User className="h-4 w-4 text-fg-muted" />
-                {username}
-              </div>
+              <Link
+                href="/profile"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg"
+              >
+                <User className="h-4 w-4" />
+                {t.nav.profile}
+              </Link>
               <button
                 type="button"
                 onClick={handleSignOut}

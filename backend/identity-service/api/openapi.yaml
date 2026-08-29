@@ -354,4 +354,30 @@ components:
       required: [error]
       properties:
         error:
-          type: string
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable code
+              enum:
+                - VALIDATION_FAILED
+                - USERNAME_TAKEN
+                - INVALID_CREDENTIALS
+                - UNAUTHORIZED
+                - NOT_FOUND
+                - INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, code, message]
+                properties:
+                  field:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string

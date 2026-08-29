@@ -3,14 +3,20 @@ package shared
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"log/slog"
 	"net/http"
 
-	domain "github.com/yetbota/identity-service/internal/domain/user"
+	"github.com/yetbota/identity-service/internal/domain/apperr"
 )
 
 type errorBody struct {
-	Error string `json:"error"`
+	Error errorPayload `json:"error"`
+}
+
+type errorPayload struct {
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details []apperr.Field `json:"details,omitempty"`
 }
 
 func EncodeJSONResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
@@ -18,29 +24,36 @@ func EncodeJSONResponse(_ context.Context, w http.ResponseWriter, response inter
 	return json.NewEncoder(w).Encode(response)
 }
 
-func EncodeError(_ context.Context, err error, w http.ResponseWriter) {
+func EncodeError(ctx context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	status := http.StatusInternalServerError
-	msg := "internal error"
 
-	switch {
-	case errors.Is(err, domain.ErrValidation):
-		status = http.StatusBadRequest
-		msg = "invalid request"
-	case errors.Is(err, domain.ErrUsernameTaken):
-		status = http.StatusConflict
-		msg = "username already taken"
-	case errors.Is(err, domain.ErrInvalidCredentials):
-		status = http.StatusUnauthorized
-		msg = "invalid credentials"
-	case errors.Is(err, domain.ErrUnauthorized):
-		status = http.StatusUnauthorized
-		msg = "unauthorized"
-	case errors.Is(err, domain.ErrNotFound):
-		status = http.StatusNotFound
-		msg = "not found"
+	payload := errorPayload{
+		Code:    string(apperr.CodeInternal),
+		Message: "internal error",
+	}
+	status := http.StatusInternalServerError
+
+	if ae, ok := apperr.As(err); ok {
+		payload.Code = string(ae.Code)
+		payload.Message = ae.Message
+		payload.Details = ae.Details
+		status = apperr.HTTPStatus(ae.Code)
+	}
+
+	log := LoggerFromContext(ctx)
+	attrs := []any{
+		"err", err.Error(),
+		"status", status,
+		"code", payload.Code,
+	}
+	if status >= 500 {
+		log.Error("request_error", attrs...)
+	} else {
+		log.Warn("request_error", attrs...)
 	}
 
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorBody{Error: msg})
+	if encErr := json.NewEncoder(w).Encode(errorBody{Error: payload}); encErr != nil {
+		slog.Error("encode_error_body_failed", "err", encErr.Error())
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	kithttp "github.com/go-kit/kit/transport/http"
 
+	"github.com/yetbota/identity-service/internal/domain/apperr"
 	domain "github.com/yetbota/identity-service/internal/domain/user"
 	svcendpoint "github.com/yetbota/identity-service/internal/services/endpoint"
 	"github.com/yetbota/identity-service/internal/transport/http/shared"
@@ -58,7 +59,7 @@ func requireAuth(authn TokenAuthenticator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw := bearerToken(r)
 		if raw == "" {
-			shared.EncodeError(r.Context(), domain.ErrUnauthorized, w)
+			shared.EncodeError(r.Context(), apperr.ErrUnauthorized, w)
 			return
 		}
 		claims, err := authn.AuthenticateToken(r.Context(), raw)
@@ -86,7 +87,7 @@ func bearerToken(r *http.Request) string {
 func claimsFromCtx(ctx context.Context) (domain.TokenClaims, error) {
 	c, ok := ctx.Value(claimsKey).(domain.TokenClaims)
 	if !ok {
-		return domain.TokenClaims{}, domain.ErrUnauthorized
+		return domain.TokenClaims{}, apperr.ErrUnauthorized
 	}
 	return c, nil
 }
@@ -95,7 +96,7 @@ func decodeCredentials(_ context.Context, r *http.Request) (interface{}, error) 
 	defer r.Body.Close()
 	var req svcendpoint.CredentialsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return req, nil
 }
@@ -104,7 +105,7 @@ func decodeIntrospect(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
 	var req svcendpoint.IntrospectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return req, nil
 }
@@ -113,7 +114,7 @@ func decodeRefresh(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
 	var req svcendpoint.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return req, nil
 }
@@ -136,7 +137,7 @@ func decodeLogout(ctx context.Context, r *http.Request) (interface{}, error) {
 		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return svcendpoint.LogoutRequest{Claims: claims, RefreshToken: body.RefreshToken}, nil
 }
@@ -154,7 +155,7 @@ func decodeUpdateProfile(ctx context.Context, r *http.Request) (interface{}, err
 		Bio      *string `json:"bio"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return svcendpoint.UpdateProfileRequest{
 		Claims:   claims,
@@ -173,7 +174,7 @@ func decodeChangePassword(ctx context.Context, r *http.Request) (interface{}, er
 	}
 	var body svcendpoint.ChangePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return nil, domain.ErrValidation
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID_JSON", Message: "request body must be valid JSON"})
 	}
 	return struct {
 		Claims domain.TokenClaims

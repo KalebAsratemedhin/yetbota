@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AuthCard from "@/components/auth/AuthCard";
 import AuthInput from "@/components/auth/AuthInput";
@@ -15,7 +16,6 @@ export default function SignInPage() {
   const accessToken = useAppSelector((s) => s.auth.accessToken);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
   const [signIn, { isLoading }] = useSignInMutation();
 
   useEffect(() => {
@@ -29,13 +29,15 @@ export default function SignInPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setFormError(null);
     try {
       await signIn({ username: username.trim(), password }).unwrap();
+      toast.success("Signed in", { description: "Welcome back." });
       const next = safeNextPath(new URLSearchParams(window.location.search).get("next"));
       router.replace(next);
     } catch (err) {
-      setFormError(getApiErrorMessage(err, "Sign in failed"));
+      toast.error("Sign in failed", {
+        description: getApiErrorMessage(err, "Check your username and password."),
+      });
     }
   }
 
@@ -74,8 +76,6 @@ export default function SignInPage() {
             </Link>
           }
         />
-
-        {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         <Button
           type="submit"

@@ -24,6 +24,7 @@ Other services validate **access** tokens by calling identity **introspect** (no
 | Refresh token | Opaque, stored hashed | Signup/signin/refresh; used only to get new tokens |
 | Token validation (cross-service) | Introspect | On **access** tokens |
 | API docs | OpenAPI 3 + Swagger UI | `/swagger/` |
+| Logging (Go) | log/slog JSON | Access + error logs to stdout; `LOG_LEVEL` |
 | Other | TBD | |
 
 ## Functional requirements

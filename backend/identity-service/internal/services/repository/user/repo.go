@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yetbota/identity-service/internal/db"
+	"github.com/yetbota/identity-service/internal/domain/apperr"
 	domain "github.com/yetbota/identity-service/internal/domain/user"
 )
 
@@ -32,7 +33,7 @@ func (r *Repo) Create(ctx context.Context, username, passwordHash, fullName stri
 		FullName:     fullName,
 	})
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "create user")
 	}
 	return toDomain(row)
 }
@@ -41,9 +42,9 @@ func (r *Repo) ByUsername(ctx context.Context, username string) (domain.User, er
 	row, err := r.q.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, domain.ErrNotFound
+			return domain.User{}, apperr.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "get user by username")
 	}
 	return toDomain(row)
 }
@@ -52,18 +53,21 @@ func (r *Repo) ByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	row, err := r.q.GetUserByID(ctx, pgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, domain.ErrNotFound
+			return domain.User{}, apperr.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "get user by id")
 	}
 	return toDomain(row)
 }
 
 func (r *Repo) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
-	return r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+	if err := r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
 		ID:           pgUUID(id),
 		PasswordHash: passwordHash,
-	})
+	}); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "update password")
+	}
+	return nil
 }
 
 func (r *Repo) UpdateProfile(ctx context.Context, id uuid.UUID, patch domain.ProfileUpdate) (domain.User, error) {
@@ -76,26 +80,36 @@ func (r *Repo) UpdateProfile(ctx context.Context, id uuid.UUID, patch domain.Pro
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, domain.ErrNotFound
+			return domain.User{}, apperr.ErrNotFound
 		}
-		return domain.User{}, err
+		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "update profile")
 	}
 	return toDomain(row)
 }
 
 func (r *Repo) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.q.DeleteUser(ctx, pgUUID(id))
+	if err := r.q.DeleteUser(ctx, pgUUID(id)); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "delete user")
+	}
+	return nil
 }
 
 func (r *Repo) RevokeAccess(ctx context.Context, jti string, expiresAt time.Time) error {
-	return r.q.RevokeToken(ctx, db.RevokeTokenParams{
+	if err := r.q.RevokeToken(ctx, db.RevokeTokenParams{
 		Jti:       jti,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
+	}); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "revoke access jti")
+	}
+	return nil
 }
 
 func (r *Repo) IsAccessRevoked(ctx context.Context, jti string) (bool, error) {
-	return r.q.IsTokenRevoked(ctx, jti)
+	revoked, err := r.q.IsTokenRevoked(ctx, jti)
+	if err != nil {
+		return false, apperr.Wrap(err, apperr.CodeInternal, "check revoked jti")
+	}
+	return revoked, nil
 }
 
 func (r *Repo) SaveRefresh(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) error {
@@ -105,30 +119,39 @@ func (r *Repo) SaveRefresh(ctx context.Context, userID uuid.UUID, tokenHash stri
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
-	return err
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "save refresh token")
+	}
+	return nil
 }
 
 func (r *Repo) GetRefreshByHash(ctx context.Context, tokenHash string) (uuid.UUID, time.Time, error) {
 	row, err := r.q.GetRefreshTokenByHash(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, time.Time{}, domain.ErrUnauthorized
+			return uuid.Nil, time.Time{}, apperr.ErrUnauthorized
 		}
-		return uuid.Nil, time.Time{}, err
+		return uuid.Nil, time.Time{}, apperr.Wrap(err, apperr.CodeInternal, "get refresh token")
 	}
 	uid, err := uuidFromPg(row.UserID)
 	if err != nil {
-		return uuid.Nil, time.Time{}, err
+		return uuid.Nil, time.Time{}, apperr.Wrap(err, apperr.CodeInternal, "parse refresh user id")
 	}
 	return uid, row.ExpiresAt.Time, nil
 }
 
 func (r *Repo) DeleteRefreshByHash(ctx context.Context, tokenHash string) error {
-	return r.q.DeleteRefreshTokenByHash(ctx, tokenHash)
+	if err := r.q.DeleteRefreshTokenByHash(ctx, tokenHash); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "delete refresh token")
+	}
+	return nil
 }
 
 func (r *Repo) DeleteRefreshByUserID(ctx context.Context, userID uuid.UUID) error {
-	return r.q.DeleteRefreshTokensByUserID(ctx, pgUUID(userID))
+	if err := r.q.DeleteRefreshTokensByUserID(ctx, pgUUID(userID)); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "delete user refresh tokens")
+	}
+	return nil
 }
 
 func toDomain(row db.User) (domain.User, error) {

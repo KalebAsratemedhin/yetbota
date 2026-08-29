@@ -116,9 +116,15 @@ func (s *Store) listEdges(ctx context.Context, userID uuid.UUID, p domain.ListPa
 
 	res, err := surrealdb.Query[[]edgeRow](ctx, s.db, sql, vars)
 	if err != nil {
+		if isMissingTable(err) {
+			return domain.EdgePage{UserIDs: []uuid.UUID{}}, nil
+		}
 		return domain.EdgePage{}, apperr.Wrap(err, apperr.CodeInternal, "surreal list follows")
 	}
 	if err := firstQueryErr(res); err != nil {
+		if isMissingTable(err) {
+			return domain.EdgePage{UserIDs: []uuid.UUID{}}, nil
+		}
 		return domain.EdgePage{}, err
 	}
 
@@ -177,9 +183,15 @@ func (s *Store) count(ctx context.Context, sql string, userID uuid.UUID) (int64,
 		"user": userRID(userID),
 	})
 	if err != nil {
+		if isMissingTable(err) {
+			return 0, nil
+		}
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "surreal count follows")
 	}
 	if err := firstQueryErr(res); err != nil {
+		if isMissingTable(err) {
+			return 0, nil
+		}
 		return 0, err
 	}
 	rows := lastResult(res)
@@ -187,6 +199,14 @@ func (s *Store) count(ctx context.Context, sql string, userID uuid.UUID) (int64,
 		return 0, nil
 	}
 	return rows[0].Count, nil
+}
+
+func isMissingTable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "does not exist") && strings.Contains(msg, "follows")
 }
 
 func normalizeLimit(n int) int {

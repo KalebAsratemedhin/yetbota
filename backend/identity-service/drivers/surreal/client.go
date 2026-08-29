@@ -29,3 +29,29 @@ func Connect(ctx context.Context, cfg config.SurrealConfig) (*surrealdb.DB, erro
 	}
 	return db, nil
 }
+
+// EnsureSchema creates graph tables if missing.
+// Cloud Surreal does not auto-create tables on SELECT; without this, empty
+// follower lists fail with "table 'follows' does not exist".
+func EnsureSchema(ctx context.Context, db *surrealdb.DB) error {
+	res, err := surrealdb.Query[any](ctx, db, `
+		DEFINE TABLE IF NOT EXISTS user TYPE NORMAL SCHEMALESS;
+		DEFINE TABLE IF NOT EXISTS follows TYPE RELATION IN user OUT user SCHEMALESS;
+		DEFINE FIELD IF NOT EXISTS created_at ON follows TYPE option<datetime>;
+	`, nil)
+	if err != nil {
+		return fmt.Errorf("surreal ensure schema: %w", err)
+	}
+	if res == nil {
+		return nil
+	}
+	for _, qr := range *res {
+		if qr.Error != nil {
+			return fmt.Errorf("surreal ensure schema: %w", qr.Error)
+		}
+		if qr.Status != "" && qr.Status != "OK" {
+			return fmt.Errorf("surreal ensure schema status %s", qr.Status)
+		}
+	}
+	return nil
+}

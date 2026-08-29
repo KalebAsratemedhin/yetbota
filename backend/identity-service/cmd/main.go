@@ -84,6 +84,12 @@ func main() {
 	defer func() { _ = sdb.Close(ctx) }()
 	log.Info("surreal_connected")
 
+	if err := surreal.EnsureSchema(ctx, sdb); err != nil {
+		log.Error("surreal_schema_failed", "err", err.Error())
+		os.Exit(1)
+	}
+	log.Info("surreal_schema_ok")
+
 	repo := userrepo.New(pool)
 	follows := followrepo.NewStore(sdb)
 	hasher := auth.NewBcryptHasher()

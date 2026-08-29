@@ -4,8 +4,10 @@ info:
   description: Auth + profile. Access JWT for APIs; refresh token for rotation. Other services introspect access tokens.
   version: 0.3.0
 servers:
+  - url: /
+    description: Current host (local or Render)
   - url: http://localhost:8081
-    description: Local
+    description: Local (only when Swagger is also opened on localhost)
 paths:
   /auth/signup:
     post:
@@ -17,7 +19,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Credentials"
+              $ref: "#/components/schemas/SignUpRequest"
       responses:
         "201":
           description: Account created
@@ -244,6 +246,20 @@ components:
         password:
           type: string
           format: password
+        full_name:
+          type: string
+          description: Required for signup; ignored for sign-in
+    SignUpRequest:
+      type: object
+      required: [username, password, full_name]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        full_name:
+          type: string
     AuthResponse:
       type: object
       required: [user_id, username, access_token, refresh_token]

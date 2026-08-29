@@ -26,6 +26,7 @@ type AuthService interface {
 type CredentialsRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	FullName string `json:"full_name"`
 }
 
 type AuthResponse struct {
@@ -83,7 +84,11 @@ type UpdateProfileRequest struct {
 func MakeSignUpEndpoint(svc AuthService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(CredentialsRequest)
-		res, err := svc.SignUp(ctx, authuc.Credentials{Username: req.Username, Password: req.Password})
+		res, err := svc.SignUp(ctx, authuc.Credentials{
+			Username: req.Username,
+			Password: req.Password,
+			FullName: req.FullName,
+		})
 		if err != nil {
 			return nil, err
 		}

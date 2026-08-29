@@ -35,7 +35,7 @@ type ProfileUpdate struct {
 }
 
 type Repository interface {
-	Create(ctx context.Context, username, passwordHash string) (User, error)
+	Create(ctx context.Context, username, passwordHash, fullName string) (User, error)
 	ByUsername(ctx context.Context, username string) (User, error)
 	ByID(ctx context.Context, id uuid.UUID) (User, error)
 	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error

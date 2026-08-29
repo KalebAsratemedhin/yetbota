@@ -1,0 +1,160 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { LogOut, Menu, User, X } from "lucide-react";
+import { useContent } from "@/lib/useContent";
+import HeaderNavLink from "@/components/shared/HeaderNavLink";
+import { useLogoutMutation } from "@/lib/api/authApi";
+import { useAppSelector } from "@/lib/hooks";
+
+export default function Navbar() {
+  const t = useContent();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const accessToken = useAppSelector((s) => s.auth.accessToken);
+  const username = useAppSelector((s) => s.auth.username);
+  const isSignedIn = Boolean(accessToken);
+  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+
+  const navLinks = [
+    { id: "explore", label: t.nav.explore, href: "/discovery" },
+    { id: "map", label: t.nav.map, href: "/map" },
+    { id: "assistant", label: t.nav.aiAssistant, href: "/assistant" },
+    { id: "community", label: t.nav.community, href: "/qa" },
+  ];
+
+  const initials = (username ?? "YB")
+    .slice(0, 2)
+    .toUpperCase();
+
+  async function handleSignOut() {
+    setMobileOpen(false);
+    await logout();
+  }
+
+  return (
+    <header className="fixed top-0 right-0 left-0 z-50 border-b border-border-subtle bg-bg/95 shadow-[0_4px_16px_-8px_rgba(15,23,42,0.08)] backdrop-blur-md dark:shadow-none">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
+        <div className="flex h-20 items-center justify-between">
+          <Link href="/" className="flex shrink-0 items-center gap-2">
+            <Image
+              src="/images/logo.png"
+              alt="Yet Bota"
+              width={80}
+              height={80}
+              className="rounded-lg"
+            />
+            <span className="text-lg font-bold tracking-tight text-fg">Yet Bota</span>
+          </Link>
+
+          <nav className="hidden items-center gap-6 lg:flex xl:gap-8">
+            {navLinks.map((link) => (
+              <HeaderNavLink key={link.id} href={link.href}>
+                {link.label}
+              </HeaderNavLink>
+            ))}
+          </nav>
+
+          <div className="hidden items-center gap-3 lg:flex">
+            {isSignedIn ? (
+              <>
+                <div
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border-subtle bg-overlay text-[11px] font-bold text-fg"
+                  title={username ?? undefined}
+                >
+                  {initials}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={isLoggingOut}
+                  className="text-sm text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
+                >
+                  {t.nav.signOut}
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/signin" className="text-sm text-fg-muted transition-colors hover:text-fg">
+                  {t.nav.signIn}
+                </Link>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-8 items-center rounded-full bg-brand px-5 text-sm font-semibold text-black transition-colors hover:bg-brand-dark"
+                >
+                  {t.nav.joinCommunity}
+                </Link>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 lg:hidden">
+            {!isSignedIn && (
+              <Link
+                href="/signin"
+                className="px-1 text-sm text-fg-muted transition-colors hover:text-fg"
+              >
+                {t.nav.signIn}
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle transition-colors hover:border-fg-muted"
+              aria-label="Toggle menu"
+            >
+              {mobileOpen ? (
+                <X className="h-4 w-4 text-fg-muted" />
+              ) : (
+                <Menu className="h-4 w-4 text-fg-muted" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {mobileOpen && (
+        <div className="border-t border-border-subtle bg-surface px-4 pt-3 pb-5 lg:hidden">
+          <nav className="mb-3 flex flex-col gap-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.id}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          {isSignedIn ? (
+            <div className="flex flex-col gap-1 border-t border-border-subtle pt-3">
+              <div className="flex items-center gap-2 px-3 py-2.5 text-sm text-fg">
+                <User className="h-4 w-4 text-fg-muted" />
+                {username}
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={isLoggingOut}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" />
+                {t.nav.signOut}
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/signup"
+              onClick={() => setMobileOpen(false)}
+              className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-brand text-sm font-semibold text-black transition-colors hover:bg-brand-dark"
+            >
+              {t.nav.joinCommunity}
+            </Link>
+          )}
+        </div>
+      )}
+    </header>
+  );
+}

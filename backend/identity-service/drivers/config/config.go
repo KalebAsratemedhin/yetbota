@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,6 +12,7 @@ type Config struct {
 	HTTP           HTTPConfig     `yaml:"http"`
 	Postgres       PostgresConfig `yaml:"postgres"`
 	JWT            JWTConfig      `yaml:"jwt"`
+	CORS           CORSConfig     `yaml:"cors"`
 	MigrateOnStart bool           `yaml:"migrate_on_start"`
 }
 
@@ -28,6 +30,10 @@ type JWTConfig struct {
 	RefreshTTLDays   int    `yaml:"refresh_ttl_days"`
 	// Deprecated: use access_ttl_minutes. Kept so old config still loads.
 	TTLHours int `yaml:"ttl_hours"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `yaml:"allowed_origins"`
 }
 
 func Load(path string) (Config, error) {
@@ -58,6 +64,16 @@ func Load(path string) (Config, error) {
 	}
 	if v := os.Getenv("MIGRATE_ON_START"); v != "" {
 		cfg.MigrateOnStart = v == "1" || v == "true" || v == "TRUE"
+	}
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		var origins []string
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				origins = append(origins, part)
+			}
+		}
+		cfg.CORS.AllowedOrigins = origins
 	}
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8081"

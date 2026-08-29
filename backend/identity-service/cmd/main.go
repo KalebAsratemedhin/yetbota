@@ -18,6 +18,7 @@ import (
 	authuc "github.com/yetbota/identity-service/internal/services/usecase/auth"
 	httptransport "github.com/yetbota/identity-service/internal/transport/http"
 	authhttp "github.com/yetbota/identity-service/internal/transport/http/auth"
+	"github.com/yetbota/identity-service/internal/transport/http/shared"
 )
 
 func main() {
@@ -62,9 +63,10 @@ func main() {
 	}
 
 	router := httptransport.NewRouter(eps, svc)
+	handler := shared.CORS(cfg.CORS.AllowedOrigins, router)
 
 	fmt.Printf("identity-service listening on %s\n", cfg.HTTP.Addr)
-	if err := httpserver.ListenAndServe(ctx, cfg.HTTP.Addr, router); err != nil {
+	if err := httpserver.ListenAndServe(ctx, cfg.HTTP.Addr, handler); err != nil {
 		log.Fatalf("http: %v", err)
 	}
 }

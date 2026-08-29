@@ -30,7 +30,7 @@ Other services validate **access** tokens by calling identity **introspect** (no
 
 | ID | Requirement | Notes |
 | --- | --- | --- |
-| FR-001 | A user shall be able to sign up with a username and password. | Returns access + refresh tokens |
+| FR-001 | A user shall be able to sign up with a username, password, and full name. | Returns access + refresh tokens; `full_name` required |
 | FR-002 | A user shall be able to sign in with username and password. | Returns access + refresh tokens |
 | FR-003 | Sign-up shall fail if the username is already taken. | |
 | FR-004 | Sign-in shall fail if the username or password is wrong. | |
@@ -48,7 +48,7 @@ Other services validate **access** tokens by calling identity **introspect** (no
 
 - **Actor:** User
 - **Goal:** Create an account
-- **Main flow:** Submit username/password → store bcrypt hash → return `access_token` + `refresh_token`.
+- **Main flow:** Submit username, password, and full name → store bcrypt hash + full name → return `access_token` + `refresh_token`.
 - **Related FRs:** FR-001, FR-003
 
 ### UC-002 — Sign in

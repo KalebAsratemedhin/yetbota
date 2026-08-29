@@ -23,12 +23,13 @@ func New(pool *pgxpool.Pool) *Repo {
 	return &Repo{q: db.New(pool)}
 }
 
-func (r *Repo) Create(ctx context.Context, username, passwordHash string) (domain.User, error) {
+func (r *Repo) Create(ctx context.Context, username, passwordHash, fullName string) (domain.User, error) {
 	id := uuid.New()
 	row, err := r.q.CreateUser(ctx, db.CreateUserParams{
 		ID:           pgUUID(id),
 		Username:     username,
 		PasswordHash: passwordHash,
+		FullName:     fullName,
 	})
 	if err != nil {
 		return domain.User{}, err

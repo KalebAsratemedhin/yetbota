@@ -7,4 +7,8 @@ jwt:
   secret: "dev-only-change-me"
   access_ttl_minutes: 15
   refresh_ttl_days: 30
+cors:
+  # Exact frontend origins (scheme + host + port). Override with CORS_ALLOWED_ORIGINS.
+  allowed_origins:
+    - "http://localhost:3000"
 migrate_on_start: true

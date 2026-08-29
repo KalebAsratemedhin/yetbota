@@ -1,0 +1,217 @@
+{
+  "nav": {
+    "explore": "Explore",
+    "map": "Map",
+    "aiAssistant": "AI Assistant",
+    "community": "Community",
+    "signIn": "Sign In",
+    "joinCommunity": "Join Community",
+    "profile": "Profile",
+    "signOut": "Log out",
+    "language": "Language"
+  },
+  "hero": {
+    "badge": "Community-Powered Discovery",
+    "title": "Local Knowledge",
+    "titleHighlight": "Maps Don't Have",
+    "subtitle": "What's open, what's changed, what's worth knowing — from people on the ground.",
+    "ctaExplore": "Explore Local Gems",
+    "ctaContribute": "Contribute a Spot"
+  },
+  "discovery": {
+    "title": "Trending in Ethiopia",
+    "subtitle": "Discover the most sought-after spots this week",
+    "categories": {
+      "coffeeHouses": "Popular Coffee Houses",
+      "hiddenMarkets": "Hidden Markets",
+      "localParks": "Local Parks"
+    },
+    "badges": {
+      "curated": "Curated",
+      "communityContributed": "Community Contributed"
+    },
+    "viewFeed": "Discover",
+    "away": "km away"
+  },
+  "places": {
+    "tomocaCoffee": {
+      "name": "Tomoca Coffee – Piazza",
+      "description": "Ethiopia's oldest and most iconic coffee house."
+    },
+    "galaniCoffee": {
+      "name": "Galani Coffee",
+      "description": "Specialty coffee with a modern Ethiopian touch."
+    },
+    "yeshiBunna": {
+      "name": "Yeshi Bunna",
+      "description": "Traditional coffee ceremony at its finest."
+    },
+    "mercatoSpice": {
+      "name": "Mercato Spice Market",
+      "description": "Authentic flavors of Addis Ketema."
+    },
+    "sholaMarket": {
+      "name": "Shola Traditional Market",
+      "description": "Best for local textiles and pottery."
+    },
+    "boleDayMarket": {
+      "name": "Bole Day Market",
+      "description": "Artisan crafts and fresh produce."
+    },
+    "friendshipPark": {
+      "name": "Friendship Park",
+      "description": "The green heart of Addis Ababa."
+    },
+    "unityPark": {
+      "name": "Unity Park",
+      "description": "History and nature combined."
+    }
+  },
+  "assistant": {
+    "title": "Ask Your Assistant",
+    "placeholder": "Ask about a place...",
+    "exampleQuery": "Where can I find the best Macchiato near Piazza right now?",
+    "exampleResponse": "Based on recent community reviews, **Tomoca Coffee** on Churchill Ave is currently the top-rated spot. It's only 450m away and usually less crowded at this hour!",
+    "label": "Gemini Assistant"
+  },
+  "community": {
+    "helpTitle": "Help the Community",
+    "browseQuestions": "Browse all questions",
+    "helpOut": "Help Out",
+    "trendingQuestion": "Trending Question",
+    "exampleQuestion": "\"Is there a designated parking area for visitors near the Friendship Park main gate?\"",
+    "user": "Abenezer T."
+  },
+  "navigation": {
+    "badge": "Smart Navigation",
+    "title": "Empowering Your Local Journey",
+    "description": "Navigate with precision using digital addresses for everyday spots, from hidden cafes to local markets. Our platform bridges the gap between traditional landmarks and digital maps.",
+    "features": [
+      "Search by local landmarks or Amharic names",
+      "Offline access to saved locations"
+    ]
+  },
+  "accuracy": {
+    "badge": "Precision Mapping",
+    "title": "Crowdsourced Accuracy",
+    "description": "Every spot on Yet Bota is verified by the community. We use a multi-step verification process where locals confirm locations, upload photos, and update business hours in real-time.",
+    "stats": {
+      "verifiedSpots": "50k+",
+      "verifiedSpotsLabel": "Verified Spots",
+      "communityLed": "100%",
+      "communityLedLabel": "Community Led"
+    },
+    "verifiedBy": "Verified by 12 Locals",
+    "lastChecked": "Last checked: 2 hours ago"
+  },
+  "gamification": {
+    "badge": "Contribute & Win",
+    "title": "Gamified Community",
+    "description": "Every contribution counts. Earn points, unlock exclusive badges, and climb the leaderboard as you help map Ethiopia. From 'Newbie Explorer' to 'Legendary Guide', your impact is recognized.",
+    "badges": [
+      "Top Mapper Badge",
+      "Expert Reviewer",
+      "Photo Legend"
+    ],
+    "levels": {
+      "current": "Gold Level",
+      "currentXp": "2,500 XP",
+      "next": "Next: Platinum"
+    }
+  },
+  "principles": {
+    "title": "Core Principles",
+    "subtitle": "Why thousands of Ethiopians trust Yet Bota every day",
+    "items": [
+      {
+        "id": "people",
+        "title": "By the People",
+        "description": "Built and updated by a passionate community of local guides who know their neighborhoods best."
+      },
+      {
+        "id": "fees",
+        "title": "No Hidden Fees",
+        "description": "Free for users and small local vendors. Our goal is accessibility for all Ethiopian businesses."
+      }
+    ]
+  },
+  "champions": {
+    "title": "Community Champions",
+    "subtitle": "The heroes mapping Ethiopia's digital future",
+    "users": [
+      {
+        "name": "Dawit Kebede",
+        "role": "Top Mapper",
+        "points": "1,250 pts"
+      },
+      {
+        "name": "Sara M.",
+        "role": "Expert Guide",
+        "points": "980 pts"
+      },
+      {
+        "name": "Elias Yared",
+        "role": "Lens Master",
+        "points": "845 pts"
+      },
+      {
+        "name": "Lulut A.",
+        "role": "QA Pro",
+        "points": "720 pts"
+      }
+    ]
+  },
+  "footer": {
+    "tagline": "Community-contributed location discovery platform aligned with Ethiopia's Digital 2030 strategy.",
+    "copyright": "Yet Bota © 2026. Empowering Communities.",
+    "alignment": "Alignment: Ethiopia Digital 2030",
+    "nav": {
+      "discovery": {
+        "title": "Discovery",
+        "links": [
+          "Local Gems Map",
+          "Neighborhood Directory",
+          "Community Feed"
+        ]
+      },
+      "community": {
+        "title": "Community",
+        "links": [
+          "Guidelines",
+          "Champions",
+          "Local Q&A"
+        ]
+      }
+    }
+  },
+  "auth": {
+    "signIn": {
+      "title": "Sign In",
+      "heading": "Welcome Back.",
+      "subtitle": "Stay connected with your local community.",
+      "email": "Email",
+      "password": "Password",
+      "forgotPassword": "Forgot Password?",
+      "submit": "Sign In",
+      "orContinueWith": "or continue with",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign Up"
+    },
+    "signUp": {
+      "title": "Sign Up",
+      "heading": "Join Yet Bota.",
+      "subtitle": "Start exploring your local community today.",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign Up",
+      "orRegisterWith": "or register with",
+      "terms": "By signing up, you agree to our",
+      "termsLink": "Terms of Service",
+      "privacyLink": "Privacy Policy",
+      "hasAccount": "Already have an account?",
+      "signIn": "Sign In"
+    }
+  }
+}

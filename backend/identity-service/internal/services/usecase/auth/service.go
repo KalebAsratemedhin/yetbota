@@ -46,6 +46,7 @@ func NewService(
 type Credentials struct {
 	Username string
 	Password string
+	FullName string // required for SignUp; ignored for SignIn
 }
 
 type AuthResult struct {
@@ -82,7 +83,7 @@ type LogoutInput struct {
 }
 
 func (s *Service) SignUp(ctx context.Context, in Credentials) (AuthResult, error) {
-	username, password, err := normalize(in)
+	username, password, fullName, err := normalizeSignUp(in)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -90,7 +91,7 @@ func (s *Service) SignUp(ctx context.Context, in Credentials) (AuthResult, error
 	if err != nil {
 		return AuthResult{}, err
 	}
-	u, err := s.users.Create(ctx, username, hash)
+	u, err := s.users.Create(ctx, username, hash, fullName)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return AuthResult{}, domain.ErrUsernameTaken
@@ -101,7 +102,7 @@ func (s *Service) SignUp(ctx context.Context, in Credentials) (AuthResult, error
 }
 
 func (s *Service) SignIn(ctx context.Context, in Credentials) (AuthResult, error) {
-	username, password, err := normalize(in)
+	username, password, err := normalizeSignIn(in)
 	if err != nil {
 		return AuthResult{}, err
 	}
@@ -269,7 +270,17 @@ func toUserInfo(u domain.User) UserInfo {
 	}
 }
 
-func normalize(in Credentials) (string, string, error) {
+func normalizeSignUp(in Credentials) (username, password, fullName string, err error) {
+	username = strings.TrimSpace(in.Username)
+	password = in.Password
+	fullName = strings.TrimSpace(in.FullName)
+	if username == "" || password == "" || fullName == "" {
+		return "", "", "", domain.ErrValidation
+	}
+	return username, password, fullName, nil
+}
+
+func normalizeSignIn(in Credentials) (string, string, error) {
 	username := strings.TrimSpace(in.Username)
 	password := in.Password
 	if username == "" || password == "" {

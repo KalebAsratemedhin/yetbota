@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, username, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, username, password_hash, created_at
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio
 `
 
 type CreateUserParams struct {
@@ -31,12 +31,48 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Username,
 		&i.PasswordHash,
 		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
+	)
+	return i, err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users
+WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio
+FROM users
+WHERE id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, created_at
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio
 FROM users
 WHERE username = $1
 `
@@ -49,6 +85,67 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Username,
 		&i.PasswordHash,
 		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
+	)
+	return i, err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users
+SET password_hash = $2
+WHERE id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	ID           pgtype.UUID `json:"id"`
+	PasswordHash string      `json:"password_hash"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users
+SET
+    full_name = COALESCE($1, full_name),
+    phone = COALESCE($2, phone),
+    address = COALESCE($3, address),
+    bio = COALESCE($4, bio)
+WHERE id = $5
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio
+`
+
+type UpdateUserProfileParams struct {
+	FullName pgtype.Text `json:"full_name"`
+	Phone    pgtype.Text `json:"phone"`
+	Address  pgtype.Text `json:"address"`
+	Bio      pgtype.Text `json:"bio"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserProfile,
+		arg.FullName,
+		arg.Phone,
+		arg.Address,
+		arg.Bio,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
 	)
 	return i, err
 }

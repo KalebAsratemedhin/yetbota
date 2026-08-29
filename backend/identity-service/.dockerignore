@@ -1,0 +1,6 @@
+tmp/
+.air.toml
+**/*_test.go
+.git/
+.gitignore
+*.md

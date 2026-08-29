@@ -23,8 +23,11 @@ type PostgresConfig struct {
 }
 
 type JWTConfig struct {
-	Secret   string `yaml:"secret"`
-	TTLHours int    `yaml:"ttl_hours"`
+	Secret           string `yaml:"secret"`
+	AccessTTLMinutes int    `yaml:"access_ttl_minutes"`
+	RefreshTTLDays   int    `yaml:"refresh_ttl_days"`
+	// Deprecated: use access_ttl_minutes. Kept so old config still loads.
+	TTLHours int `yaml:"ttl_hours"`
 }
 
 func Load(path string) (Config, error) {
@@ -42,14 +45,32 @@ func Load(path string) (Config, error) {
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
 		cfg.HTTP.Addr = v
 	}
+	// Render (and most PaaS) set PORT; prefer it over config defaults.
+	if v := os.Getenv("PORT"); v != "" {
+		if v[0] == ':' {
+			cfg.HTTP.Addr = v
+		} else {
+			cfg.HTTP.Addr = ":" + v
+		}
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
+	}
+	if v := os.Getenv("MIGRATE_ON_START"); v != "" {
+		cfg.MigrateOnStart = v == "1" || v == "true" || v == "TRUE"
 	}
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8081"
 	}
-	if cfg.JWT.TTLHours <= 0 {
-		cfg.JWT.TTLHours = 24
+	if cfg.JWT.AccessTTLMinutes <= 0 {
+		if cfg.JWT.TTLHours > 0 {
+			cfg.JWT.AccessTTLMinutes = cfg.JWT.TTLHours * 60
+		} else {
+			cfg.JWT.AccessTTLMinutes = 15
+		}
+	}
+	if cfg.JWT.RefreshTTLDays <= 0 {
+		cfg.JWT.RefreshTTLDays = 30
 	}
 	if cfg.JWT.Secret == "" {
 		return Config{}, fmt.Errorf("jwt.secret is required")

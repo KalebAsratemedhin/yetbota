@@ -26,13 +26,19 @@ func EncodeError(_ context.Context, err error, w http.ResponseWriter) {
 	switch {
 	case errors.Is(err, domain.ErrValidation):
 		status = http.StatusBadRequest
-		msg = "username and password are required"
+		msg = "invalid request"
 	case errors.Is(err, domain.ErrUsernameTaken):
 		status = http.StatusConflict
 		msg = "username already taken"
 	case errors.Is(err, domain.ErrInvalidCredentials):
 		status = http.StatusUnauthorized
 		msg = "invalid credentials"
+	case errors.Is(err, domain.ErrUnauthorized):
+		status = http.StatusUnauthorized
+		msg = "unauthorized"
+	case errors.Is(err, domain.ErrNotFound):
+		status = http.StatusNotFound
+		msg = "not found"
 	}
 
 	w.WriteHeader(status)

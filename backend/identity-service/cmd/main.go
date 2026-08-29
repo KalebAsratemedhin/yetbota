@@ -17,6 +17,7 @@ import (
 	userrepo "github.com/yetbota/identity-service/internal/services/repository/user"
 	authuc "github.com/yetbota/identity-service/internal/services/usecase/auth"
 	httptransport "github.com/yetbota/identity-service/internal/transport/http"
+	authhttp "github.com/yetbota/identity-service/internal/transport/http/auth"
 )
 
 func main() {
@@ -45,13 +46,22 @@ func main() {
 
 	repo := userrepo.New(pool)
 	hasher := auth.NewBcryptHasher()
-	tokens := auth.NewJWTIssuer(cfg.JWT.Secret, cfg.JWT.TTLHours)
-	svc := authuc.NewService(repo, hasher, tokens)
+	tokens := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTTLMinutes)
+	svc := authuc.NewService(repo, hasher, tokens, repo, repo, cfg.JWT.RefreshTTLDays)
 
-	router := httptransport.NewRouter(
-		endpoint.MakeSignUpEndpoint(svc),
-		endpoint.MakeSignInEndpoint(svc),
-	)
+	eps := authhttp.Endpoints{
+		SignUp:         endpoint.MakeSignUpEndpoint(svc),
+		SignIn:         endpoint.MakeSignInEndpoint(svc),
+		Me:             endpoint.MakeMeEndpoint(svc),
+		UpdateProfile:  endpoint.MakeUpdateProfileEndpoint(svc),
+		Introspect:     endpoint.MakeIntrospectEndpoint(svc),
+		Logout:         endpoint.MakeLogoutEndpoint(svc),
+		ChangePassword: endpoint.MakeChangePasswordEndpoint(svc),
+		Refresh:        endpoint.MakeRefreshEndpoint(svc),
+		DeleteAccount:  endpoint.MakeDeleteAccountEndpoint(svc),
+	}
+
+	router := httptransport.NewRouter(eps, svc)
 
 	fmt.Printf("identity-service listening on %s\n", cfg.HTTP.Addr)
 	if err := httpserver.ListenAndServe(ctx, cfg.HTTP.Addr, router); err != nil {

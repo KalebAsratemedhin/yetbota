@@ -16,11 +16,11 @@ help:
 	@echo "  make run           Run all API services with hot reload (identity for now)"
 	@echo "  make identity      Run identity-service with Air (restarts on code change)"
 	@echo "  make identity-once Run identity-service once (no reload)"
-	@echo "  make db-up         Start shared Postgres"
-	@echo "  make db-down       Stop Postgres (keeps volume)"
+	@echo "  make db-up         Start Postgres + SurrealDB"
+	@echo "  make db-down       Stop compose services (keeps volumes)"
 	@echo "  make db-logs       Tail Postgres logs"
 	@echo "  make db-ps         Show compose status"
-	@echo "  make down          Stop Postgres"
+	@echo "  make down          Stop compose services"
 	@echo "  make swagger       Print Swagger UI URL"
 	@echo ""
 
@@ -31,6 +31,8 @@ tools:
 db-up:
 	$(COMPOSE) up -d
 	@echo "Postgres: localhost:5433  db=yetbota"
+	@echo "SurrealDB: ws://localhost:8000  ns=yetbota db=main (root/root)"
+	@echo "  Shared graph: identity writes follows; other services may read."
 
 db-down down:
 	$(COMPOSE) down

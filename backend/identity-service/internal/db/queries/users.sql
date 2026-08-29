@@ -1,15 +1,15 @@
 -- name: CreateUser :one
 INSERT INTO users (id, username, password_hash, full_name)
 VALUES ($1, $2, $3, $4)
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio;
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
 
 -- name: GetUserByUsername :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 FROM users
 WHERE username = $1;
 
 -- name: GetUserByID :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 FROM users
 WHERE id = $1;
 
@@ -26,7 +26,33 @@ SET
     address = COALESCE(sqlc.narg('address'), address),
     bio = COALESCE(sqlc.narg('bio'), bio)
 WHERE id = sqlc.arg('id')
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio;
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
+
+-- name: UpdateUserAvatar :one
+UPDATE users
+SET
+    avatar_url = $2,
+    avatar_public_id = $3
+WHERE id = $1
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
+
+-- name: SearchUsers :many
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+FROM users
+WHERE (
+    username ILIKE '%' || sqlc.arg(query)::text || '%'
+    OR full_name ILIKE '%' || sqlc.arg(query)::text || '%'
+)
+AND id <> sqlc.arg(exclude_id)
+ORDER BY
+    CASE WHEN username ILIKE sqlc.arg(query)::text || '%' THEN 0 ELSE 1 END,
+    username ASC
+LIMIT sqlc.arg(result_limit);
+
+-- name: GetUsersByIDs :many
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+FROM users
+WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: DeleteUser :exec
 DELETE FROM users

@@ -32,6 +32,8 @@ export default function AuthCard({ title, children, backHref = "/" }: AuthCardPr
             alt="Yet Bota"
             width={80}
             height={80}
+            priority
+            loading="eager"
             className="rounded-sm"
           />
         </div>

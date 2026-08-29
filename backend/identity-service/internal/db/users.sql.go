@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, username, password_hash, full_name)
 VALUES ($1, $2, $3, $4)
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 `
 
 type CreateUserParams struct {
@@ -41,6 +41,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Phone,
 		&i.Address,
 		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
 	)
 	return i, err
 }
@@ -56,7 +58,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 FROM users
 WHERE id = $1
 `
@@ -73,12 +75,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Phone,
 		&i.Address,
 		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 FROM users
 WHERE username = $1
 `
@@ -95,6 +99,129 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Phone,
 		&i.Address,
 		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
+	)
+	return i, err
+}
+
+const getUsersByIDs = `-- name: GetUsersByIDs :many
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+FROM users
+WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) GetUsersByIDs(ctx context.Context, ids []pgtype.UUID) ([]User, error) {
+	rows, err := q.db.Query(ctx, getUsersByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.PasswordHash,
+			&i.CreatedAt,
+			&i.FullName,
+			&i.Phone,
+			&i.Address,
+			&i.Bio,
+			&i.AvatarUrl,
+			&i.AvatarPublicID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsers = `-- name: SearchUsers :many
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+FROM users
+WHERE (
+    username ILIKE '%' || $1::text || '%'
+    OR full_name ILIKE '%' || $1::text || '%'
+)
+AND id <> $2
+ORDER BY
+    CASE WHEN username ILIKE $1::text || '%' THEN 0 ELSE 1 END,
+    username ASC
+LIMIT $3
+`
+
+type SearchUsersParams struct {
+	Query       string      `json:"query"`
+	ExcludeID   pgtype.UUID `json:"exclude_id"`
+	ResultLimit int32       `json:"result_limit"`
+}
+
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsers, arg.Query, arg.ExcludeID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.PasswordHash,
+			&i.CreatedAt,
+			&i.FullName,
+			&i.Phone,
+			&i.Address,
+			&i.Bio,
+			&i.AvatarUrl,
+			&i.AvatarPublicID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateUserAvatar = `-- name: UpdateUserAvatar :one
+UPDATE users
+SET
+    avatar_url = $2,
+    avatar_public_id = $3
+WHERE id = $1
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+`
+
+type UpdateUserAvatarParams struct {
+	ID             pgtype.UUID `json:"id"`
+	AvatarUrl      string      `json:"avatar_url"`
+	AvatarPublicID string      `json:"avatar_public_id"`
+}
+
+func (q *Queries) UpdateUserAvatar(ctx context.Context, arg UpdateUserAvatarParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserAvatar, arg.ID, arg.AvatarUrl, arg.AvatarPublicID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
 	)
 	return i, err
 }
@@ -123,7 +250,7 @@ SET
     address = COALESCE($3, address),
     bio = COALESCE($4, bio)
 WHERE id = $5
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
 `
 
 type UpdateUserProfileParams struct {
@@ -152,6 +279,8 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.Phone,
 		&i.Address,
 		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
 	)
 	return i, err
 }

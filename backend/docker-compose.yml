@@ -18,5 +18,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # Shared graph DB: identity writes follows; other services may read.
+  surrealdb:
+    image: surrealdb/surrealdb:v2.3.7
+    container_name: yetbota-surreal
+    user: root
+    command: start --log info --user root --pass root file:/data/database.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - yetbota_surreal:/data
+    healthcheck:
+      test: ["CMD", "/surreal", "isready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
 volumes:
   yetbota_pgdata:
+  yetbota_surreal:

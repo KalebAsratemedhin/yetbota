@@ -14,6 +14,7 @@ import { DangerZonePanel, SessionPanel } from "@/components/profile/AccountActio
 import AppearanceSettings from "@/components/profile/AppearanceSettings";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
 import ProfileEditForm from "@/components/profile/ProfileEditForm";
+import UserAvatar from "@/components/shared/UserAvatar";
 import type { UserInfo } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
@@ -80,13 +81,6 @@ export default function ProfileSettingsView({
 }) {
   const [section, setSection] = useState<SettingsSection>("appearance");
   const meta = PANEL[section];
-  const initials = (user.full_name || user.username)
-    .split(" ")
-    .filter(Boolean)
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <div className="mx-auto w-full max-w-[1152px] px-4 pt-10 pb-20 sm:px-6 sm:pt-14">
@@ -112,9 +106,7 @@ export default function ProfileSettingsView({
         </div>
 
         <div className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-surface px-3 py-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e8b89a] text-xs font-bold text-fg/70">
-            {initials}
-          </div>
+          <UserAvatar user={user} size="sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-fg">
               {user.full_name.trim() || user.username}
@@ -243,7 +235,13 @@ export default function ProfileSettingsView({
           </div>
 
           {section === "appearance" && <AppearanceSettings framed={false} />}
-          {section === "profile" && <ProfileEditForm user={user} framed={false} />}
+          {section === "profile" && (
+            <ProfileEditForm
+              key={`${user.user_id}-${user.avatar_url}-${user.full_name}-${user.phone}-${user.address}-${user.bio}`}
+              user={user}
+              framed={false}
+            />
+          )}
           {section === "security" && <ChangePasswordForm framed={false} />}
           {section === "session" && <SessionPanel />}
           {section === "danger" && <DangerZonePanel username={user.username} />}

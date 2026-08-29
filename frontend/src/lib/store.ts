@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import { baseApi } from "@/lib/api/baseApi";
 import { authReducer, loadAuthFromStorage } from "@/lib/auth/authSlice";
 import "@/lib/api/authApi";
+import "@/lib/api/socialApi";
 
 export const makeStore = () =>
   configureStore({

@@ -60,6 +60,29 @@ func (r *Repo) ByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	return toDomain(row)
 }
 
+func (r *Repo) ByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.User, error) {
+	if len(ids) == 0 {
+		return []domain.User{}, nil
+	}
+	pgIDs := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIDs[i] = pgUUID(id)
+	}
+	rows, err := r.q.GetUsersByIDs(ctx, pgIDs)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "get users by ids")
+	}
+	out := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		u, err := toDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
 func (r *Repo) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
 	if err := r.q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
 		ID:           pgUUID(id),
@@ -85,6 +108,41 @@ func (r *Repo) UpdateProfile(ctx context.Context, id uuid.UUID, patch domain.Pro
 		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "update profile")
 	}
 	return toDomain(row)
+}
+
+func (r *Repo) UpdateAvatar(ctx context.Context, id uuid.UUID, avatarURL, publicID string) (domain.User, error) {
+	row, err := r.q.UpdateUserAvatar(ctx, db.UpdateUserAvatarParams{
+		ID:             pgUUID(id),
+		AvatarUrl:      avatarURL,
+		AvatarPublicID: publicID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, apperr.ErrNotFound
+		}
+		return domain.User{}, apperr.Wrap(err, apperr.CodeInternal, "update avatar")
+	}
+	return toDomain(row)
+}
+
+func (r *Repo) Search(ctx context.Context, query string, excludeID uuid.UUID, limit int32) ([]domain.User, error) {
+	rows, err := r.q.SearchUsers(ctx, db.SearchUsersParams{
+		Query:       query,
+		ExcludeID:   pgUUID(excludeID),
+		ResultLimit: limit,
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "search users")
+	}
+	out := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		u, err := toDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 func (r *Repo) Delete(ctx context.Context, id uuid.UUID) error {
@@ -160,14 +218,16 @@ func toDomain(row db.User) (domain.User, error) {
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:           id,
-		Username:     row.Username,
-		PasswordHash: row.PasswordHash,
-		CreatedAt:    row.CreatedAt.Time,
-		FullName:     row.FullName,
-		Phone:        row.Phone,
-		Address:      row.Address,
-		Bio:          row.Bio,
+		ID:             id,
+		Username:       row.Username,
+		PasswordHash:   row.PasswordHash,
+		CreatedAt:      row.CreatedAt.Time,
+		FullName:       row.FullName,
+		Phone:          row.Phone,
+		Address:        row.Address,
+		Bio:            row.Bio,
+		AvatarURL:      row.AvatarUrl,
+		AvatarPublicID: row.AvatarPublicID,
 	}, nil
 }
 

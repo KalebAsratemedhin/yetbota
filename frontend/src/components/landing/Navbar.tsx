@@ -3,12 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { LogOut, Menu, User, X } from "lucide-react";
+import { LogOut, Menu, Search, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
 import HeaderNavLink from "@/components/shared/HeaderNavLink";
-import { useLogoutMutation } from "@/lib/api/authApi";
+import { useLogoutMutation, useMeQuery } from "@/lib/api/authApi";
 import { useAppSelector } from "@/lib/hooks";
+import UserAvatar from "@/components/shared/UserAvatar";
 
 export default function Navbar() {
   const t = useContent();
@@ -17,6 +18,7 @@ export default function Navbar() {
   const username = useAppSelector((s) => s.auth.username);
   const isSignedIn = Boolean(accessToken);
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const { data: me } = useMeQuery(undefined, { skip: !isSignedIn });
 
   const navLinks = [
     { id: "explore", label: t.nav.explore, href: "/discovery" },
@@ -25,9 +27,11 @@ export default function Navbar() {
     { id: "community", label: t.nav.community, href: "/qa" },
   ];
 
-  const initials = (username ?? "YB")
-    .slice(0, 2)
-    .toUpperCase();
+  const avatarUser = me ?? {
+    full_name: "",
+    username: username ?? "YB",
+    avatar_url: "",
+  };
 
   async function handleSignOut() {
     setMobileOpen(false);
@@ -49,6 +53,8 @@ export default function Navbar() {
               alt="Yet Bota"
               width={80}
               height={80}
+              priority
+              loading="eager"
               className="rounded-lg"
             />
             <span className="text-lg font-bold tracking-tight text-fg">Yet Bota</span>
@@ -66,12 +72,20 @@ export default function Navbar() {
             {isSignedIn ? (
               <>
                 <Link
+                  href="/search"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-subtle bg-overlay text-fg-muted transition-colors hover:bg-overlay-strong hover:text-fg"
+                  title="Search people"
+                  aria-label="Search people"
+                >
+                  <Search className="h-4 w-4" />
+                </Link>
+                <Link
                   href="/profile"
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border-subtle bg-overlay text-[11px] font-bold text-fg transition-colors hover:bg-overlay-strong"
+                  className="overflow-hidden rounded-full border border-border-subtle transition-opacity hover:opacity-90"
                   title={username ?? "Profile"}
                   aria-label="Open profile"
                 >
-                  {initials}
+                  <UserAvatar user={avatarUser} size="xs" />
                 </Link>
                 <button
                   type="button"
@@ -98,6 +112,15 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2 lg:hidden">
+            {isSignedIn && (
+              <Link
+                href="/search"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-fg-muted transition-colors hover:border-fg-muted hover:text-fg"
+                aria-label="Search people"
+              >
+                <Search className="h-4 w-4" />
+              </Link>
+            )}
             {!isSignedIn && (
               <Link
                 href="/signin"
@@ -138,6 +161,14 @@ export default function Navbar() {
           </nav>
           {isSignedIn ? (
             <div className="flex flex-col gap-1 border-t border-border-subtle pt-3">
+              <Link
+                href="/search"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg"
+              >
+                <Search className="h-4 w-4" />
+                Search people
+              </Link>
               <Link
                 href="/profile"
                 onClick={() => setMobileOpen(false)}

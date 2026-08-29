@@ -32,6 +32,19 @@ export type UserInfo = {
   phone: string;
   address: string;
   bio: string;
+  /** Empty when no avatar */
+  avatar_url: string;
+};
+
+export type Users = {
+  users: UserInfo[];
+};
+
+/** OpenAPI UsersPage — paginated followers / following */
+export type UsersPage = {
+  users: UserInfo[];
+  total: number;
+  next_cursor?: string;
 };
 
 export type UpdateProfileRequest = {

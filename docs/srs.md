@@ -8,23 +8,26 @@ Backend shape: three microservices — `content-service` (Go), `identity-service
 
 Other services validate **access** tokens by calling identity **introspect** (not local-only JWT verify).
 
+Follow graph is stored in **SurrealDB** (shared). Identity writes follows; other services may **read** the same SurrealDB.
+
 ## Tools and stack
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
 | Frontend | Next.js | |
 | content-service | Go | |
-| identity-service | Go | Owns auth + profile |
+| identity-service | Go | Owns auth + profile + follow writes |
 | ai-service | Python | |
-| Database | PostgreSQL | One shared database for all services |
+| Database | PostgreSQL | Shared; users/auth source of truth |
+| Graph DB | SurrealDB | Shared; follow relationships. Local: Docker in `backend/docker-compose.yml` |
 | Migrations (Go) | goose-format SQL | Applied on startup |
-| Data access (Go) | sqlc + pgx | |
+| Data access (Go) | sqlc + pgx | Postgres |
 | Password hashing | bcrypt | |
-| Access token | JWT (HS256), short-lived | API calls; `jti` denylist |
-| Refresh token | Opaque, stored hashed | Signup/signin/refresh; used only to get new tokens |
-| Token validation (cross-service) | Introspect | On **access** tokens |
-| API docs | OpenAPI 3 + Swagger UI | `/swagger/` |
-| Logging (Go) | log/slog JSON | Access + error logs to stdout; `LOG_LEVEL` |
+| Access token | JWT (HS256), short-lived | |
+| Refresh token | Opaque, stored hashed | |
+| Token validation (cross-service) | Introspect | |
+| API docs | OpenAPI 3 + Swagger UI | |
+| Logging (Go) | log/slog JSON | |
 | Other | TBD | |
 
 ## Functional requirements
@@ -35,13 +38,20 @@ Other services validate **access** tokens by calling identity **introspect** (no
 | FR-002 | A user shall be able to sign in with username and password. | Returns access + refresh tokens |
 | FR-003 | Sign-up shall fail if the username is already taken. | |
 | FR-004 | Sign-in shall fail if the username or password is wrong. | |
-| FR-005 | An authenticated user shall be able to fetch their profile (`/auth/me`). | Includes username + profile fields |
+| FR-005 | An authenticated user shall be able to fetch their profile (`/auth/me`). | |
 | FR-006 | Other services shall validate an access token via identity introspect. | |
-| FR-007 | An authenticated user shall be able to log out. | Revokes access `jti` and the presented refresh token |
+| FR-007 | An authenticated user shall be able to log out. | |
 | FR-008 | An authenticated user shall be able to change their password. | |
-| FR-009 | A client shall refresh tokens using a valid refresh token. | Rotates refresh; issues new access + refresh |
+| FR-009 | A client shall refresh tokens using a valid refresh token. | |
 | FR-010 | An authenticated user shall be able to delete their account. | |
-| FR-011 | An authenticated user shall be able to update profile fields: full name, phone, address, bio. | |
+| FR-011 | An authenticated user shall be able to update profile fields: full name, phone, address, bio. | Phone: if non-empty, length 7–15 |
+| FR-012 | An authenticated user shall be able to view another user’s public profile by id. | |
+| FR-013 | An authenticated user shall be able to follow another user. | Stored in SurrealDB graph |
+| FR-014 | An authenticated user shall be able to unfollow another user. | |
+| FR-015 | An authenticated user shall be able to list a user’s followers. | Hydrated public profiles; keyset pagination |
+| FR-016 | An authenticated user shall be able to list who a user is following. | Hydrated public profiles; keyset pagination |
+| FR-017 | An authenticated user shall be able to search users by username or full name. | Min query length 2; max 20 results |
+| FR-018 | An authenticated user shall be able to upload and delete a profile avatar. | Stored on Cloudinary; URL on user |
 
 ## Use cases
 
@@ -59,49 +69,69 @@ Other services validate **access** tokens by calling identity **introspect** (no
 - **Main flow:** Verify credentials → return `access_token` + `refresh_token`.
 - **Related FRs:** FR-002, FR-004
 
-### UC-003 — Get profile
+### UC-003 — Get own profile
 
 - **Actor:** User
 - **Goal:** Read own profile
-- **Main flow:** Bearer access token → return user id, username, full_name, phone, address, bio.
 - **Related FRs:** FR-005
 
 ### UC-004 — Introspect access token
 
 - **Actor:** Internal service
-- **Goal:** Validate an access token
-- **Main flow:** POST token → `active` + user identity when valid (not expired/revoked; user exists).
 - **Related FRs:** FR-006
 
 ### UC-005 — Log out
 
-- **Actor:** User
-- **Goal:** End session
-- **Main flow:** Bearer access + refresh token in body → revoke access `jti` and invalidate refresh token.
 - **Related FRs:** FR-007
 
 ### UC-006 — Change password
 
-- **Actor:** User
-- **Goal:** Set a new password
 - **Related FRs:** FR-008
 
 ### UC-007 — Refresh tokens
 
-- **Actor:** User (client)
-- **Goal:** Get new tokens without password
-- **Main flow:** POST `{ "refresh_token" }` → validate stored hash → revoke old refresh → issue new access + refresh.
 - **Related FRs:** FR-009
 
 ### UC-008 — Delete account
 
-- **Actor:** User
-- **Goal:** Remove account
 - **Related FRs:** FR-010
 
 ### UC-009 — Update profile
 
-- **Actor:** User
-- **Goal:** Edit full name, phone, address, bio
-- **Main flow:** Bearer access → PATCH profile fields (any subset) → return updated profile.
+- **Main flow:** PATCH profile; if `phone` is non-empty it must be length 7–15.
 - **Related FRs:** FR-011
+
+### UC-010 — View other user profile
+
+- **Actor:** User
+- **Goal:** See another user’s public profile
+- **Main flow:** `GET /users/{id}` with Bearer → public fields (no password).
+- **Related FRs:** FR-012
+
+### UC-011 — Follow / unfollow
+
+- **Actor:** User
+- **Goal:** Follow or unfollow another user
+- **Main flow:** Authenticated `POST`/`DELETE` `/users/{id}/follow` → SurrealDB `user→follows→user` edge.
+- **Related FRs:** FR-013, FR-014
+
+### UC-012 — Followers / following lists
+
+- **Actor:** User
+- **Goal:** See followers or following for a user
+- **Main flow:** `GET /users/{id}/followers|following?limit=&cursor=` → Surreal edge page → batch Postgres hydrate → `{ users, next_cursor?, total }`.
+- **Related FRs:** FR-015, FR-016
+
+### UC-013 — Search users
+
+- **Actor:** User
+- **Goal:** Find other users
+- **Main flow:** `GET /users/search?q=` → public profiles matching username/full name.
+- **Related FRs:** FR-017
+
+### UC-014 — Avatar upload / delete
+
+- **Actor:** User
+- **Goal:** Set or clear profile photo
+- **Main flow:** `POST /auth/me/avatar` (multipart `file`) uploads to Cloudinary and saves URL; `DELETE /auth/me/avatar` removes it.
+- **Related FRs:** FR-018

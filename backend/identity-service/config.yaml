@@ -3,12 +3,22 @@ http:
   addr: ":8081"
 postgres:
   url: "postgres://postgres:postgres@localhost:5433/yetbota?sslmode=disable"
+surreal:
+  url: "ws://localhost:8000"
+  namespace: yetbota
+  database: main
+  username: root
+  password: root
+cloudinary:
+  cloud_name: ""
+  api_key: ""
+  api_secret: ""
+  folder: yetbota/avatars
 jwt:
   secret: "dev-only-change-me"
   access_ttl_minutes: 15
   refresh_ttl_days: 30
 cors:
-  # Exact frontend origins (scheme + host + port). Override with CORS_ALLOWED_ORIGINS.
   allowed_origins:
     - "http://localhost:3000"
 migrate_on_start: true

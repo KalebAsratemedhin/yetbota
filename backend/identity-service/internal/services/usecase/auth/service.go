@@ -1,8 +1,12 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -11,7 +15,9 @@ import (
 
 	driverauth "github.com/yetbota/identity-service/drivers/auth"
 	"github.com/yetbota/identity-service/internal/domain/apperr"
+	"github.com/yetbota/identity-service/internal/domain/media"
 	domain "github.com/yetbota/identity-service/internal/domain/user"
+	"github.com/yetbota/identity-service/internal/services/usecase/validate"
 )
 
 type Service struct {
@@ -20,6 +26,7 @@ type Service struct {
 	tokens       domain.TokenService
 	accessRevoke domain.TokenRevoker
 	refreshStore domain.RefreshStore
+	images       media.ImageStore
 	refreshTTL   time.Duration
 }
 
@@ -29,6 +36,7 @@ func NewService(
 	tokens domain.TokenService,
 	accessRevoke domain.TokenRevoker,
 	refreshStore domain.RefreshStore,
+	images media.ImageStore,
 	refreshTTLDays int,
 ) *Service {
 	if refreshTTLDays <= 0 {
@@ -40,6 +48,7 @@ func NewService(
 		tokens:       tokens,
 		accessRevoke: accessRevoke,
 		refreshStore: refreshStore,
+		images:       images,
 		refreshTTL:   time.Duration(refreshTTLDays) * 24 * time.Hour,
 	}
 }
@@ -58,12 +67,13 @@ type AuthResult struct {
 }
 
 type UserInfo struct {
-	UserID   string
-	Username string
-	FullName string
-	Phone    string
-	Address  string
-	Bio      string
+	UserID    string
+	Username  string
+	FullName  string
+	Phone     string
+	Address   string
+	Bio       string
+	AvatarURL string
 }
 
 type IntrospectResult struct {
@@ -134,6 +144,11 @@ func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, patch dom
 			Field: "body", Code: "EMPTY", Message: "at least one profile field is required",
 		})
 	}
+	if patch.Phone != nil {
+		if err := validate.PhoneLength(*patch.Phone); err != nil {
+			return UserInfo{}, err
+		}
+	}
 	u, err := s.users.UpdateProfile(ctx, userID, patch)
 	if err != nil {
 		if errors.Is(err, apperr.ErrNotFound) {
@@ -142,6 +157,104 @@ func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, patch dom
 		return UserInfo{}, err
 	}
 	return toUserInfo(u), nil
+}
+
+const (
+	maxAvatarBytes = 2 << 20 // 2 MiB
+)
+
+func (s *Service) UploadAvatar(ctx context.Context, userID uuid.UUID, filename string, r io.Reader, size int64) (UserInfo, error) {
+	if c, ok := r.(io.Closer); ok {
+		defer c.Close()
+	}
+	if s.images == nil || !s.images.Configured() {
+		return UserInfo{}, apperr.New(apperr.CodeInternal, "avatar upload is not configured")
+	}
+	if size > maxAvatarBytes {
+		return UserInfo{}, apperr.Validation(apperr.Field{
+			Field: "file", Code: "INVALID_SIZE", Message: "avatar must be at most 2MB",
+		})
+	}
+	limited := io.LimitReader(r, maxAvatarBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return UserInfo{}, apperr.Wrap(err, apperr.CodeInternal, "read avatar")
+	}
+	if len(data) == 0 {
+		return UserInfo{}, apperr.Validation(apperr.Field{
+			Field: "file", Code: "REQUIRED", Message: "file is required",
+		})
+	}
+	if int64(len(data)) > maxAvatarBytes {
+		return UserInfo{}, apperr.Validation(apperr.Field{
+			Field: "file", Code: "INVALID_SIZE", Message: "avatar must be at most 2MB",
+		})
+	}
+	ct := http.DetectContentType(data)
+	switch ct {
+	case "image/jpeg", "image/png", "image/webp", "image/gif":
+	default:
+		return UserInfo{}, apperr.Validation(apperr.Field{
+			Field: "file", Code: "INVALID_TYPE", Message: "avatar must be jpeg, png, webp, or gif",
+		})
+	}
+	u, err := s.users.ByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return UserInfo{}, apperr.ErrUnauthorized
+		}
+		return UserInfo{}, err
+	}
+	publicID := userID.String()
+	uploaded, err := s.images.Upload(ctx, "", publicID, bytes.NewReader(data), sanitizeFilename(filename, ct))
+	if err != nil {
+		return UserInfo{}, err
+	}
+	if u.AvatarPublicID != "" && u.AvatarPublicID != uploaded.PublicID {
+		_ = s.images.Destroy(ctx, u.AvatarPublicID)
+	}
+	updated, err := s.users.UpdateAvatar(ctx, userID, uploaded.URL, uploaded.PublicID)
+	if err != nil {
+		return UserInfo{}, err
+	}
+	return toUserInfo(updated), nil
+}
+
+func (s *Service) DeleteAvatar(ctx context.Context, userID uuid.UUID) (UserInfo, error) {
+	u, err := s.users.ByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return UserInfo{}, apperr.ErrUnauthorized
+		}
+		return UserInfo{}, err
+	}
+	if u.AvatarPublicID != "" && s.images != nil && s.images.Configured() {
+		if err := s.images.Destroy(ctx, u.AvatarPublicID); err != nil {
+			return UserInfo{}, err
+		}
+	}
+	updated, err := s.users.UpdateAvatar(ctx, userID, "", "")
+	if err != nil {
+		return UserInfo{}, err
+	}
+	return toUserInfo(updated), nil
+}
+
+func sanitizeFilename(name, contentType string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		switch contentType {
+		case "image/png":
+			return "avatar.png"
+		case "image/webp":
+			return "avatar.webp"
+		case "image/gif":
+			return "avatar.gif"
+		default:
+			return "avatar.jpg"
+		}
+	}
+	return filepath.Base(name)
 }
 
 func (s *Service) Introspect(ctx context.Context, token string) (IntrospectResult, error) {
@@ -280,12 +393,13 @@ func (s *Service) issuePair(ctx context.Context, u domain.User) (AuthResult, err
 
 func toUserInfo(u domain.User) UserInfo {
 	return UserInfo{
-		UserID:   u.ID.String(),
-		Username: u.Username,
-		FullName: u.FullName,
-		Phone:    u.Phone,
-		Address:  u.Address,
-		Bio:      u.Bio,
+		UserID:    u.ID.String(),
+		Username:  u.Username,
+		FullName:  u.FullName,
+		Phone:     u.Phone,
+		Address:   u.Address,
+		Bio:       u.Bio,
+		AvatarURL: u.AvatarURL,
 	}
 }
 

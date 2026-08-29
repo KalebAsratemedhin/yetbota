@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"io"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ type AuthService interface {
 	SignIn(ctx context.Context, in authuc.Credentials) (authuc.AuthResult, error)
 	Me(ctx context.Context, userID uuid.UUID) (authuc.UserInfo, error)
 	UpdateProfile(ctx context.Context, userID uuid.UUID, patch domain.ProfileUpdate) (authuc.UserInfo, error)
+	UploadAvatar(ctx context.Context, userID uuid.UUID, filename string, r io.Reader, size int64) (authuc.UserInfo, error)
+	DeleteAvatar(ctx context.Context, userID uuid.UUID) (authuc.UserInfo, error)
 	Introspect(ctx context.Context, token string) (authuc.IntrospectResult, error)
 	Logout(ctx context.Context, in authuc.LogoutInput) error
 	ChangePassword(ctx context.Context, in authuc.ChangePasswordInput) error
@@ -37,12 +40,13 @@ type AuthResponse struct {
 }
 
 type UserResponse struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	FullName string `json:"full_name"`
-	Phone    string `json:"phone"`
-	Address  string `json:"address"`
-	Bio      string `json:"bio"`
+	UserID    string `json:"user_id"`
+	Username  string `json:"username"`
+	FullName  string `json:"full_name"`
+	Phone     string `json:"phone"`
+	Address   string `json:"address"`
+	Bio       string `json:"bio"`
+	AvatarURL string `json:"avatar_url"`
 }
 
 type IntrospectRequest struct {
@@ -134,6 +138,35 @@ func MakeUpdateProfileEndpoint(svc AuthService) endpoint.Endpoint {
 	}
 }
 
+type UploadAvatarRequest struct {
+	Claims   domain.TokenClaims
+	Filename string
+	Reader   io.Reader
+	Size     int64
+}
+
+func MakeUploadAvatarEndpoint(svc AuthService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(UploadAvatarRequest)
+		res, err := svc.UploadAvatar(ctx, req.Claims.UserID, req.Filename, req.Reader, req.Size)
+		if err != nil {
+			return nil, err
+		}
+		return toUserResponse(res), nil
+	}
+}
+
+func MakeDeleteAvatarEndpoint(svc AuthService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(ClaimsRequest)
+		res, err := svc.DeleteAvatar(ctx, req.Claims.UserID)
+		if err != nil {
+			return nil, err
+		}
+		return toUserResponse(res), nil
+	}
+}
+
 func MakeIntrospectEndpoint(svc AuthService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(IntrospectRequest)
@@ -205,11 +238,12 @@ func toAuthResponse(res authuc.AuthResult) AuthResponse {
 
 func toUserResponse(res authuc.UserInfo) UserResponse {
 	return UserResponse{
-		UserID:   res.UserID,
-		Username: res.Username,
-		FullName: res.FullName,
-		Phone:    res.Phone,
-		Address:  res.Address,
-		Bio:      res.Bio,
+		UserID:    res.UserID,
+		Username:  res.Username,
+		FullName:  res.FullName,
+		Phone:     res.Phone,
+		Address:   res.Address,
+		Bio:       res.Bio,
+		AvatarURL: res.AvatarURL,
 	}
 }

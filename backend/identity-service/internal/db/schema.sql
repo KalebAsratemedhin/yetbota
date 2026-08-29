@@ -6,7 +6,9 @@ CREATE TABLE users (
     full_name TEXT NOT NULL DEFAULT '',
     phone TEXT NOT NULL DEFAULT '',
     address TEXT NOT NULL DEFAULT '',
-    bio TEXT NOT NULL DEFAULT ''
+    bio TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT NOT NULL DEFAULT '',
+    avatar_public_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE revoked_tokens (

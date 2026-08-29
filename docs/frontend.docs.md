@@ -30,6 +30,7 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 | Refresh | On **401** from protected calls: `POST /auth/refresh` with refresh token, rotate pair, retry once |
 | Logout | `POST /auth/logout` (Bearer + refresh body) then clear local session |
 | Me | `GET /auth/me` available via `useMeQuery` |
+| Social | Follow graph + search via `socialApi`; avatar via `uploadAvatar` / `deleteAvatar` |
 
 ## Why these choices
 
@@ -37,7 +38,7 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 - **Token set reused** — brand green `#22C55E` / `#00e05a`, `bg-bg`, `surface*`, `fg*` so marketing + auth match the prior product look.
 - **localStorage session** — simple for SPA + RTK; httpOnly cookies would need a BFF later.
 - **Refresh on 401** — matches short-lived access JWT; no proactive timer.
-- **Mocked Discovery / Champions** — no content/users APIs yet; static cards + CSS marquee (Embla deferred).
+- **Mocked Discovery / Champions** — no content APIs yet; static cards + CSS marquee (Embla deferred).
 
 ## Routes
 
@@ -46,7 +47,9 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 | `/` | Landing (navbar → hero → … → footer) |
 | `/signin` | Wired to identity signin |
 | `/signup` | Wired to identity signup (full name + username + password) |
-| `/profile` | Inspo-2 layout: cover header, reputation+badges, contributions; ⚙ → settings |
+| `/profile` | Own profile (inspo-2); follower counts + ⚙ settings |
+| `/users/[id]` | Public profile; Follow/Following; self redirects to `/profile` |
+| `/search` | User search (username / full name); auth required |
 | `/forgot-password` | Stub (“reset unavailable”) |
 
 ## Layout
@@ -68,9 +71,11 @@ frontend/
       api/baseApi.ts
       api/baseQueryWithReauth.ts
       api/authApi.ts
+      api/socialApi.ts
       auth/authSlice.ts
       auth/types.ts
       store.ts
+      validation/phone.ts
 ```
 
 ## Config knobs

@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: YetBota Identity Service
-  description: Auth + profile. Access JWT for APIs; refresh token for rotation. Other services introspect access tokens.
-  version: 0.3.0
+  description: Auth, profile, follow graph, user search, and avatar upload (Cloudinary).
+  version: 0.5.0
 servers:
   - url: /
     description: Current host (local or Render)
@@ -134,6 +134,51 @@ paths:
                 $ref: "#/components/schemas/StatusOK"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /auth/me/avatar:
+    post:
+      tags: [Profile]
+      summary: Upload avatar
+      description: Multipart form field `file` (jpeg/png/webp/gif, max 2MB). Stored on Cloudinary.
+      operationId: uploadAvatar
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Profile]
+      summary: Delete avatar
+      operationId: deleteAvatar
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /auth/introspect:
     post:
       tags: [Auth]
@@ -203,6 +248,148 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /users/search:
+    get:
+      tags: [Social]
+      summary: Search users
+      description: Case-insensitive match on username and full name. Min query length 2; max 20 results. Excludes the caller.
+      operationId: searchUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        "200":
+          description: Matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Users"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /users/{id}:
+    get:
+      tags: [Social]
+      summary: Get public profile
+      operationId: getUserProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Public profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{id}/follow:
+    post:
+      tags: [Social]
+      summary: Follow user
+      operationId: followUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Followed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Social]
+      summary: Unfollow user
+      operationId: unfollowUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Unfollowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /users/{id}/followers:
+    get:
+      tags: [Social]
+      summary: List followers
+      description: |
+        Returns public profiles for users who follow `{id}`, newest follows first.
+        Keyset pagination via `cursor` / `next_cursor`. Hydrated from Postgres in one batch
+        after reading follow edges from SurrealDB.
+      operationId: listFollowers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Follower profiles page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{id}/following:
+    get:
+      tags: [Social]
+      summary: List following
+      description: |
+        Returns public profiles for users `{id}` follows, newest follows first.
+        Same pagination and hydration model as followers.
+      operationId: listFollowing
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Following profiles page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /healthz:
     get:
       tags: [Ops]
@@ -223,6 +410,31 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Access token (not refresh)
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ListLimit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 20, max 50)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    ListCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque keyset cursor from a previous `next_cursor`
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Invalid request
@@ -232,6 +444,12 @@ components:
             $ref: "#/components/schemas/Error"
     Unauthorized:
       description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
       content:
         application/json:
           schema:
@@ -275,7 +493,7 @@ components:
           type: string
     UserInfo:
       type: object
-      required: [user_id, username, full_name, phone, address, bio]
+      required: [user_id, username, full_name, phone, address, bio, avatar_url]
       properties:
         user_id:
           type: string
@@ -290,6 +508,32 @@ components:
           type: string
         bio:
           type: string
+        avatar_url:
+          type: string
+          description: Empty when no avatar
+    Users:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserInfo"
+    UsersPage:
+      type: object
+      required: [users, total]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserInfo"
+        next_cursor:
+          type: string
+          description: Pass as `cursor` for the next page; omitted when no more results
+        total:
+          type: integer
+          format: int64
+          description: Total follow edges for this list (not just the page)
     UpdateProfileRequest:
       type: object
       description: Send any subset of fields to update
@@ -298,6 +542,7 @@ components:
           type: string
         phone:
           type: string
+          description: Optional; if non-empty, length 7–15
         address:
           type: string
         bio:

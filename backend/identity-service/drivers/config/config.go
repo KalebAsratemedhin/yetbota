@@ -9,11 +9,13 @@ import (
 )
 
 type Config struct {
-	HTTP           HTTPConfig     `yaml:"http"`
-	Postgres       PostgresConfig `yaml:"postgres"`
-	JWT            JWTConfig      `yaml:"jwt"`
-	CORS           CORSConfig     `yaml:"cors"`
-	MigrateOnStart bool           `yaml:"migrate_on_start"`
+	HTTP           HTTPConfig        `yaml:"http"`
+	Postgres       PostgresConfig    `yaml:"postgres"`
+	Surreal        SurrealConfig     `yaml:"surreal"`
+	Cloudinary     CloudinaryConfig  `yaml:"cloudinary"`
+	JWT            JWTConfig         `yaml:"jwt"`
+	CORS           CORSConfig        `yaml:"cors"`
+	MigrateOnStart bool              `yaml:"migrate_on_start"`
 }
 
 type HTTPConfig struct {
@@ -24,12 +26,26 @@ type PostgresConfig struct {
 	URL string `yaml:"url"`
 }
 
+type SurrealConfig struct {
+	URL       string `yaml:"url"`
+	Namespace string `yaml:"namespace"`
+	Database  string `yaml:"database"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+}
+
+type CloudinaryConfig struct {
+	CloudName string `yaml:"cloud_name"`
+	APIKey    string `yaml:"api_key"`
+	APISecret string `yaml:"api_secret"`
+	Folder    string `yaml:"folder"`
+}
+
 type JWTConfig struct {
 	Secret           string `yaml:"secret"`
 	AccessTTLMinutes int    `yaml:"access_ttl_minutes"`
 	RefreshTTLDays   int    `yaml:"refresh_ttl_days"`
-	// Deprecated: use access_ttl_minutes. Kept so old config still loads.
-	TTLHours int `yaml:"ttl_hours"`
+	TTLHours         int    `yaml:"ttl_hours"`
 }
 
 type CORSConfig struct {
@@ -51,7 +67,6 @@ func Load(path string) (Config, error) {
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
 		cfg.HTTP.Addr = v
 	}
-	// Render (and most PaaS) set PORT; prefer it over config defaults.
 	if v := os.Getenv("PORT"); v != "" {
 		if v[0] == ':' {
 			cfg.HTTP.Addr = v
@@ -75,6 +90,33 @@ func Load(path string) (Config, error) {
 		}
 		cfg.CORS.AllowedOrigins = origins
 	}
+	if v := os.Getenv("SURREAL_URL"); v != "" {
+		cfg.Surreal.URL = v
+	}
+	if v := os.Getenv("SURREAL_NS"); v != "" {
+		cfg.Surreal.Namespace = v
+	}
+	if v := os.Getenv("SURREAL_DB"); v != "" {
+		cfg.Surreal.Database = v
+	}
+	if v := os.Getenv("SURREAL_USER"); v != "" {
+		cfg.Surreal.Username = v
+	}
+	if v := os.Getenv("SURREAL_PASS"); v != "" {
+		cfg.Surreal.Password = v
+	}
+	if v := os.Getenv("CLOUDINARY_CLOUD_NAME"); v != "" {
+		cfg.Cloudinary.CloudName = v
+	}
+	if v := os.Getenv("CLOUDINARY_API_KEY"); v != "" {
+		cfg.Cloudinary.APIKey = v
+	}
+	if v := os.Getenv("CLOUDINARY_API_SECRET"); v != "" {
+		cfg.Cloudinary.APISecret = v
+	}
+	if v := os.Getenv("CLOUDINARY_FOLDER"); v != "" {
+		cfg.Cloudinary.Folder = v
+	}
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8081"
 	}
@@ -87,6 +129,24 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.JWT.RefreshTTLDays <= 0 {
 		cfg.JWT.RefreshTTLDays = 30
+	}
+	if cfg.Surreal.URL == "" {
+		cfg.Surreal.URL = "ws://localhost:8000"
+	}
+	if cfg.Surreal.Namespace == "" {
+		cfg.Surreal.Namespace = "yetbota"
+	}
+	if cfg.Surreal.Database == "" {
+		cfg.Surreal.Database = "main"
+	}
+	if cfg.Surreal.Username == "" {
+		cfg.Surreal.Username = "root"
+	}
+	if cfg.Surreal.Password == "" {
+		cfg.Surreal.Password = "root"
+	}
+	if cfg.Cloudinary.Folder == "" {
+		cfg.Cloudinary.Folder = "yetbota/avatars"
 	}
 	if cfg.JWT.Secret == "" {
 		return Config{}, fmt.Errorf("jwt.secret is required")

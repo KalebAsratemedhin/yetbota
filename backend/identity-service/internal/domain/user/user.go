@@ -8,14 +8,16 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID
-	Username     string
-	PasswordHash string
-	CreatedAt    time.Time
-	FullName     string
-	Phone        string
-	Address      string
-	Bio          string
+	ID             uuid.UUID
+	Username       string
+	PasswordHash   string
+	CreatedAt      time.Time
+	FullName       string
+	Phone          string
+	Address        string
+	Bio            string
+	AvatarURL      string
+	AvatarPublicID string
 }
 
 type ProfileUpdate struct {
@@ -29,8 +31,11 @@ type Repository interface {
 	Create(ctx context.Context, username, passwordHash, fullName string) (User, error)
 	ByUsername(ctx context.Context, username string) (User, error)
 	ByID(ctx context.Context, id uuid.UUID) (User, error)
+	ByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error)
 	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 	UpdateProfile(ctx context.Context, id uuid.UUID, patch ProfileUpdate) (User, error)
+	UpdateAvatar(ctx context.Context, id uuid.UUID, avatarURL, publicID string) (User, error)
+	Search(ctx context.Context, query string, excludeID uuid.UUID, limit int32) ([]User, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 

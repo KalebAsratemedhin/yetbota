@@ -23,12 +23,14 @@ type RevokedToken struct {
 }
 
 type User struct {
-	ID           pgtype.UUID        `json:"id"`
-	Username     string             `json:"username"`
-	PasswordHash string             `json:"password_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	FullName     string             `json:"full_name"`
-	Phone        string             `json:"phone"`
-	Address      string             `json:"address"`
-	Bio          string             `json:"bio"`
+	ID             pgtype.UUID        `json:"id"`
+	Username       string             `json:"username"`
+	PasswordHash   string             `json:"password_hash"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	FullName       string             `json:"full_name"`
+	Phone          string             `json:"phone"`
+	Address        string             `json:"address"`
+	Bio            string             `json:"bio"`
+	AvatarUrl      string             `json:"avatar_url"`
+	AvatarPublicID string             `json:"avatar_public_id"`
 }

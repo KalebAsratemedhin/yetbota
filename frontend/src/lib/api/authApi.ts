@@ -19,6 +19,8 @@ type AuthRoot = {
 };
 
 export const authApi = baseApi.injectEndpoints({
+  // HMR / Fast Refresh re-evaluates this module; allow re-inject.
+  overrideExisting: true,
   endpoints: (build) => ({
     signUp: build.mutation<AuthResponse, SignUpRequest>({
       query: (body) => ({
@@ -82,6 +84,31 @@ export const authApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Me"],
     }),
+    uploadAvatar: build.mutation<UserInfo, File>({
+      query: (file) => {
+        const body = new FormData();
+        body.append("file", file);
+        return {
+          url: "/auth/me/avatar",
+          method: "POST",
+          body,
+        };
+      },
+      invalidatesTags: (result) =>
+        result
+          ? ["Me", { type: "User", id: result.user_id }]
+          : ["Me"],
+    }),
+    deleteAvatar: build.mutation<UserInfo, void>({
+      query: () => ({
+        url: "/auth/me/avatar",
+        method: "DELETE",
+      }),
+      invalidatesTags: (result) =>
+        result
+          ? ["Me", { type: "User", id: result.user_id }]
+          : ["Me"],
+    }),
     changePassword: build.mutation<StatusOK, ChangePasswordRequest>({
       query: (body) => ({
         url: "/auth/password",
@@ -112,6 +139,8 @@ export const {
   useLogoutMutation,
   useMeQuery,
   useUpdateProfileMutation,
+  useUploadAvatarMutation,
+  useDeleteAvatarMutation,
   useChangePasswordMutation,
   useDeleteAccountMutation,
 } = authApi;

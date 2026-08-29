@@ -6,6 +6,7 @@ tmp_dir = "tmp"
   cmd = "go build -o ./tmp/identity-service ./cmd/"
   bin = "./tmp/identity-service"
   include_ext = ["go", "yaml", "yml", "sql"]
+  include_file = [".env"]
   exclude_dir = ["tmp", "vendor"]
   exclude_regex = ["_test\\.go"]
   delay = 800

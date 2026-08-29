@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/go-kit/kit/endpoint"
 	kithttp "github.com/go-kit/kit/transport/http"
@@ -15,15 +14,15 @@ import (
 	"github.com/yetbota/identity-service/internal/transport/http/shared"
 )
 
-type TokenAuthenticator interface {
-	AuthenticateToken(ctx context.Context, token string) (domain.TokenClaims, error)
-}
+type TokenAuthenticator = shared.TokenAuthenticator
 
 type Endpoints struct {
 	SignUp         endpoint.Endpoint
 	SignIn         endpoint.Endpoint
 	Me             endpoint.Endpoint
 	UpdateProfile  endpoint.Endpoint
+	UploadAvatar   endpoint.Endpoint
+	DeleteAvatar   endpoint.Endpoint
 	Introspect     endpoint.Endpoint
 	Logout         endpoint.Endpoint
 	ChangePassword endpoint.Endpoint
@@ -42,54 +41,15 @@ func NewHandler(eps Endpoints, authn TokenAuthenticator) http.Handler {
 	mux.Handle("POST /introspect", kithttp.NewServer(eps.Introspect, decodeIntrospect, shared.EncodeJSONResponse, opts...))
 	mux.Handle("POST /refresh", kithttp.NewServer(eps.Refresh, decodeRefresh, shared.EncodeJSONResponse, opts...))
 
-	mux.Handle("GET /me", requireAuth(authn, kithttp.NewServer(eps.Me, decodeClaimsOnly, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("PATCH /me", requireAuth(authn, kithttp.NewServer(eps.UpdateProfile, decodeUpdateProfile, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("POST /logout", requireAuth(authn, kithttp.NewServer(eps.Logout, decodeLogout, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("POST /password", requireAuth(authn, kithttp.NewServer(eps.ChangePassword, decodeChangePassword, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("DELETE /me", requireAuth(authn, kithttp.NewServer(eps.DeleteAccount, decodeClaimsOnly, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("GET /me", shared.RequireAuth(authn, kithttp.NewServer(eps.Me, decodeClaimsOnly, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("PATCH /me", shared.RequireAuth(authn, kithttp.NewServer(eps.UpdateProfile, decodeUpdateProfile, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("POST /me/avatar", shared.RequireAuth(authn, kithttp.NewServer(eps.UploadAvatar, decodeUploadAvatar, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("DELETE /me/avatar", shared.RequireAuth(authn, kithttp.NewServer(eps.DeleteAvatar, decodeClaimsOnly, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("POST /logout", shared.RequireAuth(authn, kithttp.NewServer(eps.Logout, decodeLogout, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("POST /password", shared.RequireAuth(authn, kithttp.NewServer(eps.ChangePassword, decodeChangePassword, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("DELETE /me", shared.RequireAuth(authn, kithttp.NewServer(eps.DeleteAccount, decodeClaimsOnly, shared.EncodeJSONResponse, opts...)))
 
 	return mux
-}
-
-type ctxKey int
-
-const claimsKey ctxKey = 1
-
-func requireAuth(authn TokenAuthenticator, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := bearerToken(r)
-		if raw == "" {
-			shared.EncodeError(r.Context(), apperr.ErrUnauthorized, w)
-			return
-		}
-		claims, err := authn.AuthenticateToken(r.Context(), raw)
-		if err != nil {
-			shared.EncodeError(r.Context(), err, w)
-			return
-		}
-		ctx := context.WithValue(r.Context(), claimsKey, claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func bearerToken(r *http.Request) string {
-	h := r.Header.Get("Authorization")
-	if h == "" {
-		return ""
-	}
-	parts := strings.SplitN(h, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
-}
-
-func claimsFromCtx(ctx context.Context) (domain.TokenClaims, error) {
-	c, ok := ctx.Value(claimsKey).(domain.TokenClaims)
-	if !ok {
-		return domain.TokenClaims{}, apperr.ErrUnauthorized
-	}
-	return c, nil
 }
 
 func decodeCredentials(_ context.Context, r *http.Request) (interface{}, error) {
@@ -120,7 +80,7 @@ func decodeRefresh(_ context.Context, r *http.Request) (interface{}, error) {
 }
 
 func decodeClaimsOnly(ctx context.Context, _ *http.Request) (interface{}, error) {
-	claims, err := claimsFromCtx(ctx)
+	claims, err := shared.ClaimsFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +89,7 @@ func decodeClaimsOnly(ctx context.Context, _ *http.Request) (interface{}, error)
 
 func decodeLogout(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	claims, err := claimsFromCtx(ctx)
+	claims, err := shared.ClaimsFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +104,7 @@ func decodeLogout(ctx context.Context, r *http.Request) (interface{}, error) {
 
 func decodeUpdateProfile(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	claims, err := claimsFromCtx(ctx)
+	claims, err := shared.ClaimsFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +126,34 @@ func decodeUpdateProfile(ctx context.Context, r *http.Request) (interface{}, err
 	}, nil
 }
 
+func decodeUploadAvatar(ctx context.Context, r *http.Request) (interface{}, error) {
+	claims, err := shared.ClaimsFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	const maxMem = 2 << 20
+	if err := r.ParseMultipartForm(maxMem); err != nil {
+		return nil, apperr.Validation(apperr.Field{
+			Field: "file", Code: "INVALID", Message: "expected multipart form with file field",
+		})
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		return nil, apperr.Validation(apperr.Field{
+			Field: "file", Code: "REQUIRED", Message: "file is required",
+		})
+	}
+	return svcendpoint.UploadAvatarRequest{
+		Claims:   claims,
+		Filename: hdr.Filename,
+		Reader:   file,
+		Size:     hdr.Size,
+	}, nil
+}
+
 func decodeChangePassword(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	claims, err := claimsFromCtx(ctx)
+	claims, err := shared.ClaimsFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}

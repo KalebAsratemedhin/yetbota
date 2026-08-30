@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { LogOut, Menu, Search, User, X } from "lucide-react";
+import { LogOut, Menu, Plus, Search, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
 import HeaderNavLink from "@/components/shared/HeaderNavLink";
@@ -72,10 +72,18 @@ export default function Navbar() {
             {isSignedIn ? (
               <>
                 <Link
+                  href="/compose"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand px-3.5 text-xs font-bold text-black transition-colors hover:bg-brand-dark"
+                  title="Create post"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={2.5} />
+                  <span className="hidden xl:inline">Drop</span>
+                </Link>
+                <Link
                   href="/search"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-subtle bg-overlay text-fg-muted transition-colors hover:bg-overlay-strong hover:text-fg"
-                  title="Search people"
-                  aria-label="Search people"
+                  title="Search"
+                  aria-label="Search"
                 >
                   <Search className="h-4 w-4" />
                 </Link>
@@ -162,12 +170,20 @@ export default function Navbar() {
           {isSignedIn ? (
             <div className="flex flex-col gap-1 border-t border-border-subtle pt-3">
               <Link
+                href="/compose"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-overlay"
+              >
+                <Plus className="h-4 w-4" />
+                Drop a place
+              </Link>
+              <Link
                 href="/search"
                 onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg"
               >
                 <Search className="h-4 w-4" />
-                Search people
+                Search
               </Link>
               <Link
                 href="/profile"

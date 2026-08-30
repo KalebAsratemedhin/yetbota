@@ -3,48 +3,67 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Hash, Search, Users } from "lucide-react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
+import PostsGrid from "@/components/posts/PostsGrid";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import {
+  useLazySearchPostsQuery,
+  useSearchPostsQuery,
+} from "@/lib/api/contentApi";
 import { useSearchUsersQuery } from "@/lib/api/socialApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
+import { cn } from "@/lib/utils";
 
 const MIN_QUERY = 2;
+
+type Tab = "people" | "posts";
 
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQ = searchParams.get("q") ?? "";
+  const initialTab = searchParams.get("tab") === "posts" ? "posts" : "people";
   const [query, setQuery] = useState(initialQ);
+  const [tab, setTab] = useState<Tab>(initialTab);
   const debounced = useDebouncedValue(query.trim(), 300);
   const canSearch = debounced.length >= MIN_QUERY;
 
-  const { data, isFetching, isError, error, isUninitialized } = useSearchUsersQuery(
-    debounced,
-    { skip: !canSearch }
+  const usersQ = useSearchUsersQuery(debounced, {
+    skip: !canSearch || tab !== "people",
+  });
+  const postsQ = useSearchPostsQuery(
+    { q: debounced, limit: 20 },
+    { skip: !canSearch || tab !== "posts" }
   );
+  const [fetchMorePosts] = useLazySearchPostsQuery();
 
   useEffect(() => {
-    const next = query.trim();
-    const current = searchParams.get("q") ?? "";
-    if (next === current) return;
-    const url = next ? `/search?q=${encodeURIComponent(next)}` : "/search";
-    router.replace(url, { scroll: false });
-  }, [query, router, searchParams]);
+    const nextQ = query.trim();
+    const currentQ = searchParams.get("q") ?? "";
+    const currentTab = searchParams.get("tab") === "posts" ? "posts" : "people";
+    if (nextQ === currentQ && tab === currentTab) return;
+    const params = new URLSearchParams();
+    if (nextQ) params.set("q", nextQ);
+    if (tab === "posts") params.set("tab", "posts");
+    const qs = params.toString();
+    router.replace(qs ? `/search?${qs}` : "/search", { scroll: false });
+  }, [query, tab, router, searchParams]);
 
-  const users = data?.users ?? [];
+  const users = usersQ.data?.users ?? [];
+  const maybeTag = debounced.replace(/^#/, "");
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 pt-6 pb-12 sm:px-6 sm:pt-8">
-      <h1 className="mb-1 text-2xl font-bold text-fg">Find people</h1>
+    <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-12 sm:px-6 sm:pt-8">
+      <h1 className="mb-1 text-2xl font-bold text-fg">Search</h1>
       <p className="mb-6 text-sm text-fg-muted">
-        Search by username or full name.
+        Find people or place drops by text and hashtags.
       </p>
 
       <label className="relative block">
-        <span className="sr-only">Search users</span>
+        <span className="sr-only">Search</span>
         <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-fg-faint" />
         <input
           type="search"
@@ -57,46 +76,98 @@ function SearchContent() {
         />
       </label>
 
-      <div className="mt-6">
+      <div className="mt-4 mb-6 inline-flex rounded-xl bg-overlay p-1">
+        {(
+          [
+            { id: "people" as const, label: "People", icon: Users },
+            { id: "posts" as const, label: "Places", icon: Hash },
+          ] as const
+        ).map((t) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm",
+                tab === t.id
+                  ? "bg-surface text-fg shadow-sm"
+                  : "text-fg-muted hover:text-fg"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "posts" && canSearch ? (
+        <Link
+          href={`/hashtags/${encodeURIComponent(maybeTag)}`}
+          className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/25 bg-brand/10 px-4 py-3 transition-colors hover:bg-brand/15"
+        >
+          <Hash className="h-5 w-5 text-brand" />
+          <div>
+            <p className="text-sm font-semibold text-fg">Browse #{maybeTag}</p>
+            <p className="text-xs text-fg-faint">Open the hashtag gallery</p>
+          </div>
+        </Link>
+      ) : null}
+
+      <div className="mt-2">
         {!canSearch ? (
           <p className="text-center text-sm text-fg-faint">
             {query.trim()
               ? "Keep typing — need at least 2 characters."
               : "Results appear as you type."}
           </p>
-        ) : isFetching && !data ? (
-          <p className="text-center text-sm text-fg-faint">Searching…</p>
-        ) : isError ? (
+        ) : tab === "people" ? (
+          usersQ.isFetching && !usersQ.data ? (
+            <p className="text-center text-sm text-fg-faint">Searching people…</p>
+          ) : usersQ.isError ? (
+            <p className="text-center text-sm text-fg-muted">
+              {getApiErrorMessage(usersQ.error)}
+            </p>
+          ) : users.length === 0 ? (
+            <p className="text-center text-sm text-fg-faint">
+              No users match “{debounced}”.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {users.map((user) => (
+                <li key={user.user_id}>
+                  <Link
+                    href={`/users/${user.user_id}`}
+                    className="flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 transition-colors hover:border-border-subtle hover:bg-surface"
+                  >
+                    <UserAvatar user={user} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-fg">
+                        {user.full_name.trim() || user.username}
+                      </p>
+                      <p className="truncate text-sm text-fg-muted">@{user.username}</p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : postsQ.isError ? (
           <p className="text-center text-sm text-fg-muted">
-            {getApiErrorMessage(error)}
-          </p>
-        ) : users.length === 0 && !isUninitialized ? (
-          <p className="text-center text-sm text-fg-faint">
-            No users match “{debounced}”.
+            {getApiErrorMessage(postsQ.error)}
           </p>
         ) : (
-          <ul className="space-y-1">
-            {users.map((user) => (
-              <li key={user.user_id}>
-                <Link
-                  href={`/users/${user.user_id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 transition-colors hover:border-border-subtle hover:bg-surface"
-                >
-                  <UserAvatar user={user} size="md" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-fg">
-                      {user.full_name.trim() || user.username}
-                    </p>
-                    <p className="truncate text-sm text-fg-muted">@{user.username}</p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <PostsGrid
+            initial={postsQ.data}
+            emptyTitle="No matching places"
+            emptyBody="Try another phrase or open the hashtag shortcut above."
+            onLoadMore={async (cursor) =>
+              fetchMorePosts({ q: debounced, limit: 20, cursor }).unwrap()
+            }
+          />
         )}
-        {canSearch && isFetching && data ? (
-          <p className="mt-3 text-center text-xs text-fg-faint">Updating…</p>
-        ) : null}
       </div>
     </div>
   );

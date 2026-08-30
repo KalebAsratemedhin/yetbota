@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { baseApi } from "@/lib/api/baseApi";
+import { contentApi } from "@/lib/api/contentApi";
 import { authReducer, loadAuthFromStorage } from "@/lib/auth/authSlice";
 import "@/lib/api/authApi";
 import "@/lib/api/socialApi";
@@ -9,9 +10,10 @@ export const makeStore = () =>
     reducer: {
       auth: authReducer,
       [baseApi.reducerPath]: baseApi.reducer,
+      [contentApi.reducerPath]: contentApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(baseApi.middleware),
+      getDefaultMiddleware().concat(baseApi.middleware, contentApi.middleware),
     preloadedState: {
       auth: loadAuthFromStorage(),
     },

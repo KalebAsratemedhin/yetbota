@@ -16,6 +16,7 @@ Decisions and structure for the Next.js app under `frontend/`.
 | Landing copy | `content/en.json` via `useContent()` | English |
 | Auth session | Redux `auth` + `localStorage` (`yetbota.auth`) | access + refresh; refresh-on-401 |
 | Identity API | Direct to service URL | CORS on identity-service; default `http://localhost:8081` |
+| Content API | Direct to content-service | CORS on content-service; default `http://localhost:8082` |
 | App location | `frontend/` at repo root | Mirrors `backend/` |
 
 ## Auth (identity-service)
@@ -32,13 +33,25 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 | Me | `GET /auth/me` available via `useMeQuery` |
 | Social | Follow graph + search via `socialApi`; avatar via `uploadAvatar` / `deleteAvatar` |
 
+## Content (content-service)
+
+Contract: `backend/content-service/api/openapi.yaml`. Feed/home timeline is **out of scope** (SRS).
+
+| Concern | Behavior |
+| --- | --- |
+| Base URL | `NEXT_PUBLIC_CONTENT_API_BASE_URL` (default `http://localhost:8082`); separate RTK `contentApi` |
+| Auth | Same Bearer access token; 401 → identity refresh → retry |
+| Create | Sign media → Cloudinary upload → `POST /posts` |
+| Read | `GET /posts/{id}`, `GET /users/{id}/posts`, bookmarks, search, hashtags |
+| Engage | Reactions, comments, bookmark, share |
+
 ## Why these choices
 
 - **App Router** — current Next.js default; official Redux + shadcn docs target it.
 - **Token set reused** — brand green `#22C55E` / `#00e05a`, `bg-bg`, `surface*`, `fg*` so marketing + auth match the prior product look.
 - **localStorage session** — simple for SPA + RTK; httpOnly cookies would need a BFF later.
 - **Refresh on 401** — matches short-lived access JWT; no proactive timer.
-- **Mocked Discovery / Champions** — no content APIs yet; static cards + CSS marquee (Embla deferred).
+- **No discovery feed** — SRS slice has no home timeline; places surface via profile, search, hashtags, compose.
 
 ## Routes
 
@@ -47,9 +60,12 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 | `/` | Landing (navbar → hero → … → footer) |
 | `/signin` | Wired to identity signin |
 | `/signup` | Wired to identity signup (full name + username + password) |
-| `/profile` | Own profile (inspo-2); follower counts + ⚙ settings |
-| `/users/[id]` | Public profile; Follow/Following; self redirects to `/profile` |
-| `/search` | User search (username / full name); auth required |
+| `/profile` | Own profile; Locations + Saved from content API |
+| `/users/[id]` | Public profile; Locations posts |
+| `/search` | People + Places tabs; hashtag shortcut |
+| `/compose` | Create post (media modes + geo) |
+| `/posts/[id]` | Post detail, reactions, comments, bookmark, share |
+| `/hashtags/[tag]` | Posts for one hashtag |
 | `/forgot-password` | Stub (“reset unavailable”) |
 
 ## Layout
@@ -81,6 +97,7 @@ frontend/
 ## Config knobs
 
 - `NEXT_PUBLIC_API_BASE_URL` — identity base URL (default `http://localhost:8081`).
+- `NEXT_PUBLIC_CONTENT_API_BASE_URL` — content base URL (default `http://localhost:8082`).
 - `yetbota.theme` / `yetbota.auth` in localStorage.
 - shadcn: `frontend/components.json`.
 - Design reference: `practices/design.inspo-1.md`.

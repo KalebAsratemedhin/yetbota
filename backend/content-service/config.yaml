@@ -1,0 +1,23 @@
+# Local defaults — override with env / .env
+http:
+  addr: ":8082"
+postgres:
+  url: "postgres://postgres:postgres@localhost:5433/yetbota?sslmode=disable"
+identity:
+  base_url: "http://localhost:8081"
+cloudinary:
+  cloud_name: ""
+  api_key: ""
+  api_secret: ""
+  folder: yetbota/posts
+media:
+  max_images: 10
+  max_av_duration_sec: 10
+  default_page_size: 20
+  max_page_size: 50
+share:
+  public_base_url: "http://localhost:3000"
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+migrate_on_start: true

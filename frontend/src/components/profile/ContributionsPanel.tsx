@@ -1,135 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import Link from "next/link";
 import { Bookmark, HelpCircle, MapPin, Plus } from "lucide-react";
+import PostsGrid from "@/components/posts/PostsGrid";
+import {
+  useLazyListMyBookmarksQuery,
+  useLazyListUserPostsQuery,
+  useListMyBookmarksQuery,
+  useListUserPostsQuery,
+} from "@/lib/api/contentApi";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 type ContributionTab = "locations" | "qa" | "saved";
 
-const TABS: { id: ContributionTab; label: string }[] = [
-  { id: "locations", label: "Locations" },
-  { id: "qa", label: "Q&A" },
-  { id: "saved", label: "Saved" },
-];
-
-const PLACEHOLDER_CARDS = [
-  {
-    id: "1",
-    title: "Tomoca Coffee – Piazza",
-    address: "Piazza, Addis Ababa",
-    photo: "/images/places/galani.jpg",
-  },
-  {
-    id: "2",
-    title: "Mercato Spice Market",
-    address: "Addis Ketema",
-    photo: "/images/places/mercato.jpg",
-  },
-  {
-    id: "3",
-    title: "Friendship Park",
-    address: "Addis Ababa",
-    photo: "/images/places/friendship.jpg",
-  },
-];
-
-function EmptyState({ tab }: { tab: ContributionTab }) {
-  const copy: Record<ContributionTab, { title: string; body: string }> = {
-    locations: {
-      title: "No locations yet",
-      body: "Places you contribute will show up here.",
-    },
-    qa: {
-      title: "No Q&A yet",
-      body: "Questions and answers you post will land in this tab.",
-    },
-    saved: {
-      title: "No saved places",
-      body: "Bookmarks and saved threads will appear here.",
-    },
-  };
-  const c = copy[tab];
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border-subtle bg-surface px-6 py-12 text-center">
-      {tab === "qa" ? (
-        <HelpCircle className="h-8 w-8 text-fg-faint" />
-      ) : tab === "saved" ? (
-        <Bookmark className="h-8 w-8 text-fg-faint" />
-      ) : (
-        <MapPin className="h-8 w-8 text-fg-faint" />
-      )}
-      <p className="text-sm font-semibold text-fg">{c.title}</p>
-      <p className="max-w-xs text-xs text-fg-faint">{c.body}</p>
-      <span className="mt-2 rounded-full bg-overlay px-2.5 py-1 text-[10px] font-semibold tracking-wide text-fg-faint uppercase">
-        Coming soon
-      </span>
-    </div>
-  );
-}
-
-function PlaceholderCard({
-  title,
-  address,
-  photo,
+export default function ContributionsPanel({
+  userId,
+  mode,
 }: {
-  title: string;
-  address: string;
-  photo: string;
+  userId: string;
+  mode: "own" | "public";
 }) {
-  return (
-    <div className="group flex cursor-default flex-col overflow-hidden rounded-xl border border-border-subtle bg-surface transition-colors hover:border-overlay-strong">
-      <div className="relative aspect-[3/2] overflow-hidden">
-        <Image
-          src={photo}
-          alt={title}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-        />
-        <span className="absolute top-2 left-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
-          Preview
-        </span>
-      </div>
-      <div className="p-3">
-        <p className="line-clamp-1 text-sm font-semibold text-fg">{title}</p>
-        <div className="mt-1 flex items-center gap-1">
-          <MapPin className="h-3 w-3 shrink-0 text-fg-faint" />
-          <span className="truncate text-[11px] text-fg-muted">{address}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between text-[10px] text-fg-faint">
-          <span>—</span>
-          <span>0 likes</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ContributionsPanel() {
+  const tabs: { id: ContributionTab; label: string }[] = [
+    { id: "locations", label: "Locations" },
+    { id: "qa", label: "Q&A" },
+    ...(mode === "own" ? [{ id: "saved" as const, label: "Saved" }] : []),
+  ];
   const [tab, setTab] = useState<ContributionTab>("locations");
 
+  const postsQ = useListUserPostsQuery(
+    { id: userId, limit: 20 },
+    { skip: tab !== "locations" }
+  );
+  const [fetchMorePosts] = useLazyListUserPostsQuery();
+
+  const bookmarksQ = useListMyBookmarksQuery(
+    { limit: 20 },
+    { skip: tab !== "saved" || mode !== "own" }
+  );
+  const [fetchMoreBookmarks] = useLazyListMyBookmarksQuery();
+
   return (
-    <div className="rounded-2xl border border-border-subtle bg-bg p-4">
+    <div className="rounded-2xl border border-border-subtle bg-bg p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-fg">Your Contributions</h3>
-        <button
-          type="button"
-          disabled
-          title="Coming soon"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand text-black opacity-70"
-          aria-label="Create post (coming soon)"
-        >
-          <Plus className="h-5 w-5" strokeWidth={2.5} />
-        </button>
+        <h3 className="text-lg font-semibold text-fg">
+          {mode === "own" ? "Your contributions" : "Contributions"}
+        </h3>
+        {mode === "own" ? (
+          <Link
+            href="/compose"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand text-black shadow-[0_0_24px_-6px_rgba(34,197,94,0.7)] transition-transform hover:scale-105"
+            aria-label="Create post"
+            title="Create post"
+          >
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
+          </Link>
+        ) : null}
       </div>
 
       <div
         role="tablist"
         aria-label="Contribution filters"
-        className="mb-4 inline-flex w-fit rounded-xl bg-overlay p-1"
+        className="mb-5 inline-flex w-fit rounded-xl bg-overlay p-1"
       >
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -149,14 +83,76 @@ export default function ContributionsPanel() {
       </div>
 
       {tab === "locations" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {PLACEHOLDER_CARDS.map((card) => (
-            <PlaceholderCard key={card.id} {...card} />
-          ))}
+        postsQ.isError ? (
+          <button
+            type="button"
+            onClick={() => void postsQ.refetch()}
+            className="text-sm font-semibold text-brand hover:underline"
+          >
+            Couldn’t load posts — retry
+          </button>
+        ) : (
+          <PostsGrid
+            initial={postsQ.data}
+            fromUser
+            emptyTitle={mode === "own" ? "No places yet" : "No posts yet"}
+            emptyBody={
+              mode === "own"
+                ? "Pin your first drop from the green + button."
+                : "This explorer hasn’t published places yet."
+            }
+            onLoadMore={async (cursor) =>
+              fetchMorePosts({ id: userId, limit: 20, cursor }).unwrap()
+            }
+          />
+        )
+      ) : null}
+
+      {tab === "saved" && mode === "own" ? (
+        bookmarksQ.isError ? (
+          <button
+            type="button"
+            onClick={() => void bookmarksQ.refetch()}
+            className="text-sm font-semibold text-brand hover:underline"
+          >
+            Couldn’t load saved — retry
+          </button>
+        ) : (
+          <PostsGrid
+            initial={bookmarksQ.data}
+            bookmarked
+            emptyTitle="Nothing saved"
+            emptyBody="Bookmark places from a post to collect them here."
+            onLoadMore={async (cursor) =>
+              fetchMoreBookmarks({ limit: 20, cursor }).unwrap()
+            }
+          />
+        )
+      ) : null}
+
+      {tab === "qa" ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border-subtle bg-surface px-6 py-12 text-center">
+          <HelpCircle className="h-8 w-8 text-fg-faint" />
+          <p className="text-sm font-semibold text-fg">Q&A coming later</p>
+          <p className="max-w-xs text-xs text-fg-faint">
+            Threaded place questions aren’t in this SRS slice yet.
+          </p>
         </div>
-      ) : (
-        <EmptyState tab={tab} />
-      )}
+      ) : null}
+
+      {tab === "locations" && mode === "own" && postsQ.data?.posts.length === 0 ? (
+        <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-fg-faint">
+          <MapPin className="h-3 w-3" />
+          Tips: photo drops travel farthest with a sharp caption + hashtags.
+        </div>
+      ) : null}
+
+      {tab === "saved" && mode === "own" && bookmarksQ.data?.posts.length === 0 ? (
+        <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-fg-faint">
+          <Bookmark className="h-3 w-3" />
+          Saved lists are private — only you see this tab.
+        </div>
+      ) : null}
     </div>
   );
 }

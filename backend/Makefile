@@ -1,27 +1,28 @@
 # YetBota backend — always run from this directory: `cd backend && make <target>`
-#
-# Later: add content-service / ai-service under `run` so one command starts all APIs.
 
 COMPOSE := docker compose
 IDENTITY_DIR := identity-service
+CONTENT_DIR := content-service
 AIR := $(shell command -v air 2>/dev/null || echo "$(shell go env GOPATH)/bin/air")
 
-.PHONY: help tools db-up db-down db-logs db-ps identity identity-once run up down swagger
+.PHONY: help tools db-up db-down db-logs db-ps identity identity-once content content-once run up down swagger
 
 help:
 	@echo "YetBota backend"
 	@echo ""
 	@echo "  make tools         Install Air (hot reload)"
 	@echo "  make up            Start Postgres, then run APIs with hot reload"
-	@echo "  make run           Run all API services with hot reload (identity for now)"
-	@echo "  make identity      Run identity-service with Air (restarts on code change)"
+	@echo "  make run           Run identity + content with Air"
+	@echo "  make identity      Run identity-service with Air"
 	@echo "  make identity-once Run identity-service once (no reload)"
+	@echo "  make content       Run content-service with Air"
+	@echo "  make content-once  Run content-service once (no reload)"
 	@echo "  make db-up         Start Postgres + SurrealDB"
 	@echo "  make db-down       Stop compose services (keeps volumes)"
 	@echo "  make db-logs       Tail Postgres logs"
 	@echo "  make db-ps         Show compose status"
 	@echo "  make down          Stop compose services"
-	@echo "  make swagger       Print Swagger UI URL"
+	@echo "  make swagger       Print Swagger UI URLs"
 	@echo ""
 
 tools:
@@ -49,14 +50,22 @@ identity: tools-check
 identity-once:
 	cd $(IDENTITY_DIR) && go run ./cmd/
 
-# One entry point for all HTTP services (hot reload). Extend when more services exist.
-run: identity
+content: tools-check
+	cd $(CONTENT_DIR) && $(AIR)
+
+content-once:
+	cd $(CONTENT_DIR) && go run ./cmd/
+
+# One entry point for all HTTP services (hot reload).
+run: tools-check
+	$(MAKE) -j2 identity content
 
 up: db-up
 	$(MAKE) run
 
 swagger:
-	@echo "http://localhost:8081/swagger/index.html"
+	@echo "identity: http://localhost:8081/swagger/index.html"
+	@echo "content:  http://localhost:8082/swagger/index.html"
 
 tools-check:
 	@command -v $(AIR) >/dev/null 2>&1 || $(MAKE) tools

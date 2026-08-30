@@ -103,7 +103,7 @@ export default function ProfileBody({
             <BadgesCard />
           </div>
           <div className="col-span-12">
-            <ContributionsPanel />
+            <ContributionsPanel userId={user.user_id} mode={mode} />
           </div>
         </div>
       </div>

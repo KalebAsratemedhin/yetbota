@@ -1,5 +1,6 @@
 practices/
 backend/identity-service/tmp/
+backend/content-service/tmp/
 .env
 **/.env
 !**/.env.example

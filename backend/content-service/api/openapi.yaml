@@ -1,0 +1,650 @@
+openapi: 3.0.3
+info:
+  title: YetBota Content Service
+  description: Posts, signed Cloudinary media, reactions, comments (with replies), bookmarks, share, and search.
+  version: 0.2.0
+servers:
+  - url: /
+    description: Current host
+  - url: http://localhost:8082
+    description: Local
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+  /media/sign:
+    post:
+      tags: [Media]
+      summary: Sign a Cloudinary upload
+      operationId: signMedia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [image, video, audio]
+      responses:
+        "200":
+          description: Signed upload params
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignMediaResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /posts:
+    post:
+      tags: [Posts]
+      summary: Create a post
+      operationId: createPost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
+      responses:
+        "200":
+          description: Created post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /posts/search:
+    get:
+      tags: [Posts]
+      summary: Search posts
+      operationId: searchPosts
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Matching posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /posts/{id}:
+    get:
+      tags: [Posts]
+      summary: Get a post
+      operationId: getPost
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{id}/reaction:
+    post:
+      tags: [Posts]
+      summary: Set or clear reaction
+      operationId: setReaction
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reaction:
+                  type: string
+                  nullable: true
+                  enum: [like, dislike]
+                  description: Omit or null to clear
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{id}/comments:
+    post:
+      tags: [Posts]
+      summary: Add a comment or reply
+      operationId: addComment
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  maxLength: 2000
+                parent_id:
+                  type: string
+                  format: uuid
+                  description: Top-level comment id to reply to (omit for top-level)
+      responses:
+        "200":
+          description: Comment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Posts]
+      summary: List top-level comments
+      operationId: listComments
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Top-level comments newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommentsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /comments/{id}/replies:
+    get:
+      tags: [Posts]
+      summary: List replies to a comment
+      operationId: listReplies
+      parameters:
+        - $ref: "#/components/parameters/CommentId"
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Direct replies newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommentsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /comments/{id}/reaction:
+    post:
+      tags: [Posts]
+      summary: Set or clear a comment reaction
+      operationId: setCommentReaction
+      parameters:
+        - $ref: "#/components/parameters/CommentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reaction:
+                  type: string
+                  nullable: true
+                  enum: [like, dislike]
+                  description: Omit or null to clear
+      responses:
+        "200":
+          description: Updated comment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{id}/bookmark:
+    post:
+      tags: [Posts]
+      summary: Bookmark a post
+      operationId: addBookmark
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Posts]
+      summary: Remove bookmark
+      operationId: removeBookmark
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{id}/share:
+    post:
+      tags: [Posts]
+      summary: Share a post
+      operationId: sharePost
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Share URL and updated counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /users/{id}/posts:
+    get:
+      tags: [Posts]
+      summary: List a user's posts
+      operationId: listUserPosts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Posts newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /me/bookmarks:
+    get:
+      tags: [Posts]
+      summary: List the caller's bookmarks
+      operationId: listMyBookmarks
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Bookmarked posts, most recently bookmarked first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /hashtags/{tag}/posts:
+    get:
+      tags: [Posts]
+      summary: List posts for a hashtag
+      operationId: listHashtagPosts
+      parameters:
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Posts with that hashtag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Identity access token (validated via introspect)
+  parameters:
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CommentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ListLimit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 20, max 50)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    ListCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque keyset cursor from a previous next_cursor
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    SignMediaResponse:
+      type: object
+      required: [cloud_name, api_key, timestamp, signature, folder, public_id, resource_type]
+      properties:
+        cloud_name:
+          type: string
+        api_key:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+        signature:
+          type: string
+        folder:
+          type: string
+        public_id:
+          type: string
+        resource_type:
+          type: string
+          enum: [image, video]
+    CreatePostRequest:
+      type: object
+      required: [lat, lng, media_mode, media]
+      properties:
+        caption:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        media_mode:
+          type: string
+          enum: [images, images_audio, video]
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateMedia"
+        hashtags:
+          type: array
+          items:
+            type: string
+    CreateMedia:
+      type: object
+      required: [kind, cloudinary_public_id, url]
+      properties:
+        kind:
+          type: string
+          enum: [image, video, audio]
+        cloudinary_public_id:
+          type: string
+        url:
+          type: string
+        sort_order:
+          type: integer
+        duration_ms:
+          type: integer
+        width:
+          type: integer
+        height:
+          type: integer
+        mime:
+          type: string
+    Post:
+      type: object
+      required: [id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at, media, hashtags]
+      properties:
+        id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        caption:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        media_mode:
+          type: string
+        like_count:
+          type: integer
+          format: int64
+        dislike_count:
+          type: integer
+          format: int64
+        comment_count:
+          type: integer
+          format: int64
+        share_count:
+          type: integer
+          format: int64
+        bookmark_count:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/Media"
+        hashtags:
+          type: array
+          items:
+            type: string
+    Media:
+      type: object
+      required: [id, kind, cloudinary_public_id, url, sort_order, duration_ms, width, height, mime]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        cloudinary_public_id:
+          type: string
+        url:
+          type: string
+        sort_order:
+          type: integer
+        duration_ms:
+          type: integer
+        width:
+          type: integer
+        height:
+          type: integer
+        mime:
+          type: string
+    PostsPage:
+      type: object
+      required: [posts]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Post"
+        next_cursor:
+          type: string
+    Comment:
+      type: object
+      required: [id, post_id, author_id, body, like_count, dislike_count, reply_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        post_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        body:
+          type: string
+        like_count:
+          type: integer
+          format: int64
+        dislike_count:
+          type: integer
+          format: int64
+        reply_count:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+    CommentsPage:
+      type: object
+      required: [comments]
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
+        next_cursor:
+          type: string
+    ShareResponse:
+      type: object
+      required: [post, share_url]
+      properties:
+        post:
+          $ref: "#/components/schemas/Post"
+        share_url:
+          type: string
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHORIZED
+                - NOT_FOUND
+                - INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, code, message]
+                properties:
+                  field:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string

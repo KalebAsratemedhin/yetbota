@@ -1,5 +1,5 @@
 # Multi-stage image for content-service (Render / GHCR).
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache git ca-certificates

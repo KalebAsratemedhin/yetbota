@@ -1,0 +1,320 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { Loader2, MapPin, RefreshCw } from "lucide-react";
+import CommentsPanel from "@/components/posts/CommentsPanel";
+import PostDetailCard from "@/components/posts/PostDetailCard";
+import { useGetFeedQuery, useLazyGetFeedQuery } from "@/lib/api/contentApi";
+import { getApiErrorMessage } from "@/lib/auth/errors";
+import type { Post } from "@/lib/content/types";
+import { cn } from "@/lib/utils";
+
+type GeoState =
+  | { status: "pending" }
+  | { status: "ready"; lat: number; lng: number }
+  | { status: "denied"; message: string };
+
+function readGeo(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not available in this browser."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        }),
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          reject(new Error("Location permission is required for your home feed."));
+        } else {
+          reject(new Error("Could not read your location. Try again."));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60_000 }
+    );
+  });
+}
+
+/** Focus the slide whose center is closest to the viewport midpoint. */
+function pickFocusedId(orderedIds: string[]): string | null {
+  if (orderedIds.length === 0) return null;
+  const mid = window.innerHeight * 0.5;
+  let best: string | null = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const id of orderedIds) {
+    const el = document.querySelector<HTMLElement>(`[data-post-id="${id}"]`);
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    const center = r.top + r.height * 0.5;
+    const dist = Math.abs(center - mid);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = id;
+    }
+  }
+  return best ?? orderedIds[0]!;
+}
+
+function SnapFeed({
+  initialPosts,
+  nextCursor,
+  onLoadMore,
+}: {
+  initialPosts: Post[];
+  nextCursor?: string;
+  onLoadMore: (cursor: string) => Promise<{ posts: Post[]; next_cursor?: string }>;
+}) {
+  const [posts, setPosts] = useState(initialPosts);
+  const [cursor, setCursor] = useState<string | null | undefined>(nextCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [focusedId, setFocusedId] = useState(initialPosts[0]?.id ?? "");
+  const [mobileCommentsOpen, setMobileCommentsOpen] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const idsRef = useRef(initialPosts.map((p) => p.id));
+
+  useEffect(() => {
+    idsRef.current = posts.map((p) => p.id);
+  }, [posts]);
+
+  // Snap against the page scrollbar (document), not an inner scroller.
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.style.scrollSnapType;
+    html.style.scrollSnapType = "y mandatory";
+    return () => {
+      html.style.scrollSnapType = prev;
+    };
+  }, []);
+
+  const refreshFocus = useCallback(() => {
+    const next = pickFocusedId(idsRef.current);
+    if (next) setFocusedId(next);
+  }, []);
+
+  useEffect(() => {
+    refreshFocus();
+    window.addEventListener("scroll", refreshFocus, { passive: true });
+    window.addEventListener("resize", refreshFocus);
+    return () => {
+      window.removeEventListener("scroll", refreshFocus);
+      window.removeEventListener("resize", refreshFocus);
+    };
+  }, [refreshFocus, posts.length]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await onLoadMore(cursor);
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const next = page.posts.filter((p) => !seen.has(p.id));
+        return next.length ? [...prev, ...next] : prev;
+      });
+      setCursor(page.next_cursor ?? null);
+    } catch {
+      setCursor(null);
+    } finally {
+      loadingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [cursor, onLoadMore]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !cursor) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) void loadMore();
+      },
+      { root: null, rootMargin: "200% 0px", threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMore, cursor]);
+
+  if (posts.length === 0) {
+    return (
+      <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-sm font-semibold text-fg">Your feed is quiet</p>
+        <p className="max-w-sm text-xs text-fg-faint">
+          Follow people and drop places nearby — new posts from your network and around
+          you will show up here.
+        </p>
+        <Link
+          href="/compose"
+          className="mt-2 rounded-full bg-brand px-4 py-2 text-xs font-bold text-black hover:bg-brand-dark"
+        >
+          Drop a place
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-6xl justify-center gap-0 lg:gap-6 lg:px-4",
+        mobileCommentsOpen && "pb-[min(52vh,28rem)] lg:pb-0"
+      )}
+    >
+      <div className="w-full max-w-xl">
+        {posts.map((p) => (
+          <section
+            key={p.id}
+            className="box-border h-[calc(100dvh-5rem)] w-full snap-start snap-always"
+          >
+            <PostDetailCard
+              post={p}
+              active={p.id === focusedId}
+              layout="snap"
+              onOpenComments={() => setMobileCommentsOpen(true)}
+            />
+          </section>
+        ))}
+        <div ref={sentinelRef} className="h-px w-full" aria-hidden />
+        {loadingMore ? (
+          <div className="flex items-center justify-center gap-2 py-6 text-sm text-fg-faint">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading more…
+          </div>
+        ) : null}
+        {cursor === null ? (
+          <p className="py-8 text-center text-xs text-fg-faint">You’re caught up</p>
+        ) : null}
+      </div>
+
+      <CommentsPanel
+        postId={focusedId}
+        mobileOpen={mobileCommentsOpen}
+        onMobileClose={() => setMobileCommentsOpen(false)}
+      />
+    </div>
+  );
+}
+
+export default function HomeFeed() {
+  const [geo, setGeo] = useState<GeoState>({ status: "pending" });
+  const [geoTick, setGeoTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readGeo()
+      .then((coords) => {
+        if (!cancelled) setGeo({ status: "ready", ...coords });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setGeo({
+            status: "denied",
+            message: err instanceof Error ? err.message : "Location unavailable",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [geoTick]);
+
+  const retryGeo = useCallback(() => {
+    setGeo({ status: "pending" });
+    setGeoTick((n) => n + 1);
+  }, []);
+
+  const feedQ = useGetFeedQuery(
+    {
+      lat: geo.status === "ready" ? geo.lat : 0,
+      lng: geo.status === "ready" ? geo.lng : 0,
+      limit: 12,
+    },
+    { skip: geo.status !== "ready" }
+  );
+  const [fetchMore] = useLazyGetFeedQuery();
+
+  const onLoadMore = useCallback(
+    async (cursor: string) => {
+      if (geo.status !== "ready") {
+        throw new Error("Location required");
+      }
+      return fetchMore({
+        lat: geo.lat,
+        lng: geo.lng,
+        limit: 12,
+        cursor,
+      }).unwrap();
+    },
+    [fetchMore, geo]
+  );
+
+  if (geo.status === "pending") {
+    return (
+      <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4">
+        <Loader2 className="h-6 w-6 animate-spin text-brand" />
+        <p className="text-sm text-fg-muted">Finding places near you…</p>
+      </div>
+    );
+  }
+
+  if (geo.status === "denied") {
+    return (
+      <div className="mx-auto flex min-h-[calc(100dvh-5rem)] max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border-subtle bg-surface text-brand">
+          <MapPin className="h-6 w-6" />
+        </span>
+        <div>
+          <h2 className="text-lg font-bold text-fg">Location needed</h2>
+          <p className="mt-1 text-sm text-fg-muted">{geo.message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={retryGeo}
+          className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-black hover:bg-brand-dark"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (feedQ.isError && !feedQ.data) {
+    return (
+      <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-sm text-fg-muted">
+          {getApiErrorMessage(feedQ.error) || "Could not load feed."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void feedQ.refetch()}
+          className="text-sm font-semibold text-brand hover:underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (feedQ.isLoading || !feedQ.data) {
+    return (
+      <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4">
+        <Loader2 className="h-6 w-6 animate-spin text-brand" />
+        <p className="text-sm text-fg-muted">Loading your feed…</p>
+      </div>
+    );
+  }
+
+  return (
+    <SnapFeed
+      key={`${geo.lat.toFixed(3)}:${geo.lng.toFixed(3)}`}
+      initialPosts={feedQ.data.posts}
+      nextCursor={feedQ.data.next_cursor}
+      onLoadMore={onLoadMore}
+    />
+  );
+}

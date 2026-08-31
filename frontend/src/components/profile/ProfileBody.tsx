@@ -97,10 +97,13 @@ export default function ProfileBody({
       >
         <div className="grid grid-cols-12 gap-6 sm:gap-8">
           <div className="col-span-12 lg:col-span-4">
-            <ReputationCard />
+            <ReputationCard
+              score={user.reputation_score ?? 0}
+              level={user.reputation_level || "Explorer"}
+            />
           </div>
           <div className="col-span-12 lg:col-span-8">
-            <BadgesCard />
+            <BadgesCard badges={user.badges ?? []} />
           </div>
           <div className="col-span-12">
             <ContributionsPanel userId={user.user_id} mode={mode} />

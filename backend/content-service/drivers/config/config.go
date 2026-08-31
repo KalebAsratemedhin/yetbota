@@ -12,10 +12,12 @@ import (
 type Config struct {
 	HTTP           HTTPConfig       `yaml:"http"`
 	Postgres       PostgresConfig   `yaml:"postgres"`
+	Surreal        SurrealConfig    `yaml:"surreal"`
 	Identity       IdentityConfig   `yaml:"identity"`
 	Cloudinary     CloudinaryConfig `yaml:"cloudinary"`
 	Media          MediaConfig      `yaml:"media"`
 	Share          ShareConfig      `yaml:"share"`
+	Feed           FeedConfig       `yaml:"feed"`
 	CORS           CORSConfig       `yaml:"cors"`
 	MigrateOnStart bool             `yaml:"migrate_on_start"`
 }
@@ -28,8 +30,28 @@ type PostgresConfig struct {
 	URL string `yaml:"url"`
 }
 
+type SurrealConfig struct {
+	URL       string `yaml:"url"`
+	Namespace string `yaml:"namespace"`
+	Database  string `yaml:"database"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+}
+
 type IdentityConfig struct {
-	BaseURL string `yaml:"base_url"`
+	BaseURL      string `yaml:"base_url"`
+	ServiceToken string `yaml:"service_token"`
+}
+
+type FeedConfig struct {
+	Gravity        float64 `yaml:"gravity"`
+	CommentWeight  float64 `yaml:"comment_weight"`
+	ShareWeight    float64 `yaml:"share_weight"`
+	FollowBoost    float64 `yaml:"follow_boost"`
+	GeoD0Km        float64 `yaml:"geo_d0_km"`
+	NearbyRadiusKm float64 `yaml:"nearby_radius_km"`
+	CandidateLimit int     `yaml:"candidate_limit"`
+	LookbackDays   int     `yaml:"lookback_days"`
 }
 
 type CloudinaryConfig struct {
@@ -79,6 +101,27 @@ func Load(path string) (Config, error) {
 	if v := os.Getenv("IDENTITY_BASE_URL"); v != "" {
 		cfg.Identity.BaseURL = v
 	}
+	if v := os.Getenv("IDENTITY_SERVICE_TOKEN"); v != "" {
+		cfg.Identity.ServiceToken = v
+	}
+	if v := os.Getenv("INTERNAL_SERVICE_TOKEN"); v != "" && cfg.Identity.ServiceToken == "" {
+		cfg.Identity.ServiceToken = v
+	}
+	if v := os.Getenv("SURREAL_URL"); v != "" {
+		cfg.Surreal.URL = v
+	}
+	if v := os.Getenv("SURREAL_NS"); v != "" {
+		cfg.Surreal.Namespace = v
+	}
+	if v := os.Getenv("SURREAL_DB"); v != "" {
+		cfg.Surreal.Database = v
+	}
+	if v := os.Getenv("SURREAL_USER"); v != "" {
+		cfg.Surreal.Username = v
+	}
+	if v := os.Getenv("SURREAL_PASS"); v != "" {
+		cfg.Surreal.Password = v
+	}
 	if v := os.Getenv("CLOUDINARY_CLOUD_NAME"); v != "" {
 		cfg.Cloudinary.CloudName = v
 	}
@@ -123,6 +166,48 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Identity.BaseURL == "" {
 		cfg.Identity.BaseURL = "http://localhost:8081"
+	}
+	if cfg.Identity.ServiceToken == "" {
+		cfg.Identity.ServiceToken = "dev-internal-token"
+	}
+	if cfg.Surreal.URL == "" {
+		cfg.Surreal.URL = "ws://localhost:8000"
+	}
+	if cfg.Surreal.Namespace == "" {
+		cfg.Surreal.Namespace = "yetbota"
+	}
+	if cfg.Surreal.Database == "" {
+		cfg.Surreal.Database = "main"
+	}
+	if cfg.Surreal.Username == "" {
+		cfg.Surreal.Username = "root"
+	}
+	if cfg.Surreal.Password == "" {
+		cfg.Surreal.Password = "root"
+	}
+	if cfg.Feed.Gravity <= 0 {
+		cfg.Feed.Gravity = 1.5
+	}
+	if cfg.Feed.CommentWeight <= 0 {
+		cfg.Feed.CommentWeight = 2
+	}
+	if cfg.Feed.ShareWeight <= 0 {
+		cfg.Feed.ShareWeight = 3
+	}
+	if cfg.Feed.FollowBoost <= 0 {
+		cfg.Feed.FollowBoost = 0.35
+	}
+	if cfg.Feed.GeoD0Km <= 0 {
+		cfg.Feed.GeoD0Km = 5
+	}
+	if cfg.Feed.NearbyRadiusKm <= 0 {
+		cfg.Feed.NearbyRadiusKm = 25
+	}
+	if cfg.Feed.CandidateLimit <= 0 {
+		cfg.Feed.CandidateLimit = 200
+	}
+	if cfg.Feed.LookbackDays <= 0 {
+		cfg.Feed.LookbackDays = 14
 	}
 	if cfg.Cloudinary.Folder == "" {
 		cfg.Cloudinary.Folder = "yetbota/posts"

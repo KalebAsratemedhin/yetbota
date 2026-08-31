@@ -31,6 +31,7 @@ type PostService interface {
 	Share(ctx context.Context, postID uuid.UUID) (postuc.ShareResult, error)
 	Search(ctx context.Context, query string, in postuc.ListInput) (postuc.PageResult, error)
 	ListByHashtag(ctx context.Context, tag string, in postuc.ListInput) (postuc.PageResult, error)
+	Feed(ctx context.Context, in postuc.FeedInput) (postuc.PageResult, error)
 }
 
 type SignMediaRequest struct {
@@ -114,6 +115,14 @@ type SearchRequest struct {
 type HashtagRequest struct {
 	Principal auth.Principal
 	Tag       string
+	Limit     int
+	Cursor    string
+}
+
+type FeedRequest struct {
+	Principal auth.Principal
+	Lat       float64
+	Lng       float64
 	Limit     int
 	Cursor    string
 }
@@ -401,6 +410,43 @@ func MakeListByHashtagEndpoint(svc PostService) endpoint.Endpoint {
 		}
 		return toPostsPageJSON(page), nil
 	}
+}
+
+func MakeFeedEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(FeedRequest)
+		viewerID, err := ParseUserID(req.Principal.UserID)
+		if err != nil {
+			return nil, err
+		}
+		page, err := svc.Feed(ctx, postuc.FeedInput{
+			ViewerID: viewerID,
+			Lat:      req.Lat,
+			Lng:      req.Lng,
+			Limit:    req.Limit,
+			Cursor:   req.Cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return toPostsPageJSON(page), nil
+	}
+}
+
+func ParseCoord(raw, field string) (float64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, apperr.Validation(apperr.Field{
+			Field: field, Code: "REQUIRED", Message: field + " is required",
+		})
+	}
+	n, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, apperr.Validation(apperr.Field{
+			Field: field, Code: "INVALID", Message: field + " must be a number",
+		})
+	}
+	return n, nil
 }
 
 func ParseUserID(raw string) (uuid.UUID, error) {

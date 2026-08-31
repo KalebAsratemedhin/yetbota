@@ -17,8 +17,8 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Layer | Choice | Notes |
 | --- | --- | --- |
 | Frontend | Next.js | |
-| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search |
-| identity-service | Go | Owns auth + profile + follow writes |
+| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, **home feed** |
+| identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
 | ai-service | Python | |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follow relationships. Local: Docker in `backend/docker-compose.yml` |
@@ -70,8 +70,49 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-031 | An authenticated user shall be able to list posts for a hashtag. | Keyset pagination |
 | FR-032 | An authenticated user shall be able to reply to a top-level comment and list those replies. | One level only (no reply-to-reply); keyset pagination |
 | FR-033 | An authenticated user shall be able to like, dislike, or clear their reaction on a comment. | At most one of like/dislike per user per comment |
+| FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
+| FR-035 | Reputation events shall be recorded for post creation and for received post likes (and later other acts). | Self-likes and self-actions shall not award reputation |
+| FR-036 | A user’s reputation level shall be derived from their reputation score using configurable bands. | Level is display-only banding of score |
+| FR-037 | An authenticated user shall be able to unlock badges when badge criteria are met. | Badges are awarded once; criteria may use score and/or activity |
+| FR-038 | An authenticated user shall be able to fetch their reputation score, level, and earned badges. | Also exposed on public profile (score, level, badges) |
+| FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; viewer lat/lng required for nearby |
+| FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
 
-Feed / home timeline is **out of scope** for this SRS slice.
+## Feed ranking (non-ML)
+
+Candidates for a feed page come from two pools: **following** (authors the viewer follows) and **nearby** (posts within a configurable radius of the viewer). Pools are merged, de-duplicated, then sorted by score.
+
+Adopt a **Hacker News–style gravity** base (engagement decays with age), extended for YetBota:
+
+```text
+engagement = like_count + w_c * comment_count + w_s * share_count
+rank = (engagement + 1)^0.8 / (age_hours + 2)^gravity
+     * (1 + follow_boost if author is followed else 1)
+     * geo_factor
+```
+
+| Symbol | Default | Meaning |
+| --- | --- | --- |
+| `gravity` | `1.5` | How fast older posts fall (higher → newer wins more) |
+| `w_c`, `w_s` | `2`, `3` | Comments/shares count more than a like |
+| `follow_boost` | `0.35` | Extra weight for in-network posts |
+| `geo_factor` | `1 / (1 + distance_km / d0)` with `d0 = 5` | Closer places rank higher; far posts still eligible |
+| Nearby radius | `25 km` (configurable) | Max distance for the nearby pool |
+
+Alternatives considered: Reddit “hot” (`log10(score) + age_term`) — good for forums; HN gravity fits better when freshness matters. Wilson score — better for comment sorting than for a mixed geo/social feed. ML ranking — deferred.
+
+## Reputation defaults (v1)
+
+| Event | Delta | Notes |
+| --- | --- | --- |
+| `post.created` | `+2` | Participation |
+| `post.liked` (received) | `+1` | Quality; revoke/adjust on unlike |
+| Daily earn cap | `50` | Anti-farming |
+| Self actions | `0` | Never count |
+
+Level bands (configurable): e.g. 0 Explorer, 50 Contributor, 200 Local Guide, 500 Pathfinder. Starter badges: First Post, Ten Likes Received, First Follower (when follow events are wired), Level Contributor.
+
+Ownership: reputation ledger, levels, and badges live on **identity-service**. Content-service emits or notifies engagement that creates ledger events. Feed assembly lives on **content-service** (reads follow graph + posts + viewer location).
 
 ## Use cases
 
@@ -232,3 +273,31 @@ Feed / home timeline is **out of scope** for this SRS slice.
 - **Goal:** Find posts by text or tag
 - **Main flow:** Search query over caption + hashtags; or list posts for one hashtag.
 - **Related FRs:** FR-030, FR-031
+
+### UC-024 — Earn reputation
+
+- **Actor:** User (passive)
+- **Goal:** Gain standing from posts and engagement
+- **Main flow:** User creates a post or receives a like → identity records a reputation event (respecting caps and self-action rules) → denormalized score and level update.
+- **Related FRs:** FR-034, FR-035, FR-036
+
+### UC-025 — View reputation and badges
+
+- **Actor:** User
+- **Goal:** See score, level, and badges (own or another user’s public profile)
+- **Main flow:** Fetch profile fields including reputation score, level, and earned badges.
+- **Related FRs:** FR-037, FR-038
+
+### UC-026 — Unlock a badge
+
+- **Actor:** User (passive)
+- **Goal:** Receive a badge when criteria are met
+- **Main flow:** After a reputation or activity event, badge rules are evaluated; if newly satisfied, badge is awarded once.
+- **Related FRs:** FR-037
+
+### UC-027 — Home feed
+
+- **Actor:** User
+- **Goal:** Browse posts from people they follow and from nearby places
+- **Main flow:** Client sends viewer location → content-service builds following + nearby candidate pools → ranks with the documented heuristic → returns a paginated feed.
+- **Related FRs:** FR-039, FR-040

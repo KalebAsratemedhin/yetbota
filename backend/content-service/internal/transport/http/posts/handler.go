@@ -31,6 +31,7 @@ type Endpoints struct {
 	Share              endpoint.Endpoint
 	Search             endpoint.Endpoint
 	ListHashtag        endpoint.Endpoint
+	Feed               endpoint.Endpoint
 }
 
 func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
@@ -56,6 +57,7 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	mux.Handle("GET /users/{id}/posts", auth(eps.ListUser, decodeUserPosts))
 	mux.Handle("GET /me/bookmarks", auth(eps.ListBookmarks, decodeMeList))
 	mux.Handle("GET /hashtags/{tag}/posts", auth(eps.ListHashtag, decodeHashtag))
+	mux.Handle("GET /feed", auth(eps.Feed, decodeFeed))
 }
 
 func decodeSignMedia(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -257,6 +259,28 @@ func decodeHashtag(ctx context.Context, r *http.Request) (interface{}, error) {
 	}
 	return svcendpoint.HashtagRequest{
 		Principal: p, Tag: r.PathValue("tag"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}, nil
+}
+
+func decodeFeed(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lat, err := svcendpoint.ParseCoord(r.URL.Query().Get("lat"), "lat")
+	if err != nil {
+		return nil, err
+	}
+	lng, err := svcendpoint.ParseCoord(r.URL.Query().Get("lng"), "lng")
+	if err != nil {
+		return nil, err
+	}
+	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
+	if err != nil {
+		return nil, err
+	}
+	return svcendpoint.FeedRequest{
+		Principal: p, Lat: lat, Lng: lng, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
 	}, nil
 }
 

@@ -3,8 +3,15 @@ http:
   addr: ":8082"
 postgres:
   url: "postgres://postgres:postgres@localhost:5433/yetbota?sslmode=disable"
+surreal:
+  url: "ws://localhost:8000"
+  namespace: yetbota
+  database: main
+  username: root
+  password: root
 identity:
   base_url: "http://localhost:8081"
+  service_token: "dev-internal-token"
 cloudinary:
   cloud_name: ""
   api_key: ""
@@ -17,6 +24,15 @@ media:
   max_page_size: 50
 share:
   public_base_url: "http://localhost:3000"
+feed:
+  gravity: 1.5
+  comment_weight: 2
+  share_weight: 3
+  follow_boost: 0.35
+  geo_d0_km: 5
+  nearby_radius_km: 25
+  candidate_limit: 200
+  lookback_days: 14
 cors:
   allowed_origins:
     - "http://localhost:3000"

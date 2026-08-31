@@ -50,14 +50,16 @@ type UsersPageResponse struct {
 }
 
 func toPublicUserResponse(res socialuc.PublicProfile) UserResponse {
+	badges := make([]BadgeJSON, 0, len(res.Badges))
+	for _, b := range res.Badges {
+		badges = append(badges, BadgeJSON{
+			ID: b.ID, Name: b.Name, Description: b.Description, AwardedAt: b.AwardedAt,
+		})
+	}
 	return UserResponse{
-		UserID:    res.UserID,
-		Username:  res.Username,
-		FullName:  res.FullName,
-		Phone:     res.Phone,
-		Address:   res.Address,
-		Bio:       res.Bio,
-		AvatarURL: res.AvatarURL,
+		UserID: res.UserID, Username: res.Username, FullName: res.FullName,
+		Phone: res.Phone, Address: res.Address, Bio: res.Bio, AvatarURL: res.AvatarURL,
+		ReputationScore: res.ReputationScore, ReputationLevel: res.ReputationLevel, Badges: badges,
 	}
 }
 

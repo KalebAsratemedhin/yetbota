@@ -189,3 +189,19 @@ LIMIT sqlc.arg(result_limit);
 UPDATE posts
 SET search_vector = to_tsvector('english', coalesce(caption, '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
 WHERE id = sqlc.arg(id);
+
+-- name: ListPostsByAuthorIDs :many
+SELECT * FROM posts
+WHERE author_id = ANY(sqlc.arg(author_ids)::uuid[])
+  AND created_at >= sqlc.arg(since)::timestamptz
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(result_limit);
+
+-- name: ListNearbyPosts :many
+-- Bounding-box prefilter then haversine distance (km) in app or via SQL expression.
+SELECT * FROM posts
+WHERE created_at >= sqlc.arg(since)::timestamptz
+  AND lat BETWEEN sqlc.arg(min_lat) AND sqlc.arg(max_lat)
+  AND lng BETWEEN sqlc.arg(min_lng) AND sqlc.arg(max_lng)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(result_limit);

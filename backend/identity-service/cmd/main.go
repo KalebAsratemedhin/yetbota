@@ -18,8 +18,10 @@ import (
 	"github.com/yetbota/identity-service/drivers/surreal"
 	"github.com/yetbota/identity-service/internal/services/endpoint"
 	followrepo "github.com/yetbota/identity-service/internal/services/repository/follow"
+	reprepo "github.com/yetbota/identity-service/internal/services/repository/reputation"
 	userrepo "github.com/yetbota/identity-service/internal/services/repository/user"
 	authuc "github.com/yetbota/identity-service/internal/services/usecase/auth"
+	repuc "github.com/yetbota/identity-service/internal/services/usecase/reputation"
 	socialuc "github.com/yetbota/identity-service/internal/services/usecase/social"
 	httptransport "github.com/yetbota/identity-service/internal/transport/http"
 	authhttp "github.com/yetbota/identity-service/internal/transport/http/auth"
@@ -55,6 +57,7 @@ func main() {
 		"surreal_ns", cfg.Surreal.Namespace,
 		"surreal_db", cfg.Surreal.Database,
 		"cloudinary_configured", images.Configured(),
+		"internal_token_set", cfg.Internal.ServiceToken != "",
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -92,10 +95,12 @@ func main() {
 
 	repo := userrepo.New(pool)
 	follows := followrepo.NewStore(sdb)
+	repStore := reprepo.New(pool)
+	repSvc := repuc.NewService(repStore, repuc.Config{})
 	hasher := auth.NewBcryptHasher()
 	tokens := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTTLMinutes)
-	authSvc := authuc.NewService(repo, hasher, tokens, repo, repo, images, cfg.JWT.RefreshTTLDays)
-	socialSvc := socialuc.NewService(repo, follows)
+	authSvc := authuc.NewService(repo, hasher, tokens, repo, repo, images, repSvc, cfg.JWT.RefreshTTLDays)
+	socialSvc := socialuc.NewService(repo, follows, repSvc, repSvc)
 
 	authEps := authhttp.Endpoints{
 		SignUp:         endpoint.MakeSignUpEndpoint(authSvc),
@@ -119,7 +124,11 @@ func main() {
 		Following:  endpoint.MakeFollowingEndpoint(socialSvc),
 	}
 
-	router := httptransport.NewRouter(authEps, userEps, authSvc)
+	router := httptransport.NewRouter(
+		authEps, userEps, authSvc,
+		endpoint.MakeRecordReputationEndpoint(repSvc),
+		cfg.Internal.ServiceToken,
+	)
 	handler := shared.AccessLog(shared.CORS(cfg.CORS.AllowedOrigins, router))
 
 	log.Info("listening", "addr", cfg.HTTP.Addr)

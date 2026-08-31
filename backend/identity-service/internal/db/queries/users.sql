@@ -1,17 +1,13 @@
 -- name: CreateUser :one
 INSERT INTO users (id, username, password_hash, full_name)
 VALUES ($1, $2, $3, $4)
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
+RETURNING *;
 
 -- name: GetUserByUsername :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
-WHERE username = $1;
+SELECT * FROM users WHERE username = $1;
 
 -- name: GetUserByID :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
-WHERE id = $1;
+SELECT * FROM users WHERE id = $1;
 
 -- name: UpdateUserPassword :exec
 UPDATE users
@@ -26,7 +22,7 @@ SET
     address = COALESCE(sqlc.narg('address'), address),
     bio = COALESCE(sqlc.narg('bio'), bio)
 WHERE id = sqlc.arg('id')
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
+RETURNING *;
 
 -- name: UpdateUserAvatar :one
 UPDATE users
@@ -34,11 +30,10 @@ SET
     avatar_url = $2,
     avatar_public_id = $3
 WHERE id = $1
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id;
+RETURNING *;
 
 -- name: SearchUsers :many
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
+SELECT * FROM users
 WHERE (
     username ILIKE '%' || sqlc.arg(query)::text || '%'
     OR full_name ILIKE '%' || sqlc.arg(query)::text || '%'
@@ -50,8 +45,7 @@ ORDER BY
 LIMIT sqlc.arg(result_limit);
 
 -- name: GetUsersByIDs :many
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
+SELECT * FROM users
 WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: DeleteUser :exec

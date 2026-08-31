@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: YetBota Identity Service
-  description: Auth, profile, follow graph, user search, and avatar upload (Cloudinary).
-  version: 0.5.0
+  description: Auth, profile, follow graph, user search, avatar upload (Cloudinary), and reputation/badges.
+  version: 0.6.0
 servers:
   - url: /
     description: Current host (local or Render)
@@ -390,6 +390,66 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /internal/reputation/events:
+    post:
+      tags: [Internal]
+      summary: Record a reputation event (service-to-service)
+      description: |
+        Called by content-service after post create/like/unlike.
+        Auth via `X-Service-Token` (same value as `INTERNAL_SERVICE_TOKEN` / identity `internal.service_token`).
+      operationId: recordReputationEvent
+      security: []
+      parameters:
+        - name: X-Service-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, event_type, subject_type]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                  description: User who receives the reputation delta
+                actor_id:
+                  type: string
+                  format: uuid
+                  description: Actor (e.g. liker); optional
+                event_type:
+                  type: string
+                  enum: [post.created, post.liked, post.unliked]
+                subject_type:
+                  type: string
+                  example: post
+                subject_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Updated snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reputation_score, reputation_level, badges]
+                properties:
+                  reputation_score:
+                    type: integer
+                    format: int64
+                  reputation_level:
+                    type: string
+                  badges:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Badge"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /healthz:
     get:
       tags: [Ops]
@@ -493,7 +553,19 @@ components:
           type: string
     UserInfo:
       type: object
-      required: [user_id, username, full_name, phone, address, bio, avatar_url]
+      required:
+        [
+          user_id,
+          username,
+          full_name,
+          phone,
+          address,
+          bio,
+          avatar_url,
+          reputation_score,
+          reputation_level,
+          badges,
+        ]
       properties:
         user_id:
           type: string
@@ -511,6 +583,32 @@ components:
         avatar_url:
           type: string
           description: Empty when no avatar
+        reputation_score:
+          type: integer
+          format: int64
+        reputation_level:
+          type: string
+          description: Explorer | Contributor | Local Guide | Pathfinder
+          example: Explorer
+        badges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Badge"
+    Badge:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+          example: first_post
+        name:
+          type: string
+        description:
+          type: string
+        awarded_at:
+          type: string
+          format: date-time
+          description: Present when the badge has been awarded to the user
     Users:
       type: object
       required: [users]

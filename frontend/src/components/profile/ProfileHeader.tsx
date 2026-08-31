@@ -128,7 +128,7 @@ export default function ProfileHeader({
             </h1>
             <span className="text-sm text-fg-faint">@{user.username}</span>
             <span className="rounded-xl border border-brand/30 bg-brand/20 px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-brand uppercase sm:px-3 sm:text-[12px]">
-              Explorer
+              {user.reputation_level || "Explorer"}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-4 sm:gap-6">

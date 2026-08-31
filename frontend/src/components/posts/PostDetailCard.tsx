@@ -52,7 +52,7 @@ function CaptionAuthorLink({ authorId }: { authorId: string }) {
 }
 
 /**
- * One post in the detail / author-continuation feed.
+ * One post in the detail / author-continuation / snap feed.
  * `active` is owned by the feed — only one post plays at a time.
  */
 export default function PostDetailCard({
@@ -61,33 +61,53 @@ export default function PostDetailCard({
   className,
   fromUser,
   onOpenComments,
+  layout = "default",
 }: {
   post: Post;
   active: boolean;
   className?: string;
   fromUser?: boolean;
   onOpenComments?: () => void;
+  /** `snap` = full-height slide for vertical social feed. */
+  layout?: "default" | "snap";
 }) {
   const caption = post.caption.trim();
   const commentsHref = fromUser
     ? `/posts/${post.id}?from=user&comments=1`
     : `/posts/${post.id}?comments=1`;
+  const snap = layout === "snap";
 
   return (
     <article
       data-post-id={post.id}
-      className={cn("border-b border-border-subtle", className)}
+      className={cn(
+        snap
+          ? "flex h-full min-h-0 flex-col bg-bg"
+          : "border-b border-border-subtle",
+        className
+      )}
     >
-      <AuthorHeader authorId={post.author_id} createdAt={post.created_at} />
+      <div className={cn("shrink-0", snap && "border-b border-border-subtle/60")}>
+        <AuthorHeader authorId={post.author_id} createdAt={post.created_at} />
+      </div>
 
-      <PostMediaGallery
-        media={post.media}
-        mode={post.media_mode}
-        tall
-        active={active}
-      />
+      <div className={cn(snap ? "min-h-0 flex-1" : null)}>
+        <PostMediaGallery
+          media={post.media}
+          mode={post.media_mode}
+          tall={!snap}
+          fill={snap}
+          active={active}
+          className={snap ? "h-full" : undefined}
+        />
+      </div>
 
-      <div className="space-y-3 px-4 pt-2 pb-6">
+      <div
+        className={cn(
+          "shrink-0 space-y-2 px-4 pt-2",
+          snap ? "border-t border-border-subtle/60 pb-4" : "space-y-3 pb-6"
+        )}
+      >
         <PostActions
           post={post}
           commentsHref={commentsHref}
@@ -95,13 +115,18 @@ export default function PostDetailCard({
         />
 
         {caption ? (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap text-fg">
+          <p
+            className={cn(
+              "text-sm leading-relaxed whitespace-pre-wrap text-fg",
+              snap && "line-clamp-2"
+            )}
+          >
             <CaptionAuthorLink authorId={post.author_id} />
             {caption}
           </p>
         ) : null}
 
-        {post.hashtags.length > 0 ? (
+        {!snap && post.hashtags.length > 0 ? (
           <p className="flex flex-wrap gap-x-2 gap-y-1 text-sm">
             {post.hashtags.map((tag) => (
               <Link

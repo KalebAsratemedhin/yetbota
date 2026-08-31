@@ -12,9 +12,11 @@ import (
 	"github.com/yetbota/content-service/drivers/cloudinary"
 	"github.com/yetbota/content-service/drivers/config"
 	"github.com/yetbota/content-service/drivers/envfile"
+	"github.com/yetbota/content-service/drivers/follow"
 	"github.com/yetbota/content-service/drivers/identity"
 	"github.com/yetbota/content-service/drivers/logger"
 	"github.com/yetbota/content-service/drivers/postgres"
+	"github.com/yetbota/content-service/drivers/surreal"
 	"github.com/yetbota/content-service/internal/services/endpoint"
 	postrepo "github.com/yetbota/content-service/internal/services/repository/post"
 	postuc "github.com/yetbota/content-service/internal/services/usecase/post"
@@ -45,9 +47,11 @@ func main() {
 		"http_addr", cfg.HTTP.Addr,
 		"migrate_on_start", cfg.MigrateOnStart,
 		"identity_base_url", cfg.Identity.BaseURL,
+		"surreal_url", cfg.Surreal.URL,
 		"cloudinary_configured", signer.Configured(),
 		"max_images", cfg.Media.MaxImages,
 		"max_av_duration_sec", cfg.Media.MaxAVDurationSec,
+		"feed_nearby_km", cfg.Feed.NearbyRadiusKm,
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -69,10 +73,31 @@ func main() {
 	defer pool.Close()
 	log.Info("postgres_connected")
 
+	sdb, err := surreal.Connect(ctx, cfg.Surreal)
+	if err != nil {
+		log.Error("surreal_failed", "err", err.Error())
+		os.Exit(1)
+	}
+	defer func() { _ = sdb.Close(ctx) }()
+	log.Info("surreal_connected")
+
 	idClient := identity.NewClient(cfg.Identity.BaseURL)
+	repClient := identity.NewReputationClient(cfg.Identity.BaseURL, cfg.Identity.ServiceToken)
 	svc := postuc.NewService(
 		postrepo.New(pool),
 		signer,
+		follow.New(sdb),
+		repClient,
+		postuc.FeedConfig{
+			Gravity:          cfg.Feed.Gravity,
+			CommentWeight:    cfg.Feed.CommentWeight,
+			ShareWeight:      cfg.Feed.ShareWeight,
+			FollowBoost:      cfg.Feed.FollowBoost,
+			GeoD0Km:          cfg.Feed.GeoD0Km,
+			NearbyRadiusKm:   cfg.Feed.NearbyRadiusKm,
+			CandidateLimit:   cfg.Feed.CandidateLimit,
+			LookbackDays:     cfg.Feed.LookbackDays,
+		},
 		cfg.Media.MaxImages,
 		cfg.Media.MaxAVDurationSec,
 		cfg.Media.DefaultPageSize,
@@ -96,6 +121,7 @@ func main() {
 		Share:              endpoint.MakeShareEndpoint(svc),
 		Search:             endpoint.MakeSearchEndpoint(svc),
 		ListHashtag:        endpoint.MakeListByHashtagEndpoint(svc),
+		Feed:               endpoint.MakeFeedEndpoint(svc),
 	}
 
 	router := httptransport.NewRouter(eps, idClient)

@@ -9,13 +9,18 @@ import (
 )
 
 type Config struct {
-	HTTP           HTTPConfig        `yaml:"http"`
-	Postgres       PostgresConfig    `yaml:"postgres"`
-	Surreal        SurrealConfig     `yaml:"surreal"`
-	Cloudinary     CloudinaryConfig  `yaml:"cloudinary"`
-	JWT            JWTConfig         `yaml:"jwt"`
-	CORS           CORSConfig        `yaml:"cors"`
-	MigrateOnStart bool              `yaml:"migrate_on_start"`
+	HTTP           HTTPConfig       `yaml:"http"`
+	Postgres       PostgresConfig   `yaml:"postgres"`
+	Surreal        SurrealConfig    `yaml:"surreal"`
+	Cloudinary     CloudinaryConfig `yaml:"cloudinary"`
+	JWT            JWTConfig        `yaml:"jwt"`
+	CORS           CORSConfig       `yaml:"cors"`
+	Internal       InternalConfig   `yaml:"internal"`
+	MigrateOnStart bool             `yaml:"migrate_on_start"`
+}
+
+type InternalConfig struct {
+	ServiceToken string `yaml:"service_token"`
 }
 
 type HTTPConfig struct {
@@ -116,6 +121,9 @@ func Load(path string) (Config, error) {
 	}
 	if v := os.Getenv("CLOUDINARY_FOLDER"); v != "" {
 		cfg.Cloudinary.Folder = v
+	}
+	if v := os.Getenv("INTERNAL_SERVICE_TOKEN"); v != "" {
+		cfg.Internal.ServiceToken = v
 	}
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8081"

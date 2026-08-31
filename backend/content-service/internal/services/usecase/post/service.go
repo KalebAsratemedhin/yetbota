@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,9 +21,32 @@ import (
 
 var hashtagRe = regexp.MustCompile(`^[a-z0-9_]{1,50}$`)
 
+type FollowingStore interface {
+	FollowingIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+}
+
+type ReputationNotifier interface {
+	Enabled() bool
+	Record(ctx context.Context, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID) error
+}
+
+type FeedConfig struct {
+	Gravity          float64
+	CommentWeight    float64
+	ShareWeight      float64
+	FollowBoost      float64
+	GeoD0Km          float64
+	NearbyRadiusKm   float64
+	CandidateLimit   int
+	LookbackDays     int
+}
+
 type Service struct {
 	posts              domain.Repository
 	signer             media.Signer
+	follows            FollowingStore
+	reputation         ReputationNotifier
+	feed               FeedConfig
 	maxImages          int
 	maxAVDurationMs    int
 	defaultPageSize    int
@@ -32,6 +57,9 @@ type Service struct {
 func NewService(
 	posts domain.Repository,
 	signer media.Signer,
+	follows FollowingStore,
+	reputation ReputationNotifier,
+	feed FeedConfig,
 	maxImages, maxAVDurationSec, defaultPageSize, maxPageSize int,
 	sharePublicBaseURL string,
 ) *Service {
@@ -47,13 +75,34 @@ func NewService(
 	if maxPageSize <= 0 {
 		maxPageSize = 50
 	}
+	if feed.Gravity <= 0 {
+		feed.Gravity = 1.5
+	}
+	if feed.CommentWeight <= 0 {
+		feed.CommentWeight = 2
+	}
+	if feed.ShareWeight <= 0 {
+		feed.ShareWeight = 3
+	}
+	if feed.FollowBoost <= 0 {
+		feed.FollowBoost = 0.35
+	}
+	if feed.GeoD0Km <= 0 {
+		feed.GeoD0Km = 5
+	}
+	if feed.NearbyRadiusKm <= 0 {
+		feed.NearbyRadiusKm = 25
+	}
+	if feed.CandidateLimit <= 0 {
+		feed.CandidateLimit = 200
+	}
+	if feed.LookbackDays <= 0 {
+		feed.LookbackDays = 14
+	}
 	return &Service{
-		posts:              posts,
-		signer:             signer,
-		maxImages:          maxImages,
-		maxAVDurationMs:    maxAVDurationSec * 1000,
-		defaultPageSize:    defaultPageSize,
-		maxPageSize:        maxPageSize,
+		posts: posts, signer: signer, follows: follows, reputation: reputation, feed: feed,
+		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
+		defaultPageSize: defaultPageSize, maxPageSize: maxPageSize,
 		sharePublicBaseURL: strings.TrimRight(sharePublicBaseURL, "/"),
 	}
 }
@@ -98,6 +147,14 @@ type ShareResult struct {
 	ShareURL string
 }
 
+type FeedInput struct {
+	ViewerID uuid.UUID
+	Lat      float64
+	Lng      float64
+	Limit    int
+	Cursor   string
+}
+
 func (s *Service) SignMedia(ctx context.Context, in SignMediaInput) (SignMediaResult, error) {
 	res, err := s.signer.SignUpload(ctx, media.SignRequest{
 		UserID: in.UserID,
@@ -126,7 +183,7 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 	if err != nil {
 		return domain.Post{}, err
 	}
-	return s.posts.Create(ctx, domain.CreateInput{
+	p, err := s.posts.Create(ctx, domain.CreateInput{
 		AuthorID:  in.AuthorID,
 		Caption:   strings.TrimSpace(in.Caption),
 		Lat:       in.Lat,
@@ -135,6 +192,11 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 		Media:     mediaItems,
 		Hashtags:  tags,
 	})
+	if err != nil {
+		return domain.Post{}, err
+	}
+	s.notifyReputation(ctx, in.AuthorID, nil, "post.created", "post", &p.ID)
+	return p, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (domain.Post, error) {
@@ -163,7 +225,28 @@ func (s *Service) SetReaction(ctx context.Context, postID, userID uuid.UUID, rea
 			})
 		}
 	}
-	return s.posts.SetReaction(ctx, postID, userID, reaction)
+	before, err := s.posts.ByID(ctx, postID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	// Infer previous like via recount is hard; call SetReaction then compare counts.
+	// Better: track via repo - for now detect by like_count delta after.
+	prevLikeCount := before.LikeCount
+	p, err := s.posts.SetReaction(ctx, postID, userID, reaction)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	authorID := p.AuthorID
+	actor := userID
+	if authorID != actor {
+		sid := p.ID
+		if p.LikeCount > prevLikeCount {
+			s.notifyReputation(ctx, authorID, &actor, "post.liked", "post", &sid)
+		} else if p.LikeCount < prevLikeCount {
+			s.notifyReputation(ctx, authorID, &actor, "post.unliked", "post", &sid)
+		}
+	}
+	return p, nil
 }
 
 func (s *Service) AddComment(ctx context.Context, postID, authorID uuid.UUID, body string, parentID *uuid.UUID) (domain.Comment, error) {
@@ -285,6 +368,152 @@ func (s *Service) ListByHashtag(ctx context.Context, tag string, in ListInput) (
 		return PageResult{}, err
 	}
 	return toPageResult(page), nil
+}
+
+func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = s.defaultPageSize
+	}
+	if limit > s.maxPageSize {
+		limit = s.maxPageSize
+	}
+	if in.Lat < -90 || in.Lat > 90 || in.Lng < -180 || in.Lng > 180 {
+		return PageResult{}, apperr.Validation(apperr.Field{
+			Field: "lat/lng", Code: "INVALID", Message: "viewer lat and lng are required for feed",
+		})
+	}
+
+	since := time.Now().UTC().Add(-time.Duration(s.feed.LookbackDays) * 24 * time.Hour)
+	followed := map[uuid.UUID]struct{}{}
+	var authorIDs []uuid.UUID
+	if s.follows != nil {
+		ids, err := s.follows.FollowingIDs(ctx, in.ViewerID)
+		if err != nil {
+			return PageResult{}, err
+		}
+		authorIDs = ids
+		for _, id := range ids {
+			followed[id] = struct{}{}
+		}
+	}
+
+	var candidates []domain.Post
+	if len(authorIDs) > 0 {
+		fromFollow, err := s.posts.ListByAuthorIDs(ctx, authorIDs, since, s.feed.CandidateLimit)
+		if err != nil {
+			return PageResult{}, err
+		}
+		candidates = append(candidates, fromFollow...)
+	}
+	nearby, err := s.posts.ListNearby(ctx, in.Lat, in.Lng, s.feed.NearbyRadiusKm, since, s.feed.CandidateLimit)
+	if err != nil {
+		return PageResult{}, err
+	}
+	candidates = append(candidates, nearby...)
+
+	seen := map[uuid.UUID]domain.Post{}
+	for _, p := range candidates {
+		seen[p.ID] = p
+	}
+	merged := make([]domain.Post, 0, len(seen))
+	for _, p := range seen {
+		merged = append(merged, p)
+	}
+
+	type scored struct {
+		post  domain.Post
+		score float64
+	}
+	now := time.Now().UTC()
+	items := make([]scored, 0, len(merged))
+	for _, p := range merged {
+		_, isFollow := followed[p.AuthorID]
+		items = append(items, scored{
+			post:  p,
+			score: s.rankScore(p, isFollow, in.Lat, in.Lng, now),
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].score == items[j].score {
+			return items[i].post.ID.String() > items[j].post.ID.String()
+		}
+		return items[i].score > items[j].score
+	})
+
+	cursorScore, cursorID, hasCursor, err := decodeFeedCursor(in.Cursor)
+	if err != nil {
+		return PageResult{}, err
+	}
+	start := 0
+	if hasCursor {
+		for i, it := range items {
+			if it.score < cursorScore || (it.score == cursorScore && it.post.ID.String() < cursorID.String()) {
+				start = i
+				break
+			}
+			if i == len(items)-1 {
+				start = len(items)
+			}
+		}
+		// skip items that are >= cursor (already seen)
+		for start < len(items) {
+			it := items[start]
+			if it.score < cursorScore || (it.score == cursorScore && it.post.ID.String() < cursorID.String()) {
+				break
+			}
+			start++
+		}
+	}
+	end := start + limit
+	hasMore := end < len(items)
+	if end > len(items) {
+		end = len(items)
+	}
+	pageItems := items[start:end]
+	posts := make([]domain.Post, 0, len(pageItems))
+	for _, it := range pageItems {
+		posts = append(posts, it.post)
+	}
+	out := PageResult{Posts: posts}
+	if hasMore && len(pageItems) > 0 {
+		last := pageItems[len(pageItems)-1]
+		out.NextCursor = encodeFeedCursor(last.score, last.post.ID)
+	}
+	return out, nil
+}
+
+func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng float64, now time.Time) float64 {
+	engagement := float64(p.LikeCount) + s.feed.CommentWeight*float64(p.CommentCount) + s.feed.ShareWeight*float64(p.ShareCount)
+	ageHours := now.Sub(p.CreatedAt.UTC()).Hours()
+	if ageHours < 0 {
+		ageHours = 0
+	}
+	base := math.Pow(engagement+1, 0.8) / math.Pow(ageHours+2, s.feed.Gravity)
+	followMul := 1.0
+	if followed {
+		followMul = 1 + s.feed.FollowBoost
+	}
+	dist := haversineKm(viewerLat, viewerLng, p.Lat, p.Lng)
+	geo := 1.0 / (1.0 + dist/s.feed.GeoD0Km)
+	return base * followMul * geo
+}
+
+func haversineKm(lat1, lng1, lat2, lng2 float64) float64 {
+	const R = 6371.0
+	toRad := math.Pi / 180
+	dLat := (lat2 - lat1) * toRad
+	dLng := (lng2 - lng1) * toRad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*toRad)*math.Cos(lat2*toRad)*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return 2 * R * math.Asin(math.Sqrt(a))
+}
+
+func (s *Service) notifyReputation(ctx context.Context, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID) {
+	if s.reputation == nil || !s.reputation.Enabled() {
+		return
+	}
+	_ = s.reputation.Record(ctx, userID, actorID, eventType, subjectType, subjectID)
 }
 
 func (s *Service) validateCreate(in CreatePostInput) (domain.MediaMode, []domain.CreateMediaInput, []string, error) {
@@ -488,4 +717,41 @@ func decodeCursor(raw string) (domain.PageCursor, bool, error) {
 		})
 	}
 	return domain.PageCursor{CreatedAt: time.Unix(0, ns).UTC(), ID: id}, true, nil
+}
+
+func encodeFeedCursor(score float64, id uuid.UUID) string {
+	raw := fmt.Sprintf("%g|%s", score, id.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeFeedCursor(raw string) (float64, uuid.UUID, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, uuid.Nil, false, nil
+	}
+	b, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return 0, uuid.Nil, false, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	parts := strings.SplitN(string(b), "|", 2)
+	if len(parts) != 2 {
+		return 0, uuid.Nil, false, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	score, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return 0, uuid.Nil, false, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return 0, uuid.Nil, false, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	return score, id, true, nil
 }

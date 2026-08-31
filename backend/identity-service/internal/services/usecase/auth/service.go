@@ -16,9 +16,14 @@ import (
 	driverauth "github.com/yetbota/identity-service/drivers/auth"
 	"github.com/yetbota/identity-service/internal/domain/apperr"
 	"github.com/yetbota/identity-service/internal/domain/media"
+	domainrep "github.com/yetbota/identity-service/internal/domain/reputation"
 	domain "github.com/yetbota/identity-service/internal/domain/user"
 	"github.com/yetbota/identity-service/internal/services/usecase/validate"
 )
+
+type ReputationReader interface {
+	Snapshot(ctx context.Context, userID uuid.UUID) (domainrep.Snapshot, error)
+}
 
 type Service struct {
 	users        domain.Repository
@@ -27,6 +32,7 @@ type Service struct {
 	accessRevoke domain.TokenRevoker
 	refreshStore domain.RefreshStore
 	images       media.ImageStore
+	reputation   ReputationReader
 	refreshTTL   time.Duration
 }
 
@@ -37,6 +43,7 @@ func NewService(
 	accessRevoke domain.TokenRevoker,
 	refreshStore domain.RefreshStore,
 	images media.ImageStore,
+	reputation ReputationReader,
 	refreshTTLDays int,
 ) *Service {
 	if refreshTTLDays <= 0 {
@@ -49,6 +56,7 @@ func NewService(
 		accessRevoke: accessRevoke,
 		refreshStore: refreshStore,
 		images:       images,
+		reputation:   reputation,
 		refreshTTL:   time.Duration(refreshTTLDays) * 24 * time.Hour,
 	}
 }
@@ -67,13 +75,23 @@ type AuthResult struct {
 }
 
 type UserInfo struct {
-	UserID    string
-	Username  string
-	FullName  string
-	Phone     string
-	Address   string
-	Bio       string
-	AvatarURL string
+	UserID          string
+	Username        string
+	FullName        string
+	Phone           string
+	Address         string
+	Bio             string
+	AvatarURL       string
+	ReputationScore int64
+	ReputationLevel string
+	Badges          []BadgeInfo
+}
+
+type BadgeInfo struct {
+	ID          string
+	Name        string
+	Description string
+	AwardedAt   string
 }
 
 type IntrospectResult struct {
@@ -135,7 +153,17 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (UserInfo, error) {
 		}
 		return UserInfo{}, err
 	}
-	return toUserInfo(u), nil
+	info := toUserInfo(u)
+	if s.reputation != nil {
+		snap, err := s.reputation.Snapshot(ctx, userID)
+		if err != nil {
+			return UserInfo{}, err
+		}
+		info.ReputationScore = snap.Score
+		info.ReputationLevel = snap.Level
+		info.Badges = badgesFromSnap(snap)
+	}
+	return info, nil
 }
 
 func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, patch domain.ProfileUpdate) (UserInfo, error) {
@@ -393,14 +421,42 @@ func (s *Service) issuePair(ctx context.Context, u domain.User) (AuthResult, err
 
 func toUserInfo(u domain.User) UserInfo {
 	return UserInfo{
-		UserID:    u.ID.String(),
-		Username:  u.Username,
-		FullName:  u.FullName,
-		Phone:     u.Phone,
-		Address:   u.Address,
-		Bio:       u.Bio,
-		AvatarURL: u.AvatarURL,
+		UserID:          u.ID.String(),
+		Username:        u.Username,
+		FullName:        u.FullName,
+		Phone:           u.Phone,
+		Address:         u.Address,
+		Bio:             u.Bio,
+		AvatarURL:       u.AvatarURL,
+		ReputationScore: u.ReputationScore,
+		ReputationLevel: LevelForScore(u.ReputationScore),
+		Badges:          []BadgeInfo{},
 	}
+}
+
+func LevelForScore(score int64) string {
+	switch {
+	case score >= 500:
+		return "Pathfinder"
+	case score >= 200:
+		return "Local Guide"
+	case score >= 50:
+		return "Contributor"
+	default:
+		return "Explorer"
+	}
+}
+
+func badgesFromSnap(snap domainrep.Snapshot) []BadgeInfo {
+	out := make([]BadgeInfo, 0, len(snap.Badges))
+	for _, b := range snap.Badges {
+		info := BadgeInfo{ID: b.ID, Name: b.Name, Description: b.Description}
+		if b.AwardedAt != nil {
+			info.AwardedAt = b.AwardedAt.UTC().Format(time.RFC3339Nano)
+		}
+		out = append(out, info)
+	}
+	return out
 }
 
 func normalizeSignUp(in Credentials) (username, password, fullName string, err error) {

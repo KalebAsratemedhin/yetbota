@@ -176,7 +176,7 @@ function CommentRow({
             className="!h-8 !w-8 !rounded-full !text-[10px]"
           />
         </Link>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <p className="text-sm leading-snug text-fg">
             <Link
               href={`/users/${comment.author_id}`}
@@ -184,7 +184,9 @@ function CommentRow({
             >
               {author?.username ?? "user"}
             </Link>
-            <span className="whitespace-pre-wrap">{comment.body}</span>
+            <span className="break-words whitespace-pre-wrap [overflow-wrap:anywhere]">
+              {comment.body}
+            </span>
           </p>
           <p className="mt-1 text-[11px] text-fg-faint">
             {relativeTime(comment.created_at)}
@@ -338,8 +340,8 @@ export default function CommentsView({
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="yb-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <div className={cn("flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden", className)}>
+      <div className="yb-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-fg-faint">
             <Loader2 className="h-4 w-4 animate-spin" />

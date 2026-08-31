@@ -218,16 +218,17 @@ func toDomain(row db.User) (domain.User, error) {
 		return domain.User{}, err
 	}
 	return domain.User{
-		ID:             id,
-		Username:       row.Username,
-		PasswordHash:   row.PasswordHash,
-		CreatedAt:      row.CreatedAt.Time,
-		FullName:       row.FullName,
-		Phone:          row.Phone,
-		Address:        row.Address,
-		Bio:            row.Bio,
-		AvatarURL:      row.AvatarUrl,
-		AvatarPublicID: row.AvatarPublicID,
+		ID:              id,
+		Username:        row.Username,
+		PasswordHash:    row.PasswordHash,
+		CreatedAt:       row.CreatedAt.Time,
+		FullName:        row.FullName,
+		Phone:           row.Phone,
+		Address:         row.Address,
+		Bio:             row.Bio,
+		AvatarURL:       row.AvatarUrl,
+		AvatarPublicID:  row.AvatarPublicID,
+		ReputationScore: row.ReputationScore,
 	}, nil
 }
 

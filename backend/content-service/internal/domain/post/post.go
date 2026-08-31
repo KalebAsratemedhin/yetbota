@@ -129,4 +129,6 @@ type Repository interface {
 	Share(ctx context.Context, postID uuid.UUID) (Post, error)
 	Search(ctx context.Context, query string, p ListParams) (Page, error)
 	ListByHashtag(ctx context.Context, tag string, p ListParams) (Page, error)
+	ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since time.Time, limit int) ([]Post, error)
+	ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]Post, error)
 }

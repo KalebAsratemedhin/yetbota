@@ -18,6 +18,8 @@ jwt:
   secret: "dev-only-change-me"
   access_ttl_minutes: 15
   refresh_ttl_days: 30
+internal:
+  service_token: "dev-internal-token"
 cors:
   allowed_origins:
     - "http://localhost:3000"

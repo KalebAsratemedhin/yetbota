@@ -8,12 +8,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Badge struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
 	TokenHash string             `json:"token_hash"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReputationEvent struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ActorID     pgtype.UUID        `json:"actor_id"`
+	EventType   string             `json:"event_type"`
+	SubjectType string             `json:"subject_type"`
+	SubjectID   pgtype.UUID        `json:"subject_id"`
+	Delta       int32              `json:"delta"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type RevokedToken struct {
@@ -23,14 +40,21 @@ type RevokedToken struct {
 }
 
 type User struct {
-	ID             pgtype.UUID        `json:"id"`
-	Username       string             `json:"username"`
-	PasswordHash   string             `json:"password_hash"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	FullName       string             `json:"full_name"`
-	Phone          string             `json:"phone"`
-	Address        string             `json:"address"`
-	Bio            string             `json:"bio"`
-	AvatarUrl      string             `json:"avatar_url"`
-	AvatarPublicID string             `json:"avatar_public_id"`
+	ID              pgtype.UUID        `json:"id"`
+	Username        string             `json:"username"`
+	PasswordHash    string             `json:"password_hash"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	FullName        string             `json:"full_name"`
+	Phone           string             `json:"phone"`
+	Address         string             `json:"address"`
+	Bio             string             `json:"bio"`
+	AvatarUrl       string             `json:"avatar_url"`
+	AvatarPublicID  string             `json:"avatar_public_id"`
+	ReputationScore int64              `json:"reputation_score"`
+}
+
+type UserBadge struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	BadgeID   string             `json:"badge_id"`
+	AwardedAt pgtype.Timestamptz `json:"awarded_at"`
 }

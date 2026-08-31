@@ -22,6 +22,7 @@ export type HashtagPostsArgs = PageArgs & { tag: string };
 export type SearchPostsArgs = PageArgs & { q: string };
 export type CommentsArgs = PageArgs & { postId: string };
 export type CommentRepliesArgs = PageArgs & { commentId: string };
+export type FeedArgs = PageArgs & { lat: number; lng: number };
 
 export const contentApi = createApi({
   reducerPath: "contentApi",
@@ -34,6 +35,7 @@ export const contentApi = createApi({
     "CommentReplies",
     "HashtagPosts",
     "SearchPosts",
+    "Feed",
   ],
   endpoints: (build) => ({
     signMedia: build.mutation<SignMediaResponse, { kind: MediaKind }>({
@@ -55,12 +57,20 @@ export const contentApi = createApi({
               { type: "UserPosts", id: result.author_id },
               { type: "SearchPosts" },
               { type: "HashtagPosts" },
+              "Feed",
             ]
-          : [],
+          : ["Feed"],
     }),
     getPost: build.query<Post, string>({
       query: (id) => `/posts/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Post", id }],
+    }),
+    getFeed: build.query<PostsPage, FeedArgs>({
+      query: ({ lat, lng, limit = 20, cursor }) => ({
+        url: "/feed",
+        params: { lat, lng, limit, ...(cursor ? { cursor } : {}) },
+      }),
+      providesTags: ["Feed"],
     }),
     searchPosts: build.query<PostsPage, SearchPostsArgs>({
       query: ({ q, limit = 20, cursor }) => ({
@@ -100,7 +110,15 @@ export const contentApi = createApi({
         body: { reaction },
       }),
       invalidatesTags: (result) =>
-        result ? [{ type: "Post", id: result.id }, "Bookmarks", "UserPosts", "SearchPosts"] : [],
+        result
+          ? [
+              { type: "Post", id: result.id },
+              "Bookmarks",
+              "UserPosts",
+              "SearchPosts",
+              "Feed",
+            ]
+          : ["Feed"],
     }),
     addComment: build.mutation<
       Comment,
@@ -156,7 +174,7 @@ export const contentApi = createApi({
         method: "POST",
       }),
       invalidatesTags: (result) =>
-        result ? [{ type: "Post", id: result.id }, "Bookmarks"] : ["Bookmarks"],
+        result ? [{ type: "Post", id: result.id }, "Bookmarks", "Feed"] : ["Bookmarks", "Feed"],
     }),
     removeBookmark: build.mutation<Post, string>({
       query: (postId) => ({
@@ -164,7 +182,7 @@ export const contentApi = createApi({
         method: "DELETE",
       }),
       invalidatesTags: (result) =>
-        result ? [{ type: "Post", id: result.id }, "Bookmarks"] : ["Bookmarks"],
+        result ? [{ type: "Post", id: result.id }, "Bookmarks", "Feed"] : ["Bookmarks", "Feed"],
     }),
     sharePost: build.mutation<ShareResponse, string>({
       query: (postId) => ({
@@ -172,7 +190,7 @@ export const contentApi = createApi({
         method: "POST",
       }),
       invalidatesTags: (result) =>
-        result ? [{ type: "Post", id: result.post.id }] : [],
+        result ? [{ type: "Post", id: result.post.id }, "Feed"] : ["Feed"],
     }),
   }),
 });
@@ -181,6 +199,8 @@ export const {
   useSignMediaMutation,
   useCreatePostMutation,
   useGetPostQuery,
+  useGetFeedQuery,
+  useLazyGetFeedQuery,
   useSearchPostsQuery,
   useLazySearchPostsQuery,
   useListUserPostsQuery,

@@ -65,9 +65,9 @@ func (s *Store) Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) 
 }
 
 type edgeRow struct {
-	In        models.RecordID         `json:"in"`
-	Out       models.RecordID         `json:"out"`
-	CreatedAt models.CustomDateTime   `json:"created_at"`
+	In        models.RecordID       `json:"in"`
+	Out       models.RecordID       `json:"out"`
+	CreatedAt models.CustomDateTime `json:"created_at"`
 }
 
 func (s *Store) Followers(ctx context.Context, userID uuid.UUID, p domain.ListParams) (domain.EdgePage, error) {

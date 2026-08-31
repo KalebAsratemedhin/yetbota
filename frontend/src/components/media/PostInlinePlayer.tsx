@@ -30,9 +30,11 @@ const PostInlinePlayer = forwardRef<
     overlay?: boolean;
     /** When false, pause and drop the media src (feed windowing). */
     active?: boolean;
+    /** Fill parent instead of max-height contain. */
+    fill?: boolean;
   }
 >(function PostInlinePlayer(
-  { src, kind, className, overlay, active = true },
+  { src, kind, className, overlay, active = true, fill },
   ref
 ) {
   const elRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
@@ -237,7 +239,11 @@ const PostInlinePlayer = forwardRef<
 
   return (
     <div
-      className={cn("relative cursor-pointer bg-black", className)}
+      className={cn(
+        "relative cursor-pointer bg-black",
+        fill && "flex h-full w-full items-center justify-center",
+        className
+      )}
       onClick={onSurfaceClick}
       onMouseEnter={showChrome}
       onMouseLeave={scheduleHideChrome}
@@ -254,7 +260,11 @@ const PostInlinePlayer = forwardRef<
         controlsList="nodownload noplaybackrate noremoteplayback"
         disablePictureInPicture
         onContextMenu={(e) => e.preventDefault()}
-        className="max-h-[min(78vh,52rem)] w-full object-contain"
+        className={
+          fill
+            ? "h-full max-h-full w-full object-contain"
+            : "max-h-[min(78vh,52rem)] w-full object-contain"
+        }
       />
       {!playing && active ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

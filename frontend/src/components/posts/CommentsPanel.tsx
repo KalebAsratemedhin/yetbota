@@ -70,10 +70,10 @@ export default function CommentsPanel({
   return (
     <>
       <aside
-        className="sticky top-24 hidden h-[calc(100vh-6.5rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border-subtle lg:flex"
+        className="sticky top-24 hidden h-[calc(100dvh-6.5rem)] w-[22rem] min-w-[22rem] max-w-[22rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-border-subtle lg:flex"
         aria-label="Comments"
       >
-        <PanelChrome className="h-full">
+        <PanelChrome className="h-full min-h-0 w-full min-w-0 overflow-hidden">
           <CommentsView key={postId} postId={postId} />
         </PanelChrome>
       </aside>

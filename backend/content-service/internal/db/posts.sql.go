@@ -725,6 +725,65 @@ func (q *Queries) ListMediaByPostIDs(ctx context.Context, postIds []pgtype.UUID)
 	return items, nil
 }
 
+const listNearbyPosts = `-- name: ListNearbyPosts :many
+SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE created_at >= $1::timestamptz
+  AND lat BETWEEN $2 AND $3
+  AND lng BETWEEN $4 AND $5
+ORDER BY created_at DESC, id DESC
+LIMIT $6
+`
+
+type ListNearbyPostsParams struct {
+	Since       pgtype.Timestamptz `json:"since"`
+	MinLat      float64            `json:"min_lat"`
+	MaxLat      float64            `json:"max_lat"`
+	MinLng      float64            `json:"min_lng"`
+	MaxLng      float64            `json:"max_lng"`
+	ResultLimit int32              `json:"result_limit"`
+}
+
+// Bounding-box prefilter then haversine distance (km) in app or via SQL expression.
+func (q *Queries) ListNearbyPosts(ctx context.Context, arg ListNearbyPostsParams) ([]Post, error) {
+	rows, err := q.db.Query(ctx, listNearbyPosts,
+		arg.Since,
+		arg.MinLat,
+		arg.MaxLat,
+		arg.MinLng,
+		arg.MaxLng,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPostsByAuthor = `-- name: ListPostsByAuthor :many
 SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE author_id = $1
@@ -750,6 +809,53 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 		arg.CursorID,
 		arg.ResultLimit,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPostsByAuthorIDs = `-- name: ListPostsByAuthorIDs :many
+SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE author_id = ANY($1::uuid[])
+  AND created_at >= $2::timestamptz
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListPostsByAuthorIDsParams struct {
+	AuthorIds   []pgtype.UUID      `json:"author_ids"`
+	Since       pgtype.Timestamptz `json:"since"`
+	ResultLimit int32              `json:"result_limit"`
+}
+
+func (q *Queries) ListPostsByAuthorIDs(ctx context.Context, arg ListPostsByAuthorIDsParams) ([]Post, error) {
+	rows, err := q.db.Query(ctx, listPostsByAuthorIDs, arg.AuthorIds, arg.Since, arg.ResultLimit)
 	if err != nil {
 		return nil, err
 	}

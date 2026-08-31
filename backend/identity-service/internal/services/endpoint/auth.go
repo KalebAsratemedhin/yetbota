@@ -40,13 +40,16 @@ type AuthResponse struct {
 }
 
 type UserResponse struct {
-	UserID    string `json:"user_id"`
-	Username  string `json:"username"`
-	FullName  string `json:"full_name"`
-	Phone     string `json:"phone"`
-	Address   string `json:"address"`
-	Bio       string `json:"bio"`
-	AvatarURL string `json:"avatar_url"`
+	UserID          string      `json:"user_id"`
+	Username        string      `json:"username"`
+	FullName        string      `json:"full_name"`
+	Phone           string      `json:"phone"`
+	Address         string      `json:"address"`
+	Bio             string      `json:"bio"`
+	AvatarURL       string      `json:"avatar_url"`
+	ReputationScore int64       `json:"reputation_score"`
+	ReputationLevel string      `json:"reputation_level"`
+	Badges          []BadgeJSON `json:"badges,omitempty"`
 }
 
 type IntrospectRequest struct {
@@ -237,13 +240,15 @@ func toAuthResponse(res authuc.AuthResult) AuthResponse {
 }
 
 func toUserResponse(res authuc.UserInfo) UserResponse {
+	badges := make([]BadgeJSON, 0, len(res.Badges))
+	for _, b := range res.Badges {
+		badges = append(badges, BadgeJSON{
+			ID: b.ID, Name: b.Name, Description: b.Description, AwardedAt: b.AwardedAt,
+		})
+	}
 	return UserResponse{
-		UserID:    res.UserID,
-		Username:  res.Username,
-		FullName:  res.FullName,
-		Phone:     res.Phone,
-		Address:   res.Address,
-		Bio:       res.Bio,
-		AvatarURL: res.AvatarURL,
+		UserID: res.UserID, Username: res.Username, FullName: res.FullName,
+		Phone: res.Phone, Address: res.Address, Bio: res.Bio, AvatarURL: res.AvatarURL,
+		ReputationScore: res.ReputationScore, ReputationLevel: res.ReputationLevel, Badges: badges,
 	}
 }

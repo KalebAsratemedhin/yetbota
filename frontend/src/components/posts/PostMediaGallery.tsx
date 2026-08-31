@@ -13,12 +13,15 @@ export default function PostMediaGallery({
   mode,
   className,
   tall,
+  fill,
   active = true,
 }: {
   media: Media[];
   mode?: string;
   className?: string;
   tall?: boolean;
+  /** Stretch to parent height (snap feed slides). */
+  fill?: boolean;
   /** When false, unload A/V (author feed windowing). */
   active?: boolean;
 }) {
@@ -62,12 +65,13 @@ export default function PostMediaGallery({
   }
 
   if (video) {
-    if (tall) {
+    if (tall || fill) {
       return (
         <PostInlinePlayer
           src={video.url}
           kind="video"
-          className={className}
+          className={cn(fill && "h-full w-full", className)}
+          fill={fill}
           active={active}
         />
       );
@@ -94,7 +98,8 @@ export default function PostMediaGallery({
     return (
       <div
         className={cn(
-          "flex aspect-[4/5] items-center justify-center bg-surface-2 text-sm text-fg-faint",
+          "flex items-center justify-center bg-surface-2 text-sm text-fg-faint",
+          fill ? "h-full w-full" : "aspect-[4/5]",
           className
         )}
       >
@@ -103,9 +108,11 @@ export default function PostMediaGallery({
     );
   }
 
-  const frame = tall
-    ? "aspect-[4/5] w-full max-h-[min(78vh,52rem)] sm:aspect-square"
-    : "aspect-[4/5] w-full";
+  const frame = fill
+    ? "h-full w-full"
+    : tall
+      ? "aspect-[4/5] w-full max-h-[min(78vh,52rem)] sm:aspect-square"
+      : "aspect-[4/5] w-full";
 
   return (
     <div className={cn("relative w-full overflow-hidden bg-black", frame, className)}>

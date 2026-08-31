@@ -8,16 +8,17 @@ import (
 )
 
 type User struct {
-	ID             uuid.UUID
-	Username       string
-	PasswordHash   string
-	CreatedAt      time.Time
-	FullName       string
-	Phone          string
-	Address        string
-	Bio            string
-	AvatarURL      string
-	AvatarPublicID string
+	ID              uuid.UUID
+	Username        string
+	PasswordHash    string
+	CreatedAt       time.Time
+	FullName        string
+	Phone           string
+	Address         string
+	Bio             string
+	AvatarURL       string
+	AvatarPublicID  string
+	ReputationScore int64
 }
 
 type ProfileUpdate struct {

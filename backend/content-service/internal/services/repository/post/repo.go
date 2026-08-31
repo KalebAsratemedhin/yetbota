@@ -3,7 +3,9 @@ package post
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -520,6 +522,80 @@ func (r *Repo) ListByHashtag(ctx context.Context, tag string, p domain.ListParam
 		return domain.Page{}, apperr.Wrap(err, apperr.CodeInternal, "list by hashtag")
 	}
 	return r.hydratePage(ctx, rows, p.Limit)
+}
+
+func (r *Repo) ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since time.Time, limit int) ([]domain.Post, error) {
+	if len(authorIDs) == 0 || limit <= 0 {
+		return []domain.Post{}, nil
+	}
+	ids := make([]pgtype.UUID, len(authorIDs))
+	for i, id := range authorIDs {
+		ids[i] = pgUUID(id)
+	}
+	rows, err := r.q.ListPostsByAuthorIDs(ctx, db.ListPostsByAuthorIDsParams{
+		AuthorIds: ids, Since: pgtype.Timestamptz{Time: since, Valid: true}, ResultLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list posts by authors")
+	}
+	page, err := r.hydratePosts(ctx, rows, postIDs(rows), limit, false)
+	if err != nil {
+		return nil, err
+	}
+	return page.Posts, nil
+}
+
+func (r *Repo) ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]domain.Post, error) {
+	if limit <= 0 || radiusKm <= 0 {
+		return []domain.Post{}, nil
+	}
+	dLat := radiusKm / 111.0
+	cosLat := math.Cos(lat * math.Pi / 180)
+	if cosLat < 0.01 {
+		cosLat = 0.01
+	}
+	dLng := radiusKm / (111.0 * cosLat)
+	rows, err := r.q.ListNearbyPosts(ctx, db.ListNearbyPostsParams{
+		Since: pgtype.Timestamptz{Time: since, Valid: true},
+		MinLat: lat - dLat, MaxLat: lat + dLat,
+		MinLng: lng - dLng, MaxLng: lng + dLng,
+		ResultLimit: int32(limit * 3), // over-fetch then filter by haversine
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list nearby posts")
+	}
+	filtered := make([]db.Post, 0, len(rows))
+	for _, row := range rows {
+		if haversineKm(lat, lng, row.Lat, row.Lng) <= radiusKm {
+			filtered = append(filtered, row)
+			if len(filtered) >= limit {
+				break
+			}
+		}
+	}
+	page, err := r.hydratePosts(ctx, filtered, postIDs(filtered), limit, false)
+	if err != nil {
+		return nil, err
+	}
+	return page.Posts, nil
+}
+
+func postIDs(rows []db.Post) []pgtype.UUID {
+	ids := make([]pgtype.UUID, len(rows))
+	for i, row := range rows {
+		ids[i] = row.ID
+	}
+	return ids
+}
+
+func haversineKm(lat1, lng1, lat2, lng2 float64) float64 {
+	const R = 6371.0
+	toRad := math.Pi / 180
+	dLat := (lat2 - lat1) * toRad
+	dLng := (lng2 - lng1) * toRad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*toRad)*math.Cos(lat2*toRad)*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return 2 * R * math.Asin(math.Sqrt(a))
 }
 
 func (r *Repo) hydrateOne(ctx context.Context, row db.Post) (domain.Post, error) {

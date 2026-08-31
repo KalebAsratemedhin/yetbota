@@ -10,7 +10,9 @@ import (
 
 	"github.com/yetbota/identity-service/internal/domain/apperr"
 	domainfollow "github.com/yetbota/identity-service/internal/domain/follow"
+	domainrep "github.com/yetbota/identity-service/internal/domain/reputation"
 	domainuser "github.com/yetbota/identity-service/internal/domain/user"
+	authuc "github.com/yetbota/identity-service/internal/services/usecase/auth"
 )
 
 const (
@@ -20,23 +22,48 @@ const (
 	listMaxLimit      = 50
 )
 
-type Service struct {
-	users   domainuser.Repository
-	follows domainfollow.Store
+type BadgeAwarder interface {
+	AwardFirstFollowerBadge(ctx context.Context, userID uuid.UUID) error
 }
 
-func NewService(users domainuser.Repository, follows domainfollow.Store) *Service {
-	return &Service{users: users, follows: follows}
+type ReputationReader interface {
+	Snapshot(ctx context.Context, userID uuid.UUID) (domainrep.Snapshot, error)
+}
+
+type Service struct {
+	users      domainuser.Repository
+	follows    domainfollow.Store
+	reputation ReputationReader
+	badges     BadgeAwarder
+}
+
+func NewService(
+	users domainuser.Repository,
+	follows domainfollow.Store,
+	reputation ReputationReader,
+	badges BadgeAwarder,
+) *Service {
+	return &Service{users: users, follows: follows, reputation: reputation, badges: badges}
 }
 
 type PublicProfile struct {
-	UserID    string
-	Username  string
-	FullName  string
-	Phone     string
-	Address   string
-	Bio       string
-	AvatarURL string
+	UserID          string
+	Username        string
+	FullName        string
+	Phone           string
+	Address         string
+	Bio             string
+	AvatarURL       string
+	ReputationScore int64
+	ReputationLevel string
+	Badges          []BadgeInfo
+}
+
+type BadgeInfo struct {
+	ID          string
+	Name        string
+	Description string
+	AwardedAt   string
 }
 
 type ProfilePage struct {
@@ -52,13 +79,16 @@ type ListInput struct {
 
 func toPublic(u domainuser.User) PublicProfile {
 	return PublicProfile{
-		UserID:    u.ID.String(),
-		Username:  u.Username,
-		FullName:  u.FullName,
-		Phone:     u.Phone,
-		Address:   u.Address,
-		Bio:       u.Bio,
-		AvatarURL: u.AvatarURL,
+		UserID:          u.ID.String(),
+		Username:        u.Username,
+		FullName:        u.FullName,
+		Phone:           u.Phone,
+		Address:         u.Address,
+		Bio:             u.Bio,
+		AvatarURL:       u.AvatarURL,
+		ReputationScore: u.ReputationScore,
+		ReputationLevel: authuc.LevelForScore(u.ReputationScore),
+		Badges:          []BadgeInfo{},
 	}
 }
 
@@ -70,7 +100,24 @@ func (s *Service) GetPublicProfile(ctx context.Context, userID uuid.UUID) (Publi
 		}
 		return PublicProfile{}, err
 	}
-	return toPublic(u), nil
+	p := toPublic(u)
+	if s.reputation != nil {
+		snap, err := s.reputation.Snapshot(ctx, userID)
+		if err != nil {
+			return PublicProfile{}, err
+		}
+		p.ReputationScore = snap.Score
+		p.ReputationLevel = snap.Level
+		p.Badges = make([]BadgeInfo, 0, len(snap.Badges))
+		for _, b := range snap.Badges {
+			info := BadgeInfo{ID: b.ID, Name: b.Name, Description: b.Description}
+			if b.AwardedAt != nil {
+				info.AwardedAt = b.AwardedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")
+			}
+			p.Badges = append(p.Badges, info)
+		}
+	}
+	return p, nil
 }
 
 func (s *Service) Search(ctx context.Context, viewerID uuid.UUID, query string) ([]PublicProfile, error) {
@@ -103,7 +150,13 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID uuid.UUID) 
 		}
 		return err
 	}
-	return s.follows.Follow(ctx, followerID, followeeID)
+	if err := s.follows.Follow(ctx, followerID, followeeID); err != nil {
+		return err
+	}
+	if s.badges != nil {
+		_ = s.badges.AwardFirstFollowerBadge(ctx, followeeID)
+	}
+	return nil
 }
 
 func (s *Service) Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) error {

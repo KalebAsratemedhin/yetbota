@@ -35,7 +35,7 @@ Contract: `backend/identity-service/api/openapi.yaml`.
 
 ## Content (content-service)
 
-Contract: `backend/content-service/api/openapi.yaml`. Feed/home timeline is **out of scope** (SRS).
+Contract: `backend/content-service/api/openapi.yaml`.
 
 | Concern | Behavior |
 | --- | --- |
@@ -43,7 +43,12 @@ Contract: `backend/content-service/api/openapi.yaml`. Feed/home timeline is **ou
 | Auth | Same Bearer access token; 401 → identity refresh → retry |
 | Create | Sign media → Cloudinary upload → `POST /posts` |
 | Read | `GET /posts/{id}`, `GET /users/{id}/posts`, bookmarks, search, hashtags |
-| Engage | Reactions, comments, bookmark, share |
+| Feed | `GET /feed?lat=&lng=` — following + nearby; signed-in `/` uses geolocation |
+| Engage | Reactions, comments (incl. replies + comment reactions), bookmark, share |
+
+## Reputation (identity-service)
+
+Exposed on `UserInfo` from `/auth/me` and public profiles: `reputation_score`, `reputation_level`, `badges[]`. Levels: Explorer → Contributor (50) → Local Guide (200) → Pathfinder (500).
 
 ## Why these choices
 
@@ -51,17 +56,17 @@ Contract: `backend/content-service/api/openapi.yaml`. Feed/home timeline is **ou
 - **Token set reused** — brand green `#22C55E` / `#00e05a`, `bg-bg`, `surface*`, `fg*` so marketing + auth match the prior product look.
 - **localStorage session** — simple for SPA + RTK; httpOnly cookies would need a BFF later.
 - **Refresh on 401** — matches short-lived access JWT; no proactive timer.
-- **No discovery feed** — SRS slice has no home timeline; places surface via profile, search, hashtags, compose.
+- **Signed-in home = feed** — marketing landing stays for guests; authenticated `/` requests location and loads ranked feed.
 
 ## Routes
 
 | Route | Notes |
 | --- | --- |
-| `/` | Landing (navbar → hero → … → footer) |
+| `/` | Guest: landing. Signed-in: home feed (geo + following/nearby) |
 | `/signin` | Wired to identity signin |
 | `/signup` | Wired to identity signup (full name + username + password) |
-| `/profile` | Own profile; Locations + Saved from content API |
-| `/users/[id]` | Public profile; Locations posts |
+| `/profile` | Own profile; reputation/badges + Locations + Saved |
+| `/users/[id]` | Public profile; reputation/badges + Locations |
 | `/search` | People + Places tabs; hashtag shortcut |
 | `/compose` | Create post (media modes + geo) |
 | `/posts/[id]` | Post detail, reactions, comments, bookmark, share |
@@ -111,4 +116,4 @@ cd frontend && npm run dev
 
 ## Still TBD
 
-Wire posts/bookmarks/reputation to content-service, Embla champions, live trending places, theme toggle UI, deploy.
+Embla champions, live trending places, theme toggle UI, deploy.

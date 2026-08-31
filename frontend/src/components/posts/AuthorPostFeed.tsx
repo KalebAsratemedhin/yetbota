@@ -119,7 +119,7 @@ function AuthorPostFeedSession({
   return (
     <div
       className={cn(
-        "lg:grid lg:grid-cols-[minmax(0,36rem)_minmax(18rem,1fr)] lg:items-start lg:gap-6",
+        "lg:grid lg:grid-cols-[minmax(0,36rem)_22rem] lg:items-start lg:gap-6",
         mobileCommentsOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >

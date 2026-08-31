@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, username, password_hash, full_name)
 VALUES ($1, $2, $3, $4)
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score
 `
 
 type CreateUserParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Bio,
 		&i.AvatarUrl,
 		&i.AvatarPublicID,
+		&i.ReputationScore,
 	)
 	return i, err
 }
@@ -58,9 +59,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
-WHERE id = $1
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -77,14 +76,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Bio,
 		&i.AvatarUrl,
 		&i.AvatarPublicID,
+		&i.ReputationScore,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
-WHERE username = $1
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -101,13 +99,13 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Bio,
 		&i.AvatarUrl,
 		&i.AvatarPublicID,
+		&i.ReputationScore,
 	)
 	return i, err
 }
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users
 WHERE id = ANY($1::uuid[])
 `
 
@@ -131,6 +129,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []pgtype.UUID) ([]User,
 			&i.Bio,
 			&i.AvatarUrl,
 			&i.AvatarPublicID,
+			&i.ReputationScore,
 		); err != nil {
 			return nil, err
 		}
@@ -143,8 +142,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []pgtype.UUID) ([]User,
 }
 
 const searchUsers = `-- name: SearchUsers :many
-SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
-FROM users
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users
 WHERE (
     username ILIKE '%' || $1::text || '%'
     OR full_name ILIKE '%' || $1::text || '%'
@@ -182,6 +180,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			&i.Bio,
 			&i.AvatarUrl,
 			&i.AvatarPublicID,
+			&i.ReputationScore,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +198,7 @@ SET
     avatar_url = $2,
     avatar_public_id = $3
 WHERE id = $1
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score
 `
 
 type UpdateUserAvatarParams struct {
@@ -222,6 +221,7 @@ func (q *Queries) UpdateUserAvatar(ctx context.Context, arg UpdateUserAvatarPara
 		&i.Bio,
 		&i.AvatarUrl,
 		&i.AvatarPublicID,
+		&i.ReputationScore,
 	)
 	return i, err
 }
@@ -250,7 +250,7 @@ SET
     address = COALESCE($3, address),
     bio = COALESCE($4, bio)
 WHERE id = $5
-RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score
 `
 
 type UpdateUserProfileParams struct {
@@ -281,6 +281,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.Bio,
 		&i.AvatarUrl,
 		&i.AvatarPublicID,
+		&i.ReputationScore,
 	)
 	return i, err
 }

@@ -25,6 +25,14 @@ export type LogoutRequest = {
   refresh_token: string;
 };
 
+export type Badge = {
+  id: string;
+  name: string;
+  description: string;
+  /** Present when this badge has been awarded to the user */
+  awarded_at?: string;
+};
+
 export type UserInfo = {
   user_id: string;
   username: string;
@@ -34,6 +42,10 @@ export type UserInfo = {
   bio: string;
   /** Empty when no avatar */
   avatar_url: string;
+  reputation_score: number;
+  /** Explorer | Contributor | Local Guide | Pathfinder */
+  reputation_level: string;
+  badges: Badge[];
 };
 
 export type Users = {

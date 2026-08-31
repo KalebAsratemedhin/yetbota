@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: YetBota Content Service
-  description: Posts, signed Cloudinary media, reactions, comments (with replies), bookmarks, share, and search.
-  version: 0.2.0
+  description: Posts, signed Cloudinary media, reactions, comments (with replies), bookmarks, share, search, and home feed.
+  version: 0.3.0
 servers:
   - url: /
     description: Current host
@@ -89,6 +89,44 @@ paths:
       responses:
         "200":
           description: Matching posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /feed:
+    get:
+      tags: [Feed]
+      summary: Home feed (following + nearby)
+      description: |
+        Ranked feed of posts from accounts the viewer follows plus nearby posts
+        (default ~25 km). Uses HN-style gravity; no ML. Requires viewer `lat`/`lng`.
+      operationId: getFeed
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Ranked posts page
           content:
             application/json:
               schema:

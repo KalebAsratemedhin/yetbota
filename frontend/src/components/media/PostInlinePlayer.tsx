@@ -19,7 +19,8 @@ export type PostInlinePlayerHandle = {
 
 /**
  * Minimal looping player: seek + mute on hover, center tap pauses/resumes.
- * When `active` is false, media is unloaded to free memory.
+ * When `active` is false, playback pauses but `src` stays set so the browser
+ * can reuse its HTTP cache on the next view.
  */
 const PostInlinePlayer = forwardRef<
   PostInlinePlayerHandle,
@@ -28,7 +29,7 @@ const PostInlinePlayer = forwardRef<
     kind: "audio" | "video";
     className?: string;
     overlay?: boolean;
-    /** When false, pause and drop the media src (feed windowing). */
+    /** When false, pause playback (keep src for cache). */
     active?: boolean;
     /** Fill parent instead of max-height contain. */
     fill?: boolean;
@@ -55,23 +56,8 @@ const PostInlinePlayer = forwardRef<
     const el = elRef.current;
     if (!el) return;
 
-    if (!active) {
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
-      queueMicrotask(() => {
-        setPlaying(false);
-        setReady(false);
-        setCurrent(0);
-      });
-      return;
-    }
-
-    el.src = src;
-    el.muted = mutedRef.current;
-    el.load();
-
     const tryPlay = () => {
+      if (!active) return;
       void el.play().then(
         () => setPlaying(true),
         () => {
@@ -95,7 +81,7 @@ const PostInlinePlayer = forwardRef<
     const onPause = () => setPlaying(false);
     const onEnded = () => {
       el.currentTime = 0;
-      void el.play().catch(() => undefined);
+      if (active) void el.play().catch(() => undefined);
     };
 
     el.addEventListener("loadedmetadata", onMeta);
@@ -104,21 +90,37 @@ const PostInlinePlayer = forwardRef<
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
 
+    if (!active) {
+      el.pause();
+      return () => {
+        el.removeEventListener("loadedmetadata", onMeta);
+        el.removeEventListener("timeupdate", onTime);
+        el.removeEventListener("play", onPlay);
+        el.removeEventListener("pause", onPause);
+        el.removeEventListener("ended", onEnded);
+      };
+    }
+
+    if (el.readyState >= 1) {
+      setReady(true);
+      if (Number.isFinite(el.duration)) setDuration(el.duration);
+      tryPlay();
+    }
+
     return () => {
       el.removeEventListener("loadedmetadata", onMeta);
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onEnded);
-      el.pause();
     };
   }, [src, active]);
 
   useEffect(() => {
     const el = elRef.current;
-    if (!el || !active) return;
+    if (!el) return;
     el.muted = muted;
-  }, [muted, active]);
+  }, [muted]);
 
   useImperativeHandle(ref, () => ({
     toggle() {
@@ -131,6 +133,7 @@ const PostInlinePlayer = forwardRef<
       elRef.current?.pause();
     },
     play() {
+      if (!active) return;
       void elRef.current?.play().catch(() => undefined);
     },
   }));
@@ -152,7 +155,7 @@ const PostInlinePlayer = forwardRef<
     if (!Number.isFinite(t)) return;
     el.currentTime = t;
     setCurrent(t);
-    void el.play().catch(() => undefined);
+    if (active) void el.play().catch(() => undefined);
   }
 
   function onSurfaceClick(e: React.MouseEvent) {
@@ -223,15 +226,15 @@ const PostInlinePlayer = forwardRef<
           ref={(n) => {
             elRef.current = n;
           }}
+          src={src}
           loop
           playsInline
-          preload={active ? "auto" : "none"}
+          preload={active ? "auto" : "metadata"}
           controls={false}
           controlsList="nodownload noplaybackrate"
           onContextMenu={(e) => e.preventDefault()}
           className="hidden"
         />
-        {/* Always show a thin hit area; bar fades in on hover */}
         <div className="min-h-8">{bar}</div>
       </div>
     );
@@ -253,9 +256,10 @@ const PostInlinePlayer = forwardRef<
         ref={(n) => {
           elRef.current = n;
         }}
+        src={src}
         loop
         playsInline
-        preload={active ? "auto" : "none"}
+        preload={active ? "auto" : "metadata"}
         controls={false}
         controlsList="nodownload noplaybackrate noremoteplayback"
         disablePictureInPicture

@@ -82,7 +82,7 @@ export default function PostDetailCard({
       data-post-id={post.id}
       className={cn(
         snap
-          ? "flex h-full min-h-0 flex-col bg-bg"
+          ? "flex h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)] flex-col bg-bg"
           : "border-b border-border-subtle",
         className
       )}
@@ -91,14 +91,14 @@ export default function PostDetailCard({
         <AuthorHeader authorId={post.author_id} createdAt={post.created_at} />
       </div>
 
-      <div className={cn(snap ? "min-h-0 flex-1" : null)}>
+      <div className={cn(snap ? "min-h-0 flex-1 basis-0" : null)}>
         <PostMediaGallery
           media={post.media}
           mode={post.media_mode}
           tall={!snap}
           fill={snap}
           active={active}
-          className={snap ? "h-full" : undefined}
+          className={snap ? "h-full min-h-0" : undefined}
         />
       </div>
 

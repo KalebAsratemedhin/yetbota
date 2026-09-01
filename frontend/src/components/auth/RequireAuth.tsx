@@ -1,29 +1,27 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
-
-const emptySubscribe = () => () => {};
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const accessToken = useAppSelector((s) => s.auth.accessToken);
-  /** false on server + first SSR HTML; true after client hydrate */
-  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
+  const hydrated = useHydrated();
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!hydrated) return;
     if (accessToken) return;
     const next = pathname && pathname.startsWith("/") ? pathname : "/profile";
     router.replace(`/signin?next=${encodeURIComponent(next)}`);
-  }, [isClient, accessToken, pathname, router]);
+  }, [hydrated, accessToken, pathname, router]);
 
-  if (!isClient || !accessToken) {
+  if (!hydrated || !accessToken) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center bg-bg text-sm text-fg-faint">
-        {isClient && !accessToken ? "Redirecting to sign in…" : "Loading…"}
+        {hydrated && !accessToken ? "Redirecting to sign in…" : "Loading…"}
       </div>
     );
   }

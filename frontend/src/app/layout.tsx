@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { StoreProvider } from "@/components/providers/store-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -39,10 +38,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${jakarta.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={`${jakarta.className} flex min-h-full flex-col bg-bg text-fg`}>
-        <Script id="yetbota-theme-init" strategy="beforeInteractive">
-          {themeInitScript}
-        </Script>
         <StoreProvider>
           {children}
           <Toaster />

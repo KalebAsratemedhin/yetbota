@@ -1,13 +1,15 @@
 "use client";
 
-import { Suspense, use, useCallback, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import AuthorPostFeed from "@/components/posts/AuthorPostFeed";
 import CommentsPanel from "@/components/posts/CommentsPanel";
+import { commentsGridClass } from "@/components/posts/commentsLayout";
 import PostDetailCard from "@/components/posts/PostDetailCard";
 import { useGetPostQuery } from "@/lib/api/contentApi";
+import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
 import { cn } from "@/lib/utils";
 
@@ -21,36 +23,48 @@ function SinglePostWithComments({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(initialMobileOpen);
+  const [desktopOpen, setDesktopOpen] = useState(initialMobileOpen);
+  const openRef = useRef(initialMobileOpen);
+  openRef.current = mobileOpen || desktopOpen;
+
+  const syncCommentsUrl = useCallback(
+    (open: boolean) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (open) next.set("comments", "1");
+      else next.delete("comments");
+      const qs = next.toString();
+      router.replace(qs ? `?${qs}` : "?", { scroll: false });
+    },
+    [router, searchParams]
+  );
 
   const closeMobile = useCallback(() => {
     setMobileOpen(false);
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("comments");
-    const qs = next.toString();
-    router.replace(qs ? `?${qs}` : "?", { scroll: false });
-  }, [router, searchParams]);
+    if (!desktopOpen) syncCommentsUrl(false);
+  }, [desktopOpen, syncCommentsUrl]);
 
-  const openMobile = useCallback(() => {
-    setMobileOpen(true);
-    const next = new URLSearchParams(searchParams.toString());
-    next.set("comments", "1");
-    router.replace(`?${next.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+  const onCommentsClick = useCallback(() => {
+    const next = !openRef.current;
+    setMobileOpen(next);
+    setDesktopOpen(next);
+    syncCommentsUrl(next);
+  }, [syncCommentsUrl]);
 
   return (
     <div
       className={cn(
-        "lg:grid lg:grid-cols-[minmax(0,36rem)_22rem] lg:items-start lg:gap-6",
+        commentsGridClass(desktopOpen),
         mobileOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >
       <div className="mx-auto w-full max-w-xl lg:mx-0">
-        <PostDetailCard post={post} active onOpenComments={openMobile} />
+        <PostDetailCard post={post} active onOpenComments={onCommentsClick} />
       </div>
       <CommentsPanel
         postId={post.id}
         mobileOpen={mobileOpen}
         onMobileClose={closeMobile}
+        desktopOpen={desktopOpen}
       />
     </div>
   );
@@ -61,6 +75,10 @@ function PostDetail({ postId }: { postId: string }) {
   const fromUser = searchParams.get("from") === "user";
   const commentsOpen = searchParams.get("comments") === "1";
   const { data: post, isLoading, isError, refetch } = useGetPostQuery(postId);
+
+  useEffect(() => {
+    if (post) prefetchPostMedia(post);
+  }, [post]);
 
   if (isLoading) {
     return (

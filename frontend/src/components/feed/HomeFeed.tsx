@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Loader2, MapPin, RefreshCw } from "lucide-react";
 import CommentsPanel from "@/components/posts/CommentsPanel";
 import PostDetailCard from "@/components/posts/PostDetailCard";
+import { useCommentsPanel } from "@/hooks/use-comments-panel";
 import { useGetFeedQuery, useLazyGetFeedQuery } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
+import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
 import { cn } from "@/lib/utils";
 
@@ -39,24 +41,18 @@ function readGeo(): Promise<{ lat: number; lng: number }> {
   });
 }
 
-/** Focus the slide whose center is closest to the viewport midpoint. */
-function pickFocusedId(orderedIds: string[]): string | null {
+/** Which post owns A/V: last one whose top has crossed mid-viewport. */
+function pickFocusedPostId(orderedIds: string[]): string | null {
   if (orderedIds.length === 0) return null;
   const mid = window.innerHeight * 0.5;
-  let best: string | null = null;
-  let bestDist = Number.POSITIVE_INFINITY;
+  let focused = orderedIds[0]!;
   for (const id of orderedIds) {
     const el = document.querySelector<HTMLElement>(`[data-post-id="${id}"]`);
     if (!el) continue;
-    const r = el.getBoundingClientRect();
-    const center = r.top + r.height * 0.5;
-    const dist = Math.abs(center - mid);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = id;
-    }
+    if (el.getBoundingClientRect().top <= mid) focused = id;
+    else break;
   }
-  return best ?? orderedIds[0]!;
+  return focused;
 }
 
 function SnapFeed({
@@ -72,27 +68,25 @@ function SnapFeed({
   const [cursor, setCursor] = useState<string | null | undefined>(nextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
   const [focusedId, setFocusedId] = useState(initialPosts[0]?.id ?? "");
-  const [mobileCommentsOpen, setMobileCommentsOpen] = useState(false);
+  const {
+    mobileOpen: mobileCommentsOpen,
+    desktopOpen: desktopCommentsOpen,
+    panelPostId,
+    onCommentsClick,
+    closeMobile,
+    followFocusedPost,
+  } = useCommentsPanel();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const idsRef = useRef(initialPosts.map((p) => p.id));
 
   useEffect(() => {
     idsRef.current = posts.map((p) => p.id);
+    for (const p of posts.slice(0, 3)) prefetchPostMedia(p);
   }, [posts]);
 
-  // Snap against the page scrollbar (document), not an inner scroller.
-  useEffect(() => {
-    const html = document.documentElement;
-    const prev = html.style.scrollSnapType;
-    html.style.scrollSnapType = "y mandatory";
-    return () => {
-      html.style.scrollSnapType = prev;
-    };
-  }, []);
-
   const refreshFocus = useCallback(() => {
-    const next = pickFocusedId(idsRef.current);
+    const next = pickFocusedPostId(idsRef.current);
     if (next) setFocusedId(next);
   }, []);
 
@@ -105,6 +99,18 @@ function SnapFeed({
       window.removeEventListener("resize", refreshFocus);
     };
   }, [refreshFocus, posts.length]);
+
+  useEffect(() => {
+    const idx = posts.findIndex((p) => p.id === focusedId);
+    if (idx < 0) return;
+    for (const p of posts.slice(Math.max(0, idx - 1), idx + 2)) {
+      prefetchPostMedia(p);
+    }
+  }, [focusedId, posts]);
+
+  useEffect(() => {
+    followFocusedPost(focusedId);
+  }, [focusedId, followFocusedPost]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingRef.current) return;
@@ -168,13 +174,13 @@ function SnapFeed({
         {posts.map((p) => (
           <section
             key={p.id}
-            className="box-border h-[calc(100dvh-5rem)] w-full snap-start snap-always"
+            className="scroll-mt-20 box-border min-h-[calc(100dvh-5rem)] w-full"
           >
             <PostDetailCard
               post={p}
               active={p.id === focusedId}
               layout="snap"
-              onOpenComments={() => setMobileCommentsOpen(true)}
+              onOpenComments={() => onCommentsClick(p.id)}
             />
           </section>
         ))}
@@ -191,9 +197,10 @@ function SnapFeed({
       </div>
 
       <CommentsPanel
-        postId={focusedId}
+        postId={panelPostId || focusedId}
         mobileOpen={mobileCommentsOpen}
-        onMobileClose={() => setMobileCommentsOpen(false)}
+        onMobileClose={closeMobile}
+        desktopOpen={desktopCommentsOpen}
       />
     </div>
   );

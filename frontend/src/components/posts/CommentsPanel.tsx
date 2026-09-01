@@ -46,17 +46,19 @@ function PanelChrome({
 }
 
 /**
- * Large screens: sticky side column always shown (parent provides the grid).
- * Small screens: bottom sheet only when `mobileOpen` — post stays visible above.
+ * Large screens: sticky side column when `desktopOpen`.
+ * Small screens: bottom sheet when `mobileOpen` — post stays visible above.
  */
 export default function CommentsPanel({
   postId,
   mobileOpen,
   onMobileClose,
+  desktopOpen,
 }: {
   postId: string;
   mobileOpen: boolean;
   onMobileClose: () => void;
+  desktopOpen: boolean;
 }) {
   useEffect(() => {
     if (!mobileOpen) return;
@@ -67,16 +69,20 @@ export default function CommentsPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen, onMobileClose]);
 
+  if (!postId) return null;
+
   return (
     <>
-      <aside
-        className="sticky top-24 hidden h-[calc(100dvh-6.5rem)] w-[22rem] min-w-[22rem] max-w-[22rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-border-subtle lg:flex"
-        aria-label="Comments"
-      >
-        <PanelChrome className="h-full min-h-0 w-full min-w-0 overflow-hidden">
-          <CommentsView key={postId} postId={postId} />
-        </PanelChrome>
-      </aside>
+      {desktopOpen ? (
+        <aside
+          className="sticky top-24 hidden h-[calc(100dvh-6.5rem)] w-[28rem] min-w-[28rem] max-w-[28rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-border-subtle lg:flex"
+          aria-label="Comments"
+        >
+          <PanelChrome className="h-full min-h-0 w-full min-w-0 overflow-hidden">
+            <CommentsView key={postId} postId={postId} />
+          </PanelChrome>
+        </aside>
+      ) : null}
 
       {mobileOpen ? (
         <div

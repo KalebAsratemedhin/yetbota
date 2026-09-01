@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   Navbar,
   HeroSection,
@@ -14,9 +14,8 @@ import {
   Footer,
 } from "@/components/landing";
 import HomeFeed from "@/components/feed/HomeFeed";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
-
-const emptySubscribe = () => () => {};
 
 function MarketingHome() {
   return (
@@ -57,10 +56,9 @@ function HomeShell({ children }: { children: ReactNode }) {
 
 export default function HomePage() {
   const accessToken = useAppSelector((s) => s.auth.accessToken);
-  /** false on server + hydration; true after client commit */
-  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
+  const hydrated = useHydrated();
 
-  if (!isClient) {
+  if (!hydrated) {
     return (
       <HomeShell>
         <div className="flex min-h-[50vh] items-center justify-center pt-20 text-sm text-fg-faint">

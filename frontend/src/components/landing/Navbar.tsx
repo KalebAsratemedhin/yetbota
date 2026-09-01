@@ -8,15 +8,17 @@ import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
 import HeaderNavLink from "@/components/shared/HeaderNavLink";
 import { useLogoutMutation, useMeQuery } from "@/lib/api/authApi";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
 import UserAvatar from "@/components/shared/UserAvatar";
 
 export default function Navbar() {
   const t = useContent();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const hydrated = useHydrated();
   const accessToken = useAppSelector((s) => s.auth.accessToken);
   const username = useAppSelector((s) => s.auth.username);
-  const isSignedIn = Boolean(accessToken);
+  const isSignedIn = hydrated && Boolean(accessToken);
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { data: me } = useMeQuery(undefined, { skip: !isSignedIn });
 

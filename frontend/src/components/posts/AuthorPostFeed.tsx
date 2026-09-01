@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import CommentsPanel from "@/components/posts/CommentsPanel";
+import { commentsGridClass } from "@/components/posts/commentsLayout";
 import PostDetailCard from "@/components/posts/PostDetailCard";
+import { useCommentsPanel } from "@/hooks/use-comments-panel";
 import { useLazyListUserPostsQuery } from "@/lib/api/contentApi";
 import { encodeContentCursor } from "@/lib/content/cursor";
+import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
 import { cn } from "@/lib/utils";
 
@@ -47,9 +50,17 @@ function AuthorPostFeedSession({
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(initialCursor == null);
   const [focusedId, setFocusedId] = useState(seed.id);
-  const [mobileCommentsOpen, setMobileCommentsOpen] = useState(
-    Boolean(initialMobileComments)
-  );
+  const {
+    mobileOpen: mobileCommentsOpen,
+    desktopOpen: desktopCommentsOpen,
+    panelPostId,
+    onCommentsClick,
+    closeMobile,
+    followFocusedPost,
+  } = useCommentsPanel({
+    initialMobileOpen: Boolean(initialMobileComments),
+    initialDesktopOpen: Boolean(initialMobileComments),
+  });
   const [fetchPage] = useLazyListUserPostsQuery();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
@@ -57,7 +68,9 @@ function AuthorPostFeedSession({
 
   useEffect(() => {
     idsRef.current = posts.map((p) => p.id);
-  }, [posts]);
+    prefetchPostMedia(seed);
+    for (const p of posts.slice(0, 3)) prefetchPostMedia(p);
+  }, [posts, seed]);
 
   const refreshFocus = useCallback(() => {
     const next = pickFocusedPostId(idsRef.current);
@@ -73,6 +86,18 @@ function AuthorPostFeedSession({
       window.removeEventListener("resize", refreshFocus);
     };
   }, [refreshFocus, posts.length]);
+
+  useEffect(() => {
+    const idx = posts.findIndex((p) => p.id === focusedId);
+    if (idx < 0) return;
+    for (const p of posts.slice(Math.max(0, idx - 1), idx + 2)) {
+      prefetchPostMedia(p);
+    }
+  }, [focusedId, posts]);
+
+  useEffect(() => {
+    followFocusedPost(focusedId);
+  }, [focusedId, followFocusedPost]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingRef.current || done) return;
@@ -119,7 +144,7 @@ function AuthorPostFeedSession({
   return (
     <div
       className={cn(
-        "lg:grid lg:grid-cols-[minmax(0,36rem)_22rem] lg:items-start lg:gap-6",
+        commentsGridClass(desktopCommentsOpen),
         mobileCommentsOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >
@@ -130,7 +155,7 @@ function AuthorPostFeedSession({
             post={p}
             active={p.id === focusedId}
             fromUser
-            onOpenComments={() => setMobileCommentsOpen(true)}
+            onOpenComments={() => onCommentsClick(p.id)}
           />
         ))}
         <div ref={sentinelRef} className="h-10" aria-hidden />
@@ -143,9 +168,10 @@ function AuthorPostFeedSession({
       </div>
 
       <CommentsPanel
-        postId={focusedId}
+        postId={panelPostId || focusedId}
         mobileOpen={mobileCommentsOpen}
-        onMobileClose={() => setMobileCommentsOpen(false)}
+        onMobileClose={closeMobile}
+        desktopOpen={desktopCommentsOpen}
       />
     </div>
   );

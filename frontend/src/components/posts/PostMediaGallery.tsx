@@ -22,7 +22,7 @@ export default function PostMediaGallery({
   tall?: boolean;
   /** Stretch to parent height (snap feed slides). */
   fill?: boolean;
-  /** When false, unload A/V (author feed windowing). */
+  /** When false, pause A/V but keep media loaded for browser cache reuse. */
   active?: boolean;
 }) {
   const sorted = [...media].sort((a, b) => a.sort_order - b.sort_order);
@@ -30,6 +30,7 @@ export default function PostMediaGallery({
   const video = sorted.find((m) => m.kind === "video");
   const audio = sorted.find((m) => m.kind === "audio");
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const compactVideoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<PostInlinePlayerHandle>(null);
   const [index, setIndex] = useState(0);
 
@@ -56,6 +57,13 @@ export default function PostMediaGallery({
     return () => observer.disconnect();
   }, [images.length]);
 
+  useEffect(() => {
+    const el = compactVideoRef.current;
+    if (!el) return;
+    if (!active) el.pause();
+    else void el.play().catch(() => undefined);
+  }, [active]);
+
   function goTo(i: number) {
     const root = scrollerRef.current;
     if (!root) return;
@@ -79,11 +87,13 @@ export default function PostMediaGallery({
     return (
       <div className={cn("relative overflow-hidden bg-black", className)}>
         <video
-          src={active ? video.url : undefined}
+          ref={compactVideoRef}
+          src={video.url}
           muted
           loop
           playsInline
           autoPlay={active}
+          preload={active ? "auto" : "metadata"}
           controls={false}
           controlsList="nodownload"
           disablePictureInPicture
@@ -108,8 +118,11 @@ export default function PostMediaGallery({
     );
   }
 
+  const hasAudio = Boolean(audio);
+  const interactiveAudio = hasAudio && (tall || fill);
+
   const frame = fill
-    ? "h-full w-full"
+    ? "flex min-h-0 flex-1 flex-col"
     : tall
       ? "aspect-[4/5] w-full max-h-[min(78vh,52rem)] sm:aspect-square"
       : "aspect-[4/5] w-full";
@@ -119,7 +132,9 @@ export default function PostMediaGallery({
       <div
         ref={scrollerRef}
         className={cn(
-          "absolute inset-0 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain",
+          fill
+            ? "flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain"
+            : "absolute inset-0 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain",
           "scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         )}
       >
@@ -127,9 +142,12 @@ export default function PostMediaGallery({
           <div
             key={img.id || `${img.url}-${i}`}
             data-slide
-            className="relative h-full w-full min-w-full shrink-0 snap-center snap-always"
+            className={cn(
+              "relative min-w-full shrink-0 snap-center snap-always",
+              fill ? "flex min-h-0 flex-1" : "h-full w-full"
+            )}
             onClick={(e) => {
-              if (!tall || !audio) return;
+              if (!interactiveAudio) return;
               if ((e.target as HTMLElement).closest("[data-player-chrome]")) return;
               if ((e.target as HTMLElement).closest("button")) return;
               audioRef.current?.toggle();
@@ -140,21 +158,24 @@ export default function PostMediaGallery({
               src={img.url}
               alt=""
               draggable={false}
+              decoding="async"
+              loading="eager"
               className={cn(
-                "h-full w-full object-cover select-none",
-                tall && audio ? "cursor-pointer" : null
+                "w-full object-cover select-none",
+                fill ? "min-h-0 flex-1" : "h-full",
+                interactiveAudio ? "cursor-pointer" : null
               )}
             />
           </div>
         ))}
       </div>
 
-      {audio && (tall || mode === "images_audio") ? (
+      {hasAudio && (interactiveAudio || mode === "images_audio") ? (
         <div className="absolute inset-x-3 bottom-10 z-10 sm:bottom-12">
-          {tall ? (
+          {interactiveAudio ? (
             <PostInlinePlayer
               ref={audioRef}
-              src={audio.url}
+              src={audio!.url}
               kind="audio"
               overlay
               active={active}

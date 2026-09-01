@@ -1,5 +1,6 @@
 export { DEFAULT_MAX_CLIP_SEC } from "@/lib/media/constants";
 export { readMediaDuration } from "@/lib/media/duration";
+export { prefetchMediaUrl, prefetchPostMedia } from "@/lib/media/prefetch";
 export {
   clampClipRange,
   formatClipTime,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import {
   MapContainer,
@@ -13,6 +13,10 @@ import {
 } from "react-leaflet";
 import type { MapPoi, MapView } from "@/lib/geo/nominatim";
 import "leaflet/dist/leaflet.css";
+
+const CYCLOSM_URL =
+  "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png";
+const OSM_FALLBACK_URL = "https://tile.openstreetmap.de/{z}/{x}/{y}.png";
 
 const pin = L.divIcon({
   className: "yb-map-pin",
@@ -126,6 +130,38 @@ function Recenter({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
+/** CyclOSM (dense amenities) with OSM.de fallback if tiles fail. */
+function BasemapTiles() {
+  const [fallback, setFallback] = useState(false);
+  const errors = useRef(0);
+
+  if (fallback) {
+    return (
+      <TileLayer
+        key="osmde"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url={OSM_FALLBACK_URL}
+        maxZoom={19}
+      />
+    );
+  }
+
+  return (
+    <TileLayer
+      key="cyclosm"
+      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://www.cyclosm.org">CyclOSM</a>'
+      url={CYCLOSM_URL}
+      maxZoom={20}
+      eventHandlers={{
+        tileerror: () => {
+          errors.current += 1;
+          if (errors.current >= 4) setFallback(true);
+        },
+      }}
+    />
+  );
+}
+
 export default function LocationMap({
   lat,
   lng,
@@ -159,13 +195,7 @@ export default function LocationMap({
       className="h-full w-full"
       zoomControl={false}
     >
-      {/* Carto Voyager — OSM-based, reliable CDN (CyclOSM often times out). */}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
-        maxZoom={20}
-        subdomains="abcd"
-      />
+      <BasemapTiles />
       <ZoomControl position="bottomleft" />
       <MapSizeFix />
       <MapEvents

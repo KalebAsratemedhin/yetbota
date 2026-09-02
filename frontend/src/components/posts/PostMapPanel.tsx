@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { MapPin, X } from "lucide-react";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useIsLg } from "@/hooks/use-is-lg";
-import { reversePlace } from "@/lib/geo/nominatim";
+import {
+  POI_MIN_ZOOM,
+  fetchMapPois,
+  type MapPoi,
+  type MapView,
+} from "@/lib/geo/nominatim";
 import { cn } from "@/lib/utils";
 
 const LocationMap = dynamic(() => import("@/components/compose/LocationMap"), {
@@ -17,36 +23,54 @@ const LocationMap = dynamic(() => import("@/components/compose/LocationMap"), {
 });
 
 function MapBody({ lat, lng }: { lat: number; lng: number }) {
-  const [label, setLabel] = useState<string | null>(null);
+  const [pois, setPois] = useState<MapPoi[]>([]);
+  const [view, setView] = useState<MapView | null>(null);
+  const debouncedView = useDebouncedValue(view, 550);
+  const viewKeyRef = useRef("");
+
+  const onViewChange = useCallback((next: MapView) => {
+    setView(next);
+  }, []);
 
   useEffect(() => {
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const ac = new AbortController();
-    setLabel(null);
-    void reversePlace(lat, lng, ac.signal)
-      .then((name) => {
-        if (!ac.signal.aborted) setLabel(name);
+    if (!debouncedView || debouncedView.zoom < POI_MIN_ZOOM) {
+      setPois([]);
+      return;
+    }
+    const key = [
+      debouncedView.zoom,
+      debouncedView.south.toFixed(3),
+      debouncedView.west.toFixed(3),
+      debouncedView.north.toFixed(3),
+      debouncedView.east.toFixed(3),
+    ].join("|");
+    if (key === viewKeyRef.current) return;
+    viewKeyRef.current = key;
+
+    let cancelled = false;
+    void fetchMapPois(debouncedView)
+      .then((rows) => {
+        if (!cancelled) setPois(rows);
       })
       .catch(() => {
-        if (!ac.signal.aborted) setLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        if (!cancelled) setPois([]);
       });
-    return () => ac.abort();
-  }, [lat, lng]);
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedView]);
 
   return (
     <div className="relative isolate h-full min-h-0 w-full overflow-hidden">
       <div className="absolute inset-0">
-        <LocationMap lat={lat} lng={lng} pinned interactive={false} />
-      </div>
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 sm:inset-x-4 sm:bottom-4">
-        <div className="pointer-events-auto max-w-[16rem] rounded-xl border border-white/15 bg-black/75 px-3 py-2 backdrop-blur-sm">
-          <p className="text-[10px] font-semibold tracking-wide text-white/50 uppercase">
-            Location
-          </p>
-          <p className="mt-0.5 line-clamp-2 text-[11px] text-white/90">
-            {label ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`}
-          </p>
-        </div>
+        <LocationMap
+          lat={lat}
+          lng={lng}
+          pinned
+          interactive={false}
+          pois={pois}
+          onViewChange={onViewChange}
+        />
       </div>
     </div>
   );

@@ -61,6 +61,7 @@ export default function PostDetailCard({
   className,
   fromUser,
   onOpenComments,
+  onOpenMap,
   layout = "default",
 }: {
   post: Post;
@@ -68,6 +69,7 @@ export default function PostDetailCard({
   className?: string;
   fromUser?: boolean;
   onOpenComments?: () => void;
+  onOpenMap?: () => void;
   /** `snap` = full-height slide for vertical social feed. */
   layout?: "default" | "snap";
 }) {
@@ -140,15 +142,26 @@ export default function PostDetailCard({
           </p>
         ) : null}
 
-        <a
-          href={`https://www.openstreetmap.org/?mlat=${post.lat}&mlon=${post.lng}#map=17/${post.lat}/${post.lng}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-fg-faint hover:text-fg-muted"
-        >
-          <MapPin className="h-3.5 w-3.5 text-brand" />
-          View map
-        </a>
+        {onOpenMap ? (
+          <button
+            type="button"
+            onClick={onOpenMap}
+            className="inline-flex items-center gap-1.5 text-xs text-fg-faint hover:text-fg-muted"
+          >
+            <MapPin className="h-3.5 w-3.5 text-brand" />
+            View map
+          </button>
+        ) : (
+          <a
+            href={`https://www.openstreetmap.org/?mlat=${post.lat}&mlon=${post.lng}#map=17/${post.lat}/${post.lng}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-fg-faint hover:text-fg-muted"
+          >
+            <MapPin className="h-3.5 w-3.5 text-brand" />
+            View map
+          </a>
+        )}
       </div>
     </article>
   );

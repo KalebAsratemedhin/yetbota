@@ -56,12 +56,17 @@ export async function searchPlaces(
   });
 }
 
-export async function reversePlace(lat: number, lng: number): Promise<string> {
+export async function reversePlace(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal
+): Promise<string> {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     throw new Error("Invalid coordinates");
   }
   const res = await fetch(
-    `/api/geo/reverse?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}`
+    `/api/geo/reverse?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}`,
+    { signal }
   );
   if (!res.ok) throw new Error("Reverse lookup failed");
   const row = (await res.json()) as { display_name?: string };

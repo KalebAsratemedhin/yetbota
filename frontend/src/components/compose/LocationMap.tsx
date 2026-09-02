@@ -32,9 +32,16 @@ function poiIcon(labeled: boolean) {
   });
 }
 
-function viewFromMap(map: L.Map): MapView {
+function viewFromMap(map: L.Map): MapView | null {
   const b = map.getBounds();
   const c = map.getCenter();
+  if (
+    !Number.isFinite(c.lat) ||
+    !Number.isFinite(c.lng) ||
+    !Number.isFinite(b.getSouth())
+  ) {
+    return null;
+  }
   return {
     south: b.getSouth(),
     west: b.getWest(),
@@ -50,26 +57,56 @@ function MapEvents({
   onPick,
   onViewChange,
 }: {
-  onPick: (lat: number, lng: number) => void;
+  onPick?: (lat: number, lng: number) => void;
   onViewChange?: (view: MapView) => void;
 }) {
   const map = useMapEvents({
     click(e) {
-      onPick(e.latlng.lat, e.latlng.lng);
+      onPick?.(e.latlng.lat, e.latlng.lng);
     },
     moveend() {
-      onViewChange?.(viewFromMap(map));
+      const view = viewFromMap(map);
+      if (view) onViewChange?.(view);
     },
     zoomend() {
-      onViewChange?.(viewFromMap(map));
+      const view = viewFromMap(map);
+      if (view) onViewChange?.(view);
     },
   });
 
   useEffect(() => {
-    const id = window.setTimeout(() => onViewChange?.(viewFromMap(map)), 0);
+    const id = window.setTimeout(() => {
+      const view = viewFromMap(map);
+      if (view) onViewChange?.(view);
+    }, 0);
     return () => window.clearTimeout(id);
   }, [map, onViewChange]);
 
+  return null;
+}
+
+function MapSizeFix() {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    const refresh = () => {
+      try {
+        map.invalidateSize({ pan: false });
+      } catch {
+        /* not ready */
+      }
+    };
+    refresh();
+    const t1 = window.setTimeout(refresh, 50);
+    const t2 = window.setTimeout(refresh, 250);
+    const ro = new ResizeObserver(refresh);
+    ro.observe(el);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      ro.disconnect();
+    };
+  }, [map]);
   return null;
 }
 
@@ -77,7 +114,14 @@ function Recenter({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   useEffect(() => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { duration: 0.7 });
+    const rawZoom = map.getZoom();
+    const zoom = Number.isFinite(rawZoom) ? Math.max(rawZoom, 16) : 16;
+    try {
+      map.invalidateSize({ pan: false });
+      map.setView([lat, lng], zoom, { animate: false });
+    } catch {
+      /* Map not ready yet */
+    }
   }, [lat, lng, map]);
   return null;
 }
@@ -86,18 +130,21 @@ export default function LocationMap({
   lat,
   lng,
   pinned,
-  pois,
+  pois = [],
   onPick,
   onPickPoi,
   onViewChange,
+  interactive = true,
 }: {
   lat: number;
   lng: number;
   pinned: boolean;
-  pois: MapPoi[];
-  onPick: (lat: number, lng: number) => void;
-  onPickPoi: (poi: MapPoi) => void;
-  onViewChange: (view: MapView) => void;
+  pois?: MapPoi[];
+  onPick?: (lat: number, lng: number) => void;
+  onPickPoi?: (poi: MapPoi) => void;
+  onViewChange?: (view: MapView) => void;
+  /** When false, map is view-only (no pin picking). */
+  interactive?: boolean;
 }) {
   const safeLat = Number.isFinite(lat) ? lat : 9.0192;
   const safeLng = Number.isFinite(lng) ? lng : 38.7525;
@@ -112,14 +159,19 @@ export default function LocationMap({
       className="h-full w-full"
       zoomControl={false}
     >
-      {/* CyclOSM: free OSM tiles with dense amenity labels; no API key */}
+      {/* Carto Voyager — OSM-based, reliable CDN (CyclOSM often times out). */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://www.cyclosm.org">CyclOSM</a>'
-        url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
         maxZoom={20}
+        subdomains="abcd"
       />
       <ZoomControl position="bottomleft" />
-      <MapEvents onPick={onPick} onViewChange={onViewChange} />
+      <MapSizeFix />
+      <MapEvents
+        onPick={interactive ? onPick : undefined}
+        onViewChange={onViewChange}
+      />
       {showPin ? <Recenter lat={lat} lng={lng} /> : null}
       {pois.map((p) => (
         <Marker
@@ -129,7 +181,7 @@ export default function LocationMap({
           eventHandlers={{
             click: (e) => {
               L.DomEvent.stopPropagation(e.originalEvent);
-              onPickPoi(p);
+              onPickPoi?.(p);
             },
           }}
         >

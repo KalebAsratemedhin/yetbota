@@ -1,13 +1,15 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import AuthorPostFeed from "@/components/posts/AuthorPostFeed";
 import CommentsPanel from "@/components/posts/CommentsPanel";
-import { commentsGridClass } from "@/components/posts/commentsLayout";
+import { sidePanelGridClass } from "@/components/posts/commentsLayout";
 import PostDetailCard from "@/components/posts/PostDetailCard";
+import PostMapPanel from "@/components/posts/PostMapPanel";
+import { usePostSidePanel } from "@/hooks/use-post-side-panel";
 import { useGetPostQuery } from "@/lib/api/contentApi";
 import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
@@ -15,17 +17,24 @@ import { cn } from "@/lib/utils";
 
 function SinglePostWithComments({
   post,
-  initialMobileOpen,
+  initialCommentsOpen,
 }: {
   post: Post;
-  initialMobileOpen: boolean;
+  initialCommentsOpen: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mobileOpen, setMobileOpen] = useState(initialMobileOpen);
-  const [desktopOpen, setDesktopOpen] = useState(initialMobileOpen);
-  const openRef = useRef(initialMobileOpen);
-  openRef.current = mobileOpen || desktopOpen;
+  const {
+    commentsOpen,
+    mapOpen,
+    sideOpen,
+    onCommentsClick,
+    onMapClick,
+    closeMobile,
+  } = usePostSidePanel({
+    initialMode: initialCommentsOpen ? "comments" : "none",
+    initialPostId: post.id,
+  });
 
   const syncCommentsUrl = useCallback(
     (open: boolean) => {
@@ -38,34 +47,54 @@ function SinglePostWithComments({
     [router, searchParams]
   );
 
-  const closeMobile = useCallback(() => {
-    setMobileOpen(false);
-    if (!desktopOpen) syncCommentsUrl(false);
-  }, [desktopOpen, syncCommentsUrl]);
+  useEffect(() => {
+    const has = searchParams.get("comments") === "1";
+    if (has === commentsOpen) return;
+    syncCommentsUrl(commentsOpen);
+    // Only react to commentsOpen; searchParams read for comparison.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentsOpen]);
 
-  const onCommentsClick = useCallback(() => {
-    const next = !openRef.current;
-    setMobileOpen(next);
-    setDesktopOpen(next);
-    syncCommentsUrl(next);
-  }, [syncCommentsUrl]);
+  const handleComments = useCallback(() => {
+    onCommentsClick(post.id);
+  }, [onCommentsClick, post.id]);
+
+  const handleMap = useCallback(() => {
+    onMapClick(post.id);
+  }, [onMapClick, post.id]);
 
   return (
     <div
       className={cn(
-        commentsGridClass(desktopOpen),
-        mobileOpen && "pb-[min(52vh,28rem)] lg:pb-0"
+        sidePanelGridClass(sideOpen),
+        sideOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >
       <div className="mx-auto w-full max-w-xl lg:mx-0">
-        <PostDetailCard post={post} active onOpenComments={onCommentsClick} />
+        <PostDetailCard
+          post={post}
+          active
+          onOpenComments={handleComments}
+          onOpenMap={handleMap}
+        />
       </div>
-      <CommentsPanel
-        postId={post.id}
-        mobileOpen={mobileOpen}
-        onMobileClose={closeMobile}
-        desktopOpen={desktopOpen}
-      />
+      {commentsOpen ? (
+        <CommentsPanel
+          postId={post.id}
+          mobileOpen={commentsOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={commentsOpen}
+        />
+      ) : null}
+      {mapOpen ? (
+        <PostMapPanel
+          lat={post.lat}
+          lng={post.lng}
+          mobileOpen={mapOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={mapOpen}
+        />
+      ) : null}
     </div>
   );
 }
@@ -108,7 +137,7 @@ function PostDetail({ postId }: { postId: string }) {
       {fromUser ? (
         <AuthorPostFeed seed={post} initialMobileComments={commentsOpen} />
       ) : (
-        <SinglePostWithComments post={post} initialMobileOpen={commentsOpen} />
+        <SinglePostWithComments post={post} initialCommentsOpen={commentsOpen} />
       )}
     </div>
   );

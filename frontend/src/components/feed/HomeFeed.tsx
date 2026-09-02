@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Loader2, MapPin, RefreshCw } from "lucide-react";
 import CommentsPanel from "@/components/posts/CommentsPanel";
 import PostDetailCard from "@/components/posts/PostDetailCard";
-import { useCommentsPanel } from "@/hooks/use-comments-panel";
+import PostMapPanel from "@/components/posts/PostMapPanel";
+import { usePostSidePanel } from "@/hooks/use-post-side-panel";
 import { useGetFeedQuery, useLazyGetFeedQuery } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { prefetchPostMedia } from "@/lib/media/prefetch";
@@ -69,16 +70,21 @@ function SnapFeed({
   const [loadingMore, setLoadingMore] = useState(false);
   const [focusedId, setFocusedId] = useState(initialPosts[0]?.id ?? "");
   const {
-    mobileOpen: mobileCommentsOpen,
-    desktopOpen: desktopCommentsOpen,
+    commentsOpen,
+    mapOpen,
+    sideOpen,
     panelPostId,
     onCommentsClick,
+    onMapClick,
     closeMobile,
     followFocusedPost,
-  } = useCommentsPanel();
+  } = usePostSidePanel();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const idsRef = useRef(initialPosts.map((p) => p.id));
+
+  const activeSidePost =
+    posts.find((p) => p.id === (panelPostId || focusedId)) ?? posts[0];
 
   useEffect(() => {
     idsRef.current = posts.map((p) => p.id);
@@ -167,7 +173,7 @@ function SnapFeed({
     <div
       className={cn(
         "mx-auto flex w-full max-w-6xl justify-center gap-0 lg:gap-6 lg:px-4",
-        mobileCommentsOpen && "pb-[min(52vh,28rem)] lg:pb-0"
+        sideOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >
       <div className="w-full max-w-xl">
@@ -181,6 +187,7 @@ function SnapFeed({
               active={p.id === focusedId}
               layout="snap"
               onOpenComments={() => onCommentsClick(p.id)}
+              onOpenMap={() => onMapClick(p.id)}
             />
           </section>
         ))}
@@ -196,12 +203,23 @@ function SnapFeed({
         ) : null}
       </div>
 
-      <CommentsPanel
-        postId={panelPostId || focusedId}
-        mobileOpen={mobileCommentsOpen}
-        onMobileClose={closeMobile}
-        desktopOpen={desktopCommentsOpen}
-      />
+      {commentsOpen ? (
+        <CommentsPanel
+          postId={panelPostId || focusedId}
+          mobileOpen={commentsOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={commentsOpen}
+        />
+      ) : null}
+      {mapOpen && activeSidePost ? (
+        <PostMapPanel
+          lat={activeSidePost.lat}
+          lng={activeSidePost.lng}
+          mobileOpen={mapOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={mapOpen}
+        />
+      ) : null}
     </div>
   );
 }

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import CommentsPanel from "@/components/posts/CommentsPanel";
-import { commentsGridClass } from "@/components/posts/commentsLayout";
+import { sidePanelGridClass } from "@/components/posts/commentsLayout";
 import PostDetailCard from "@/components/posts/PostDetailCard";
-import { useCommentsPanel } from "@/hooks/use-comments-panel";
+import PostMapPanel from "@/components/posts/PostMapPanel";
+import { usePostSidePanel } from "@/hooks/use-post-side-panel";
 import { useLazyListUserPostsQuery } from "@/lib/api/contentApi";
 import { encodeContentCursor } from "@/lib/content/cursor";
 import { prefetchPostMedia } from "@/lib/media/prefetch";
@@ -51,20 +52,25 @@ function AuthorPostFeedSession({
   const [done, setDone] = useState(initialCursor == null);
   const [focusedId, setFocusedId] = useState(seed.id);
   const {
-    mobileOpen: mobileCommentsOpen,
-    desktopOpen: desktopCommentsOpen,
+    commentsOpen,
+    mapOpen,
+    sideOpen,
     panelPostId,
     onCommentsClick,
+    onMapClick,
     closeMobile,
     followFocusedPost,
-  } = useCommentsPanel({
-    initialMobileOpen: Boolean(initialMobileComments),
-    initialDesktopOpen: Boolean(initialMobileComments),
+  } = usePostSidePanel({
+    initialMode: initialMobileComments ? "comments" : "none",
+    initialPostId: seed.id,
   });
   const [fetchPage] = useLazyListUserPostsQuery();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const idsRef = useRef<string[]>([seed.id]);
+
+  const activeSidePost =
+    posts.find((p) => p.id === (panelPostId || focusedId)) ?? seed;
 
   useEffect(() => {
     idsRef.current = posts.map((p) => p.id);
@@ -144,8 +150,8 @@ function AuthorPostFeedSession({
   return (
     <div
       className={cn(
-        commentsGridClass(desktopCommentsOpen),
-        mobileCommentsOpen && "pb-[min(52vh,28rem)] lg:pb-0"
+        sidePanelGridClass(sideOpen),
+        sideOpen && "pb-[min(52vh,28rem)] lg:pb-0"
       )}
     >
       <div className="mx-auto w-full max-w-xl lg:mx-0">
@@ -156,6 +162,7 @@ function AuthorPostFeedSession({
             active={p.id === focusedId}
             fromUser
             onOpenComments={() => onCommentsClick(p.id)}
+            onOpenMap={() => onMapClick(p.id)}
           />
         ))}
         <div ref={sentinelRef} className="h-10" aria-hidden />
@@ -167,12 +174,23 @@ function AuthorPostFeedSession({
         ) : null}
       </div>
 
-      <CommentsPanel
-        postId={panelPostId || focusedId}
-        mobileOpen={mobileCommentsOpen}
-        onMobileClose={closeMobile}
-        desktopOpen={desktopCommentsOpen}
-      />
+      {commentsOpen ? (
+        <CommentsPanel
+          postId={panelPostId || focusedId}
+          mobileOpen={commentsOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={commentsOpen}
+        />
+      ) : null}
+      {mapOpen ? (
+        <PostMapPanel
+          lat={activeSidePost.lat}
+          lng={activeSidePost.lng}
+          mobileOpen={mapOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={mapOpen}
+        />
+      ) : null}
     </div>
   );
 }

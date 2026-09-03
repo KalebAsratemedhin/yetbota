@@ -267,11 +267,11 @@ func decodeFeed(ctx context.Context, r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	lat, err := svcendpoint.ParseCoord(r.URL.Query().Get("lat"), "lat")
+	lat, err := svcendpoint.ParseOptionalCoord(r.URL.Query().Get("lat"), "lat")
 	if err != nil {
 		return nil, err
 	}
-	lng, err := svcendpoint.ParseCoord(r.URL.Query().Get("lng"), "lng")
+	lng, err := svcendpoint.ParseOptionalCoord(r.URL.Query().Get("lng"), "lng")
 	if err != nil {
 		return nil, err
 	}

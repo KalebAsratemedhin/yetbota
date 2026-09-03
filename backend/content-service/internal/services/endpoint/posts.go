@@ -121,8 +121,8 @@ type HashtagRequest struct {
 
 type FeedRequest struct {
 	Principal auth.Principal
-	Lat       float64
-	Lng       float64
+	Lat       *float64
+	Lng       *float64
 	Limit     int
 	Cursor    string
 }
@@ -433,20 +433,18 @@ func MakeFeedEndpoint(svc PostService) endpoint.Endpoint {
 	}
 }
 
-func ParseCoord(raw, field string) (float64, error) {
+func ParseOptionalCoord(raw, field string) (*float64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return 0, apperr.Validation(apperr.Field{
-			Field: field, Code: "REQUIRED", Message: field + " is required",
-		})
+		return nil, nil
 	}
 	n, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
-		return 0, apperr.Validation(apperr.Field{
+		return nil, apperr.Validation(apperr.Field{
 			Field: field, Code: "INVALID", Message: field + " must be a number",
 		})
 	}
-	return n, nil
+	return &n, nil
 }
 
 func ParseUserID(raw string) (uuid.UUID, error) {

@@ -149,8 +149,8 @@ type ShareResult struct {
 
 type FeedInput struct {
 	ViewerID uuid.UUID
-	Lat      float64
-	Lng      float64
+	Lat      *float64
+	Lng      *float64
 	Limit    int
 	Cursor   string
 }
@@ -378,9 +378,15 @@ func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
 	if limit > s.maxPageSize {
 		limit = s.maxPageSize
 	}
-	if in.Lat < -90 || in.Lat > 90 || in.Lng < -180 || in.Lng > 180 {
+	hasLoc := in.Lat != nil && in.Lng != nil
+	if (in.Lat == nil) != (in.Lng == nil) {
 		return PageResult{}, apperr.Validation(apperr.Field{
-			Field: "lat/lng", Code: "INVALID", Message: "viewer lat and lng are required for feed",
+			Field: "lat/lng", Code: "INVALID", Message: "lat and lng must both be provided or both omitted",
+		})
+	}
+	if hasLoc && (*in.Lat < -90 || *in.Lat > 90 || *in.Lng < -180 || *in.Lng > 180) {
+		return PageResult{}, apperr.Validation(apperr.Field{
+			Field: "lat/lng", Code: "INVALID", Message: "lat/lng out of range",
 		})
 	}
 
@@ -405,12 +411,21 @@ func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
 			return PageResult{}, err
 		}
 		candidates = append(candidates, fromFollow...)
+	} else {
+		// Newcomers / empty follow graph: global recent pool ranked by score.
+		recent, err := s.posts.ListRecent(ctx, since, s.feed.CandidateLimit)
+		if err != nil {
+			return PageResult{}, err
+		}
+		candidates = append(candidates, recent...)
 	}
-	nearby, err := s.posts.ListNearby(ctx, in.Lat, in.Lng, s.feed.NearbyRadiusKm, since, s.feed.CandidateLimit)
-	if err != nil {
-		return PageResult{}, err
+	if hasLoc {
+		nearby, err := s.posts.ListNearby(ctx, *in.Lat, *in.Lng, s.feed.NearbyRadiusKm, since, s.feed.CandidateLimit)
+		if err != nil {
+			return PageResult{}, err
+		}
+		candidates = append(candidates, nearby...)
 	}
-	candidates = append(candidates, nearby...)
 
 	seen := map[uuid.UUID]domain.Post{}
 	for _, p := range candidates {
@@ -483,7 +498,7 @@ func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
 	return out, nil
 }
 
-func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng float64, now time.Time) float64 {
+func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng *float64, now time.Time) float64 {
 	engagement := float64(p.LikeCount) + s.feed.CommentWeight*float64(p.CommentCount) + s.feed.ShareWeight*float64(p.ShareCount)
 	ageHours := now.Sub(p.CreatedAt.UTC()).Hours()
 	if ageHours < 0 {
@@ -494,8 +509,11 @@ func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng f
 	if followed {
 		followMul = 1 + s.feed.FollowBoost
 	}
-	dist := haversineKm(viewerLat, viewerLng, p.Lat, p.Lng)
-	geo := 1.0 / (1.0 + dist/s.feed.GeoD0Km)
+	geo := 1.0
+	if viewerLat != nil && viewerLng != nil {
+		dist := haversineKm(*viewerLat, *viewerLng, p.Lat, p.Lng)
+		geo = 1.0 / (1.0 + dist/s.feed.GeoD0Km)
+	}
 	return base * followMul * geo
 }
 

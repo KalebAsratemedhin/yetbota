@@ -131,4 +131,5 @@ type Repository interface {
 	ListByHashtag(ctx context.Context, tag string, p ListParams) (Page, error)
 	ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since time.Time, limit int) ([]Post, error)
 	ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]Post, error)
+	ListRecent(ctx context.Context, since time.Time, limit int) ([]Post, error)
 }

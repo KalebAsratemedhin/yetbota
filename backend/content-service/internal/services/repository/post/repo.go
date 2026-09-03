@@ -545,6 +545,23 @@ func (r *Repo) ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since
 	return page.Posts, nil
 }
 
+func (r *Repo) ListRecent(ctx context.Context, since time.Time, limit int) ([]domain.Post, error) {
+	if limit <= 0 {
+		return []domain.Post{}, nil
+	}
+	rows, err := r.q.ListRecentPosts(ctx, db.ListRecentPostsParams{
+		Since: pgtype.Timestamptz{Time: since, Valid: true}, ResultLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list recent posts")
+	}
+	page, err := r.hydratePosts(ctx, rows, postIDs(rows), limit, false)
+	if err != nil {
+		return nil, err
+	}
+	return page.Posts, nil
+}
+
 func (r *Repo) ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]domain.Post, error) {
 	if limit <= 0 || radiusKm <= 0 {
 		return []domain.Post{}, nil

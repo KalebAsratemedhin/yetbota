@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import CommentsPanel from "@/components/posts/CommentsPanel";
 import PostDetailCard from "@/components/posts/PostDetailCard";
 import PostMapPanel from "@/components/posts/PostMapPanel";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 type GeoState =
   | { status: "pending" }
   | { status: "ready"; lat: number; lng: number }
-  | { status: "denied"; message: string };
+  | { status: "unavailable" };
 
 function readGeo(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
@@ -31,11 +32,13 @@ function readGeo(): Promise<{ lat: number; lng: number }> {
           lng: pos.coords.longitude,
         }),
       (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          reject(new Error("Location permission is required for your home feed."));
-        } else {
-          reject(new Error("Could not read your location. Try again."));
-        }
+        reject(
+          new Error(
+            err.code === err.PERMISSION_DENIED
+              ? "Location permission denied"
+              : "Could not read location"
+          )
+        );
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60_000 }
     );
@@ -156,8 +159,8 @@ function SnapFeed({
       <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="text-sm font-semibold text-fg">Your feed is quiet</p>
         <p className="max-w-sm text-xs text-fg-faint">
-          Follow people and drop places nearby — new posts from your network and around
-          you will show up here.
+          Follow people and drop places — posts from your network (and nearby, when
+          location is on) will show up here.
         </p>
         <Link
           href="/compose"
@@ -234,79 +237,50 @@ export default function HomeFeed() {
       .then((coords) => {
         if (!cancelled) setGeo({ status: "ready", ...coords });
       })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setGeo({
-            status: "denied",
-            message: err instanceof Error ? err.message : "Location unavailable",
-          });
-        }
+      .catch(() => {
+        if (!cancelled) setGeo({ status: "unavailable" });
       });
     return () => {
       cancelled = true;
     };
   }, [geoTick]);
 
-  const retryGeo = useCallback(() => {
-    setGeo({ status: "pending" });
-    setGeoTick((n) => n + 1);
-  }, []);
+  useEffect(() => {
+    if (geo.status !== "unavailable") return;
+    toast.message("Location off", {
+      id: "feed-geo-unavailable",
+      description: "Showing following / recent posts. Enable location for nearby.",
+      duration: 5000,
+      action: {
+        label: "Enable",
+        onClick: () => {
+          setGeo({ status: "pending" });
+          setGeoTick((n) => n + 1);
+        },
+      },
+    });
+  }, [geo.status]);
 
-  const feedQ = useGetFeedQuery(
-    {
-      lat: geo.status === "ready" ? geo.lat : 0,
-      lng: geo.status === "ready" ? geo.lng : 0,
-      limit: 12,
-    },
-    { skip: geo.status !== "ready" }
+  const feedArgs = useMemo(
+    () =>
+      geo.status === "ready"
+        ? { lat: geo.lat, lng: geo.lng, limit: 12 }
+        : { limit: 12 },
+    [geo]
   );
+
+  const feedQ = useGetFeedQuery(feedArgs);
   const [fetchMore] = useLazyGetFeedQuery();
 
   const onLoadMore = useCallback(
     async (cursor: string) => {
-      if (geo.status !== "ready") {
-        throw new Error("Location required");
-      }
       return fetchMore({
-        lat: geo.lat,
-        lng: geo.lng,
-        limit: 12,
+        ...feedArgs,
         cursor,
       }).unwrap();
     },
-    [fetchMore, geo]
+    [fetchMore, feedArgs]
   );
-
-  if (geo.status === "pending") {
-    return (
-      <div className="flex min-h-[calc(100dvh-5rem)] flex-col items-center justify-center gap-3 px-4">
-        <Loader2 className="h-6 w-6 animate-spin text-brand" />
-        <p className="text-sm text-fg-muted">Finding places near you…</p>
-      </div>
-    );
-  }
-
-  if (geo.status === "denied") {
-    return (
-      <div className="mx-auto flex min-h-[calc(100dvh-5rem)] max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border-subtle bg-surface text-brand">
-          <MapPin className="h-6 w-6" />
-        </span>
-        <div>
-          <h2 className="text-lg font-bold text-fg">Location needed</h2>
-          <p className="mt-1 text-sm text-fg-muted">{geo.message}</p>
-        </div>
-        <button
-          type="button"
-          onClick={retryGeo}
-          className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-black hover:bg-brand-dark"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Try again
-        </button>
-      </div>
-    );
-  }
 
   if (feedQ.isError && !feedQ.data) {
     return (
@@ -334,9 +308,14 @@ export default function HomeFeed() {
     );
   }
 
+  const feedKey =
+    geo.status === "ready"
+      ? `${geo.lat.toFixed(3)}:${geo.lng.toFixed(3)}`
+      : "no-geo";
+
   return (
     <SnapFeed
-      key={`${geo.lat.toFixed(3)}:${geo.lng.toFixed(3)}`}
+      key={feedKey}
       initialPosts={feedQ.data.posts}
       nextCursor={feedQ.data.next_cursor}
       onLoadMore={onLoadMore}

@@ -945,6 +945,52 @@ func (q *Queries) ListPostsByHashtag(ctx context.Context, arg ListPostsByHashtag
 	return items, nil
 }
 
+const listRecentPosts = `-- name: ListRecentPosts :many
+SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE created_at >= $1::timestamptz
+ORDER BY created_at DESC, id DESC
+LIMIT $2
+`
+
+type ListRecentPostsParams struct {
+	Since       pgtype.Timestamptz `json:"since"`
+	ResultLimit int32              `json:"result_limit"`
+}
+
+// Cold-start / discovery pool (no follow graph required).
+func (q *Queries) ListRecentPosts(ctx context.Context, arg ListRecentPostsParams) ([]Post, error) {
+	rows, err := q.db.Query(ctx, listRecentPosts, arg.Since, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRepliesByParent = `-- name: ListRepliesByParent :many
 SELECT id, post_id, author_id, parent_id, body, like_count, dislike_count, reply_count, created_at FROM post_comments
 WHERE parent_id = $1

@@ -205,3 +205,10 @@ WHERE created_at >= sqlc.arg(since)::timestamptz
   AND lng BETWEEN sqlc.arg(min_lng) AND sqlc.arg(max_lng)
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(result_limit);
+
+-- name: ListRecentPosts :many
+-- Cold-start / discovery pool (no follow graph required).
+SELECT * FROM posts
+WHERE created_at >= sqlc.arg(since)::timestamptz
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(result_limit);

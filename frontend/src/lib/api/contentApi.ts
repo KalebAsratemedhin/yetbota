@@ -22,7 +22,7 @@ export type HashtagPostsArgs = PageArgs & { tag: string };
 export type SearchPostsArgs = PageArgs & { q: string };
 export type CommentsArgs = PageArgs & { postId: string };
 export type CommentRepliesArgs = PageArgs & { commentId: string };
-export type FeedArgs = PageArgs & { lat: number; lng: number };
+export type FeedArgs = PageArgs & { lat?: number; lng?: number };
 
 export const contentApi = createApi({
   reducerPath: "contentApi",
@@ -65,11 +65,24 @@ export const contentApi = createApi({
       query: (id) => `/posts/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Post", id }],
     }),
-    getFeed: build.query<PostsPage, FeedArgs>({
-      query: ({ lat, lng, limit = 20, cursor }) => ({
-        url: "/feed",
-        params: { lat, lng, limit, ...(cursor ? { cursor } : {}) },
-      }),
+    getFeed: build.query<PostsPage, FeedArgs | void>({
+      query: (args) => {
+        const lat = args?.lat;
+        const lng = args?.lng;
+        const hasLoc =
+          lat != null &&
+          lng != null &&
+          Number.isFinite(lat) &&
+          Number.isFinite(lng);
+        return {
+          url: "/feed",
+          params: {
+            limit: args?.limit ?? 20,
+            ...(args?.cursor ? { cursor: args.cursor } : {}),
+            ...(hasLoc ? { lat, lng } : {}),
+          },
+        };
+      },
       providesTags: ["Feed"],
     }),
     searchPosts: build.query<PostsPage, SearchPostsArgs>({

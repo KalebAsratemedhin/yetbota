@@ -100,15 +100,16 @@ paths:
   /feed:
     get:
       tags: [Feed]
-      summary: Home feed (following + nearby)
+      summary: Home feed
       description: |
-        Ranked feed of posts from accounts the viewer follows plus nearby posts
-        (default ~25 km). Uses HN-style gravity; no ML. Requires viewer `lat`/`lng`.
+        Ranked feed (HN-style gravity; no ML). Following posts when available; otherwise
+        recent site-wide posts. Optional `lat`/`lng` (both or neither): when set, nearby
+        posts are mixed in and distance boosts ranking.
       operationId: getFeed
       parameters:
         - name: lat
           in: query
-          required: true
+          required: false
           schema:
             type: number
             format: double
@@ -116,7 +117,7 @@ paths:
             maximum: 90
         - name: lng
           in: query
-          required: true
+          required: false
           schema:
             type: number
             format: double

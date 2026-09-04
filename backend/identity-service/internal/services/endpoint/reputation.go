@@ -11,6 +11,7 @@ import (
 
 type ReputationService interface {
 	RecordEvent(ctx context.Context, in domainrep.EventInput) (domainrep.Snapshot, error)
+	SyncScore(ctx context.Context, in domainrep.SyncInput) (domainrep.Snapshot, error)
 }
 
 type RecordReputationRequest struct {
@@ -19,6 +20,13 @@ type RecordReputationRequest struct {
 	EventType   string  `json:"event_type"`
 	SubjectType string  `json:"subject_type"`
 	SubjectID   *string `json:"subject_id"`
+}
+
+type SyncReputationRequest struct {
+	UserID        string `json:"user_id"`
+	Score         int64  `json:"score"`
+	PostsCreated  int64  `json:"posts_created"`
+	LikesReceived int64  `json:"likes_received"`
 }
 
 type ReputationSnapshotResponse struct {
@@ -61,6 +69,26 @@ func MakeRecordReputationEndpoint(svc ReputationService) endpoint.Endpoint {
 			in.SubjectID = &sid
 		}
 		snap, err := svc.RecordEvent(ctx, in)
+		if err != nil {
+			return nil, err
+		}
+		return snapshotResponse(snap), nil
+	}
+}
+
+func MakeSyncReputationEndpoint(svc ReputationService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(SyncReputationRequest)
+		userID, err := uuid.Parse(req.UserID)
+		if err != nil {
+			return nil, err
+		}
+		snap, err := svc.SyncScore(ctx, domainrep.SyncInput{
+			UserID:        userID,
+			Score:         req.Score,
+			PostsCreated:  req.PostsCreated,
+			LikesReceived: req.LikesReceived,
+		})
 		if err != nil {
 			return nil, err
 		}

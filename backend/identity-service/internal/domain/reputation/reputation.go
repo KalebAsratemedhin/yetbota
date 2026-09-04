@@ -11,12 +11,21 @@ const (
 	EventPostCreated = "post.created"
 	EventPostLiked   = "post.liked"
 	EventPostUnliked = "post.unliked"
+	EventScoreSync   = "score.sync"
 
 	BadgeFirstPost        = "first_post"
 	BadgeTenLikesReceived = "ten_likes_received"
 	BadgeFirstFollower    = "first_follower"
 	BadgeLevelContributor = "level_contributor"
 )
+
+// SyncInput sets denormalized score from content-side engagement math (Option 1).
+type SyncInput struct {
+	UserID        uuid.UUID
+	Score         int64
+	PostsCreated  int64
+	LikesReceived int64
+}
 
 type EventInput struct {
 	UserID      uuid.UUID
@@ -41,6 +50,7 @@ type Snapshot struct {
 
 type Repository interface {
 	AdjustScore(ctx context.Context, userID uuid.UUID, delta int64) (int64, error)
+	SetScore(ctx context.Context, userID uuid.UUID, score int64) (int64, error)
 	InsertEvent(ctx context.Context, id uuid.UUID, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID, delta int32) error
 	SumPositiveDeltaToday(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountEventsByType(ctx context.Context, userID uuid.UUID, eventType string) (int64, error)

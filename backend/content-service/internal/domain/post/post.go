@@ -30,6 +30,28 @@ const (
 	ReactionDislike Reaction = "dislike"
 )
 
+// Interaction event kinds logged for reputation (content-owned ledger).
+const (
+	InteractionCreate     = "create"
+	InteractionLike       = "like"
+	InteractionUnlike     = "unlike"
+	InteractionDislike    = "dislike"
+	InteractionUndislike  = "undislike"
+	InteractionComment    = "comment"
+	InteractionShare      = "share"
+	InteractionBookmark   = "bookmark"
+	InteractionUnbookmark = "unbookmark"
+)
+
+type InteractionEvent struct {
+	ID        uuid.UUID
+	PostID    uuid.UUID
+	AuthorID  uuid.UUID
+	ActorID   uuid.UUID
+	Kind      string
+	CreatedAt time.Time
+}
+
 type Post struct {
 	ID            uuid.UUID
 	AuthorID      uuid.UUID
@@ -126,10 +148,11 @@ type Repository interface {
 	AddBookmark(ctx context.Context, userID, postID uuid.UUID) (Post, error)
 	RemoveBookmark(ctx context.Context, userID, postID uuid.UUID) (Post, error)
 	ListBookmarks(ctx context.Context, userID uuid.UUID, p ListParams) (Page, error)
-	Share(ctx context.Context, postID uuid.UUID) (Post, error)
+	Share(ctx context.Context, postID, actorID uuid.UUID) (Post, error)
 	Search(ctx context.Context, query string, p ListParams) (Page, error)
 	ListByHashtag(ctx context.Context, tag string, p ListParams) (Page, error)
 	ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since time.Time, limit int) ([]Post, error)
 	ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]Post, error)
 	ListRecent(ctx context.Context, since time.Time, limit int) ([]Post, error)
+	ListAuthorInteractions(ctx context.Context, authorID uuid.UUID, since time.Time, limit int) ([]InteractionEvent, error)
 }

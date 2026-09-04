@@ -127,6 +127,7 @@ func main() {
 	router := httptransport.NewRouter(
 		authEps, userEps, authSvc,
 		endpoint.MakeRecordReputationEndpoint(repSvc),
+		endpoint.MakeSyncReputationEndpoint(repSvc),
 		cfg.Internal.ServiceToken,
 	)
 	handler := shared.AccessLog(shared.CORS(cfg.CORS.AllowedOrigins, router))

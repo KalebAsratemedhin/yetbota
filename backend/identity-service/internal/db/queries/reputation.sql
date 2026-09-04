@@ -3,6 +3,11 @@ UPDATE users SET reputation_score = GREATEST(0, reputation_score + $2)
 WHERE id = $1
 RETURNING *;
 
+-- name: SetReputationScore :one
+UPDATE users SET reputation_score = GREATEST(0, sqlc.arg(score)::bigint)
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
 -- name: GetUserReputation :one
 SELECT reputation_score FROM users WHERE id = $1;
 

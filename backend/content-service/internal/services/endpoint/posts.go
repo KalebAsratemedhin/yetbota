@@ -28,7 +28,7 @@ type PostService interface {
 	AddBookmark(ctx context.Context, userID, postID uuid.UUID) (domain.Post, error)
 	RemoveBookmark(ctx context.Context, userID, postID uuid.UUID) (domain.Post, error)
 	ListBookmarks(ctx context.Context, userID uuid.UUID, in postuc.ListInput) (postuc.PageResult, error)
-	Share(ctx context.Context, postID uuid.UUID) (postuc.ShareResult, error)
+	Share(ctx context.Context, postID, actorID uuid.UUID) (postuc.ShareResult, error)
 	Search(ctx context.Context, query string, in postuc.ListInput) (postuc.PageResult, error)
 	ListByHashtag(ctx context.Context, tag string, in postuc.ListInput) (postuc.PageResult, error)
 	Feed(ctx context.Context, in postuc.FeedInput) (postuc.PageResult, error)
@@ -382,7 +382,11 @@ func MakeListBookmarksEndpoint(svc PostService) endpoint.Endpoint {
 func MakeShareEndpoint(svc PostService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(PostIDRequest)
-		res, err := svc.Share(ctx, req.PostID)
+		actorID, err := ParseUserID(req.Principal.UserID)
+		if err != nil {
+			return nil, err
+		}
+		res, err := svc.Share(ctx, req.PostID, actorID)
 		if err != nil {
 			return nil, err
 		}

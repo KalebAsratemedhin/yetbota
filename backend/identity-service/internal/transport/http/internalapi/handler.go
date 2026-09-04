@@ -15,10 +15,13 @@ import (
 	"github.com/yetbota/identity-service/internal/transport/http/shared"
 )
 
-func Mount(mux *http.ServeMux, record endpoint.Endpoint, serviceToken string) {
+func Mount(mux *http.ServeMux, record, syncScore endpoint.Endpoint, serviceToken string) {
 	opts := []kithttp.ServerOption{kithttp.ServerErrorEncoder(shared.EncodeError)}
 	mux.Handle("POST /internal/reputation/events", requireServiceToken(serviceToken,
 		kithttp.NewServer(record, decodeRecord, shared.EncodeJSONResponse, opts...),
+	))
+	mux.Handle("POST /internal/reputation/score", requireServiceToken(serviceToken,
+		kithttp.NewServer(syncScore, decodeSync, shared.EncodeJSONResponse, opts...),
 	))
 }
 
@@ -40,6 +43,15 @@ func requireServiceToken(token string, next http.Handler) http.Handler {
 func decodeRecord(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
 	var req svcendpoint.RecordReputationRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID", Message: "invalid JSON body"})
+	}
+	return req, nil
+}
+
+func decodeSync(_ context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req svcendpoint.SyncReputationRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		return nil, apperr.Validation(apperr.Field{Field: "body", Code: "INVALID", Message: "invalid JSON body"})
 	}

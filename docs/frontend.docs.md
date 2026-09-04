@@ -48,7 +48,7 @@ Contract: `backend/content-service/api/openapi.yaml`.
 
 ## Reputation (identity-service)
 
-Exposed on `UserInfo` from `/auth/me` and public profiles: `reputation_score`, `reputation_level`, `badges[]`. Levels: Explorer → Contributor (50) → Local Guide (200) → Pathfinder (500).
+Exposed on `UserInfo` from `/auth/me` and public profiles: `reputation_score`, `reputation_level`, `badges[]`. Levels: Explorer → Contributor (100) → Local Guide (400) → Pathfinder (1000).
 
 ## Why these choices
 

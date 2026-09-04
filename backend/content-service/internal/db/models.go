@@ -59,6 +59,15 @@ type PostHashtag struct {
 	HashtagID pgtype.UUID `json:"hashtag_id"`
 }
 
+type PostInteractionEvent struct {
+	ID        pgtype.UUID        `json:"id"`
+	PostID    pgtype.UUID        `json:"post_id"`
+	AuthorID  pgtype.UUID        `json:"author_id"`
+	ActorID   pgtype.UUID        `json:"actor_id"`
+	Kind      string             `json:"kind"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type PostMedium struct {
 	ID                 pgtype.UUID `json:"id"`
 	PostID             pgtype.UUID `json:"post_id"`

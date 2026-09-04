@@ -435,12 +435,13 @@ func toUserInfo(u domain.User) UserInfo {
 }
 
 func LevelForScore(score int64) string {
+	// Keep in sync with reputation.LevelForScore / OpenAPI UserInfo bands.
 	switch {
-	case score >= 500:
+	case score >= 1000:
 		return "Pathfinder"
-	case score >= 200:
+	case score >= 400:
 		return "Local Guide"
-	case score >= 50:
+	case score >= 100:
 		return "Contributor"
 	default:
 		return "Explorer"

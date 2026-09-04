@@ -71,11 +71,11 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-032 | An authenticated user shall be able to reply to a top-level comment and list those replies. | One level only (no reply-to-reply); keyset pagination |
 | FR-033 | An authenticated user shall be able to like, dislike, or clear their reaction on a comment. | At most one of like/dislike per user per comment |
 | FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
-| FR-035 | Reputation events shall be recorded for post creation and for received post likes (and later other acts). | Self-likes and self-actions shall not award reputation |
+| FR-035 | Reputation shall be derived from a log of post interaction events (likes, comments, shares, bookmarks, …) with per-event time freshness, synced from content-service. | Self-engagement (except post create) shall not write scoring events |
 | FR-036 | A user’s reputation level shall be derived from their reputation score using configurable bands. | Level is display-only banding of score |
 | FR-037 | An authenticated user shall be able to unlock badges when badge criteria are met. | Badges are awarded once; criteria may use score and/or activity |
 | FR-038 | An authenticated user shall be able to fetch their reputation score, level, and earned badges. | Also exposed on public profile (score, level, badges) |
-| FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; viewer lat/lng required for nearby |
+| FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; lat/lng optional (enables nearby + geo boost) |
 | FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
 
 ## Feed ranking (non-ML)
@@ -94,25 +94,38 @@ rank = (engagement + 1)^0.8 / (age_hours + 2)^gravity
 | Symbol | Default | Meaning |
 | --- | --- | --- |
 | `gravity` | `1.5` | How fast older posts fall (higher → newer wins more) |
-| `w_c`, `w_s` | `2`, `3` | Comments/shares count more than a like |
+| `w_c`, `w_s`, `w_b` | `3`, `4`, `3` | Comments / shares / bookmarks count more than a like |
 | `follow_boost` | `0.35` | Extra weight for in-network posts |
-| `geo_factor` | `1 / (1 + distance_km / d0)` with `d0 = 5` | Closer places rank higher; far posts still eligible |
+| `geo_factor` | `1 / (1 + distance_km / d0)` with `d0 = 5` | Closer places rank higher when lat/lng provided; optional |
 | Nearby radius | `25 km` (configurable) | Max distance for the nearby pool |
 
 Alternatives considered: Reddit “hot” (`log10(score) + age_term`) — good for forums; HN gravity fits better when freshness matters. Wilson score — better for comment sorting than for a mixed geo/social feed. ML ranking — deferred.
 
-## Reputation defaults (v1)
+## Reputation defaults (engagement event log)
 
-| Event | Delta | Notes |
-| --- | --- | --- |
-| `post.created` | `+2` | Participation |
-| `post.liked` (received) | `+1` | Quality; revoke/adjust on unlike |
-| Daily earn cap | `50` | Anti-farming |
-| Self actions | `0` | Never count |
+Content appends rows to `post_interaction_events` on create / like / unlike / dislike /
+comment / share / bookmark / unbookmark (self-actions skipped except `create`).
+Score is recomputed from that log and synced to identity:
 
-Level bands (configurable): e.g. 0 Explorer, 50 Contributor, 200 Local Guide, 500 Pathfinder. Starter badges: First Post, Ten Likes Received, First Follower (when follow events are wired), Level Contributor.
+\[
+c_i = \frac{w(\mathrm{kind}_i)}{(t_i+2)^{1.5}},\quad
+R(u)=\mathrm{round}\Big(100\log\big(1+(\max(0,\sum c_i))^{0.8}\big)\Big)
+\]
 
-Ownership: reputation ledger, levels, and badges live on **identity-service**. Content-service emits or notifies engagement that creates ledger events. Feed assembly lives on **content-service** (reads follow graph + posts + viewer location).
+| Kind | Weight \(w\) |
+| --- | --- |
+| create | 0.25 |
+| like / unlike | +1 / −1 |
+| dislike / undislike | −1 / +1 |
+| comment | 3 |
+| share | 4 |
+| bookmark / unbookmark | +3 / −3 |
+
+Lookback 90 days (up to 5000 events). Feed still uses denormalized counters for ranking.
+Levels: 100 Contributor / 400 Local Guide / 1000 Pathfinder.
+
+Ownership: event log on **content-service**; denormalized score + badges on **identity-service**.
+See `docs/reputation-engagement-scoring.md`.
 
 ## Use cases
 
@@ -278,7 +291,7 @@ Ownership: reputation ledger, levels, and badges live on **identity-service**. C
 
 - **Actor:** User (passive)
 - **Goal:** Gain standing from posts and engagement
-- **Main flow:** User creates a post or receives a like → identity records a reputation event (respecting caps and self-action rules) → denormalized score and level update.
+- **Main flow:** Someone engages with the user’s posts (like, comment, share, bookmark) or the user creates a post → content recomputes engagement-weighted score with freshness → identity syncs denormalized score, level, and badges.
 - **Related FRs:** FR-034, FR-035, FR-036
 
 ### UC-025 — View reputation and badges

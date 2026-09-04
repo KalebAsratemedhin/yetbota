@@ -18,6 +18,7 @@ type Config struct {
 	Media          MediaConfig      `yaml:"media"`
 	Share          ShareConfig      `yaml:"share"`
 	Feed           FeedConfig       `yaml:"feed"`
+	Reputation     ReputationConfig `yaml:"reputation"`
 	CORS           CORSConfig       `yaml:"cors"`
 	MigrateOnStart bool             `yaml:"migrate_on_start"`
 }
@@ -47,11 +48,27 @@ type FeedConfig struct {
 	Gravity        float64 `yaml:"gravity"`
 	CommentWeight  float64 `yaml:"comment_weight"`
 	ShareWeight    float64 `yaml:"share_weight"`
+	BookmarkWeight float64 `yaml:"bookmark_weight"`
 	FollowBoost    float64 `yaml:"follow_boost"`
 	GeoD0Km        float64 `yaml:"geo_d0_km"`
 	NearbyRadiusKm float64 `yaml:"nearby_radius_km"`
 	CandidateLimit int     `yaml:"candidate_limit"`
 	LookbackDays   int     `yaml:"lookback_days"`
+}
+
+type ReputationConfig struct {
+	LikeWeight     float64 `yaml:"like_weight"`
+	CommentWeight  float64 `yaml:"comment_weight"`
+	ShareWeight    float64 `yaml:"share_weight"`
+	BookmarkWeight float64 `yaml:"bookmark_weight"`
+	DislikeWeight  float64 `yaml:"dislike_weight"`
+	CreateWeight   float64 `yaml:"create_weight"`
+	Alpha          float64 `yaml:"alpha"`
+	Gravity        float64 `yaml:"gravity"`
+	TimeBaseHours  float64 `yaml:"time_base_hours"`
+	Scale          float64 `yaml:"scale"`
+	LookbackDays   int     `yaml:"lookback_days"`
+	CandidateLimit int     `yaml:"candidate_limit"`
 }
 
 type CloudinaryConfig struct {
@@ -189,10 +206,13 @@ func Load(path string) (Config, error) {
 		cfg.Feed.Gravity = 1.5
 	}
 	if cfg.Feed.CommentWeight <= 0 {
-		cfg.Feed.CommentWeight = 2
+		cfg.Feed.CommentWeight = 3
 	}
 	if cfg.Feed.ShareWeight <= 0 {
-		cfg.Feed.ShareWeight = 3
+		cfg.Feed.ShareWeight = 4
+	}
+	if cfg.Feed.BookmarkWeight <= 0 {
+		cfg.Feed.BookmarkWeight = 3
 	}
 	if cfg.Feed.FollowBoost <= 0 {
 		cfg.Feed.FollowBoost = 0.35
@@ -208,6 +228,42 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Feed.LookbackDays <= 0 {
 		cfg.Feed.LookbackDays = 14
+	}
+	if cfg.Reputation.LikeWeight <= 0 {
+		cfg.Reputation.LikeWeight = 1
+	}
+	if cfg.Reputation.CommentWeight <= 0 {
+		cfg.Reputation.CommentWeight = cfg.Feed.CommentWeight
+	}
+	if cfg.Reputation.ShareWeight <= 0 {
+		cfg.Reputation.ShareWeight = cfg.Feed.ShareWeight
+	}
+	if cfg.Reputation.BookmarkWeight <= 0 {
+		cfg.Reputation.BookmarkWeight = cfg.Feed.BookmarkWeight
+	}
+	if cfg.Reputation.DislikeWeight <= 0 {
+		cfg.Reputation.DislikeWeight = 1
+	}
+	if cfg.Reputation.CreateWeight <= 0 {
+		cfg.Reputation.CreateWeight = 0.25
+	}
+	if cfg.Reputation.Alpha <= 0 {
+		cfg.Reputation.Alpha = 0.8
+	}
+	if cfg.Reputation.Gravity <= 0 {
+		cfg.Reputation.Gravity = cfg.Feed.Gravity
+	}
+	if cfg.Reputation.TimeBaseHours <= 0 {
+		cfg.Reputation.TimeBaseHours = 2
+	}
+	if cfg.Reputation.Scale <= 0 {
+		cfg.Reputation.Scale = 100
+	}
+	if cfg.Reputation.LookbackDays <= 0 {
+		cfg.Reputation.LookbackDays = 90
+	}
+	if cfg.Reputation.CandidateLimit <= 0 {
+		cfg.Reputation.CandidateLimit = 5000
 	}
 	if cfg.Cloudinary.Folder == "" {
 		cfg.Cloudinary.Folder = "yetbota/posts"

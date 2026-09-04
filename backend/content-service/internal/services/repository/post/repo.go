@@ -92,6 +92,10 @@ func (r *Repo) Create(ctx context.Context, in domain.CreateInput) (domain.Post, 
 		tags = append(tags, h.Tag)
 	}
 
+	if err := insertInteraction(ctx, q, postID, in.AuthorID, in.AuthorID, domain.InteractionCreate); err != nil {
+		return domain.Post{}, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "commit post")
 	}
@@ -136,11 +140,16 @@ func (r *Repo) SetReaction(ctx context.Context, postID, userID uuid.UUID, reacti
 	defer tx.Rollback(ctx)
 	q := r.q.WithTx(tx)
 
-	if _, err := q.GetPostByID(ctx, pgUUID(postID)); err != nil {
+	postRow, err := q.GetPostByID(ctx, pgUUID(postID))
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Post{}, apperr.ErrNotFound
 		}
 		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "get post")
+	}
+	authorID, err := uuidFromPg(postRow.AuthorID)
+	if err != nil {
+		return domain.Post{}, err
 	}
 
 	prev, err := q.GetReaction(ctx, db.GetReactionParams{PostID: pgUUID(postID), UserID: pgUUID(userID)})
@@ -150,12 +159,15 @@ func (r *Repo) SetReaction(ctx context.Context, postID, userID uuid.UUID, reacti
 	}
 
 	likeDelta, dislikeDelta := int64(0), int64(0)
+	var kinds []string
 	if hasPrev {
 		switch prev.Reaction {
 		case "like":
 			likeDelta--
+			kinds = append(kinds, domain.InteractionUnlike)
 		case "dislike":
 			dislikeDelta--
+			kinds = append(kinds, domain.InteractionUndislike)
 		}
 		if err := q.DeleteReaction(ctx, db.DeleteReactionParams{PostID: pgUUID(postID), UserID: pgUUID(userID)}); err != nil {
 			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "delete reaction")
@@ -165,8 +177,10 @@ func (r *Repo) SetReaction(ctx context.Context, postID, userID uuid.UUID, reacti
 		switch *reaction {
 		case domain.ReactionLike:
 			likeDelta++
+			kinds = append(kinds, domain.InteractionLike)
 		case domain.ReactionDislike:
 			dislikeDelta++
+			kinds = append(kinds, domain.InteractionDislike)
 		}
 		if _, err := q.UpsertReaction(ctx, db.UpsertReactionParams{
 			PostID: pgUUID(postID), UserID: pgUUID(userID), Reaction: string(*reaction),
@@ -184,6 +198,13 @@ func (r *Repo) SetReaction(ctx context.Context, postID, userID uuid.UUID, reacti
 			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "adjust dislikes")
 		}
 	}
+	if authorID != userID {
+		for _, kind := range kinds {
+			if err := insertInteraction(ctx, q, postID, authorID, userID, kind); err != nil {
+				return domain.Post{}, err
+			}
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "commit reaction")
 	}
@@ -197,11 +218,16 @@ func (r *Repo) AddComment(ctx context.Context, postID, authorID uuid.UUID, body 
 	}
 	defer tx.Rollback(ctx)
 	q := r.q.WithTx(tx)
-	if _, err := q.GetPostByID(ctx, pgUUID(postID)); err != nil {
+	postRow, err := q.GetPostByID(ctx, pgUUID(postID))
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Comment{}, apperr.ErrNotFound
 		}
 		return domain.Comment{}, apperr.Wrap(err, apperr.CodeInternal, "get post")
+	}
+	postAuthorID, err := uuidFromPg(postRow.AuthorID)
+	if err != nil {
+		return domain.Comment{}, err
 	}
 	var parentPg pgtype.UUID
 	if parentID != nil {
@@ -244,6 +270,11 @@ func (r *Repo) AddComment(ctx context.Context, postID, authorID uuid.UUID, body 
 	if parentID != nil {
 		if _, err := q.IncrementReplyCount(ctx, pgUUID(*parentID)); err != nil {
 			return domain.Comment{}, apperr.Wrap(err, apperr.CodeInternal, "inc reply count")
+		}
+	}
+	if postAuthorID != authorID {
+		if err := insertInteraction(ctx, q, postID, postAuthorID, authorID, domain.InteractionComment); err != nil {
+			return domain.Comment{}, err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -399,7 +430,8 @@ func (r *Repo) AddBookmark(ctx context.Context, userID, postID uuid.UUID) (domai
 	}
 	defer tx.Rollback(ctx)
 	q := r.q.WithTx(tx)
-	if _, err := q.GetPostByID(ctx, pgUUID(postID)); err != nil {
+	postRow, err := q.GetPostByID(ctx, pgUUID(postID))
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Post{}, apperr.ErrNotFound
 		}
@@ -412,6 +444,15 @@ func (r *Repo) AddBookmark(ctx context.Context, userID, postID uuid.UUID) (domai
 	if n > 0 {
 		if _, err := q.IncrementBookmarkCount(ctx, db.IncrementBookmarkCountParams{ID: pgUUID(postID), BookmarkCount: 1}); err != nil {
 			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "inc bookmark count")
+		}
+		authorID, err := uuidFromPg(postRow.AuthorID)
+		if err != nil {
+			return domain.Post{}, err
+		}
+		if authorID != userID {
+			if err := insertInteraction(ctx, q, postID, authorID, userID, domain.InteractionBookmark); err != nil {
+				return domain.Post{}, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -427,6 +468,13 @@ func (r *Repo) RemoveBookmark(ctx context.Context, userID, postID uuid.UUID) (do
 	}
 	defer tx.Rollback(ctx)
 	q := r.q.WithTx(tx)
+	postRow, err := q.GetPostByID(ctx, pgUUID(postID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Post{}, apperr.ErrNotFound
+		}
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "get post")
+	}
 	n, err := q.RemoveBookmark(ctx, db.RemoveBookmarkParams{UserID: pgUUID(userID), PostID: pgUUID(postID)})
 	if err != nil {
 		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "remove bookmark")
@@ -434,6 +482,15 @@ func (r *Repo) RemoveBookmark(ctx context.Context, userID, postID uuid.UUID) (do
 	if n > 0 {
 		if _, err := q.IncrementBookmarkCount(ctx, db.IncrementBookmarkCountParams{ID: pgUUID(postID), BookmarkCount: -1}); err != nil {
 			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "dec bookmark count")
+		}
+		authorID, err := uuidFromPg(postRow.AuthorID)
+		if err != nil {
+			return domain.Post{}, err
+		}
+		if authorID != userID {
+			if err := insertInteraction(ctx, q, postID, authorID, userID, domain.InteractionUnbookmark); err != nil {
+				return domain.Post{}, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -488,14 +545,91 @@ func (r *Repo) ListBookmarks(ctx context.Context, userID uuid.UUID, p domain.Lis
 	return page, nil
 }
 
-func (r *Repo) Share(ctx context.Context, postID uuid.UUID) (domain.Post, error) {
-	if _, err := r.q.IncrementShareCount(ctx, pgUUID(postID)); err != nil {
+func (r *Repo) Share(ctx context.Context, postID, actorID uuid.UUID) (domain.Post, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "begin share tx")
+	}
+	defer tx.Rollback(ctx)
+	q := r.q.WithTx(tx)
+	postRow, err := q.GetPostByID(ctx, pgUUID(postID))
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Post{}, apperr.ErrNotFound
 		}
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "get post")
+	}
+	if _, err := q.IncrementShareCount(ctx, pgUUID(postID)); err != nil {
 		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "share post")
 	}
+	authorID, err := uuidFromPg(postRow.AuthorID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if authorID != actorID {
+		if err := insertInteraction(ctx, q, postID, authorID, actorID, domain.InteractionShare); err != nil {
+			return domain.Post{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "commit share")
+	}
 	return r.ByID(ctx, postID)
+}
+
+func (r *Repo) ListAuthorInteractions(ctx context.Context, authorID uuid.UUID, since time.Time, limit int) ([]domain.InteractionEvent, error) {
+	if limit <= 0 {
+		return []domain.InteractionEvent{}, nil
+	}
+	rows, err := r.q.ListAuthorInteractionEventsSince(ctx, db.ListAuthorInteractionEventsSinceParams{
+		AuthorID: pgUUID(authorID), Since: pgtype.Timestamptz{Time: since, Valid: true}, ResultLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list author interactions")
+	}
+	out := make([]domain.InteractionEvent, 0, len(rows))
+	for _, row := range rows {
+		ev, err := interactionFromDB(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, nil
+}
+
+func insertInteraction(ctx context.Context, q *db.Queries, postID, authorID, actorID uuid.UUID, kind string) error {
+	_, err := q.InsertPostInteractionEvent(ctx, db.InsertPostInteractionEventParams{
+		ID: pgUUID(uuid.New()), PostID: pgUUID(postID), AuthorID: pgUUID(authorID),
+		ActorID: pgUUID(actorID), Kind: kind,
+	})
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "insert interaction event")
+	}
+	return nil
+}
+
+func interactionFromDB(row db.PostInteractionEvent) (domain.InteractionEvent, error) {
+	id, err := uuidFromPg(row.ID)
+	if err != nil {
+		return domain.InteractionEvent{}, err
+	}
+	postID, err := uuidFromPg(row.PostID)
+	if err != nil {
+		return domain.InteractionEvent{}, err
+	}
+	authorID, err := uuidFromPg(row.AuthorID)
+	if err != nil {
+		return domain.InteractionEvent{}, err
+	}
+	actorID, err := uuidFromPg(row.ActorID)
+	if err != nil {
+		return domain.InteractionEvent{}, err
+	}
+	return domain.InteractionEvent{
+		ID: id, PostID: postID, AuthorID: authorID, ActorID: actorID,
+		Kind: row.Kind, CreatedAt: row.CreatedAt.Time.UTC(),
+	}, nil
 }
 
 func (r *Repo) Search(ctx context.Context, query string, p domain.ListParams) (domain.Page, error) {

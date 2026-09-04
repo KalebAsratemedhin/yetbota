@@ -211,6 +211,36 @@ func (q *Queries) ListUserBadges(ctx context.Context, userID pgtype.UUID) ([]Lis
 	return items, nil
 }
 
+const setReputationScore = `-- name: SetReputationScore :one
+UPDATE users SET reputation_score = GREATEST(0, $1::bigint)
+WHERE id = $2
+RETURNING id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score
+`
+
+type SetReputationScoreParams struct {
+	Score int64       `json:"score"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetReputationScore(ctx context.Context, arg SetReputationScoreParams) (User, error) {
+	row := q.db.QueryRow(ctx, setReputationScore, arg.Score, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.FullName,
+		&i.Phone,
+		&i.Address,
+		&i.Bio,
+		&i.AvatarUrl,
+		&i.AvatarPublicID,
+		&i.ReputationScore,
+	)
+	return i, err
+}
+
 const sumReputationDeltaToday = `-- name: SumReputationDeltaToday :one
 SELECT COALESCE(SUM(delta), 0)::bigint AS total
 FROM reputation_events

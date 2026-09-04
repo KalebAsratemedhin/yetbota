@@ -393,10 +393,10 @@ paths:
   /internal/reputation/events:
     post:
       tags: [Internal]
-      summary: Record a reputation event (service-to-service)
+      summary: Record a legacy reputation event (service-to-service)
       description: |
-        Called by content-service after post create/like/unlike.
-        Auth via `X-Service-Token` (same value as `INTERNAL_SERVICE_TOKEN` / identity `internal.service_token`).
+        Legacy fixed-delta path. Prefer `POST /internal/reputation/score` for
+        engagement-weighted sync from content-service.
       operationId: recordReputationEvent
       security: []
       parameters:
@@ -416,11 +416,9 @@ paths:
                 user_id:
                   type: string
                   format: uuid
-                  description: User who receives the reputation delta
                 actor_id:
                   type: string
                   format: uuid
-                  description: Actor (e.g. liker); optional
                 event_type:
                   type: string
                   enum: [post.created, post.liked, post.unliked]
@@ -436,18 +434,52 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [reputation_score, reputation_level, badges]
-                properties:
-                  reputation_score:
-                    type: integer
-                    format: int64
-                  reputation_level:
-                    type: string
-                  badges:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Badge"
+                $ref: "#/components/schemas/ReputationSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /internal/reputation/score:
+    post:
+      tags: [Internal]
+      summary: Sync engagement-weighted reputation score
+      description: |
+        Content recomputes R(u) from post engagement + gravity and sets the
+        denormalized score. Also drives badge awards from posts_created / likes_received.
+      operationId: syncReputationScore
+      security: []
+      parameters:
+        - name: X-Service-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, score]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                score:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                posts_created:
+                  type: integer
+                  format: int64
+                likes_received:
+                  type: integer
+                  format: int64
+      responses:
+        "200":
+          description: Updated snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReputationSnapshot"
         "401":
           $ref: "#/components/responses/Unauthorized"
   /healthz:
@@ -588,8 +620,21 @@ components:
           format: int64
         reputation_level:
           type: string
-          description: Explorer | Contributor | Local Guide | Pathfinder
+          description: "Explorer (<100) | Contributor (≥100) | Local Guide (≥400) | Pathfinder (≥1000)"
           example: Explorer
+        badges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Badge"
+    ReputationSnapshot:
+      type: object
+      required: [reputation_score, reputation_level, badges]
+      properties:
+        reputation_score:
+          type: integer
+          format: int64
+        reputation_level:
+          type: string
         badges:
           type: array
           items:

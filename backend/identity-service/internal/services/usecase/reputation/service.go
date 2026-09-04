@@ -9,7 +9,21 @@ import (
 	domain "github.com/yetbota/identity-service/internal/domain/reputation"
 )
 
+// Level bands for engagement-weighted score (scale ≈ 100 × Σ log(1+Q)).
+// Retuned vs v1 fixed-delta bands — see docs/reputation-engagement-scoring.md.
+const (
+	LevelExplorer    = "Explorer"
+	LevelContributor = "Contributor"
+	LevelLocalGuide  = "Local Guide"
+	LevelPathfinder  = "Pathfinder"
+
+	ThresholdContributor = 100
+	ThresholdLocalGuide  = 400
+	ThresholdPathfinder  = 1000
+)
+
 type Config struct {
+	// Legacy event deltas kept for optional RecordEvent path (badges / audit).
 	PostCreatedDelta int
 	PostLikedDelta   int
 	DailyCap         int64
@@ -35,14 +49,14 @@ func NewService(repo domain.Repository, cfg Config) *Service {
 
 func LevelForScore(score int64) string {
 	switch {
-	case score >= 500:
-		return "Pathfinder"
-	case score >= 200:
-		return "Local Guide"
-	case score >= 50:
-		return "Contributor"
+	case score >= ThresholdPathfinder:
+		return LevelPathfinder
+	case score >= ThresholdLocalGuide:
+		return LevelLocalGuide
+	case score >= ThresholdContributor:
+		return LevelContributor
 	default:
-		return "Explorer"
+		return LevelExplorer
 	}
 }
 
@@ -59,6 +73,36 @@ func (s *Service) Snapshot(ctx context.Context, userID uuid.UUID) (domain.Snapsh
 		badges = []domain.Badge{}
 	}
 	return domain.Snapshot{Score: score, Level: LevelForScore(score), Badges: badges}, nil
+}
+
+// SyncScore replaces denormalized reputation with content-computed engagement score (Option 1).
+func (s *Service) SyncScore(ctx context.Context, in domain.SyncInput) (domain.Snapshot, error) {
+	if in.UserID == uuid.Nil {
+		return domain.Snapshot{}, apperr.Validation(apperr.Required("user_id"))
+	}
+	if in.Score < 0 {
+		in.Score = 0
+	}
+	prev, err := s.repo.GetScore(ctx, in.UserID)
+	if err != nil {
+		return domain.Snapshot{}, err
+	}
+	score, err := s.repo.SetScore(ctx, in.UserID, in.Score)
+	if err != nil {
+		return domain.Snapshot{}, err
+	}
+	delta := score - prev
+	if delta > 2147483647 {
+		delta = 2147483647
+	}
+	if delta < -2147483648 {
+		delta = -2147483648
+	}
+	_ = s.repo.InsertEvent(ctx, uuid.New(), in.UserID, nil, domain.EventScoreSync, "user", &in.UserID, int32(delta))
+	if err := s.evaluateBadgesFromStats(ctx, in.UserID, in.PostsCreated, in.LikesReceived, score); err != nil {
+		return domain.Snapshot{}, err
+	}
+	return s.Snapshot(ctx, in.UserID)
 }
 
 func (s *Service) RecordEvent(ctx context.Context, in domain.EventInput) (domain.Snapshot, error) {
@@ -141,7 +185,26 @@ func (s *Service) evaluateBadges(ctx context.Context, userID uuid.UUID, eventTyp
 			}
 		}
 	}
-	if score >= 50 {
+	if score >= ThresholdContributor {
+		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeLevelContributor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) evaluateBadgesFromStats(ctx context.Context, userID uuid.UUID, postsCreated, likesReceived, score int64) error {
+	if postsCreated >= 1 {
+		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeFirstPost); err != nil {
+			return err
+		}
+	}
+	if likesReceived >= 10 {
+		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeTenLikesReceived); err != nil {
+			return err
+		}
+	}
+	if score >= ThresholdContributor {
 		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeLevelContributor); err != nil {
 			return err
 		}

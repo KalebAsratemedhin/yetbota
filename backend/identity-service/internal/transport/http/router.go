@@ -17,12 +17,13 @@ func NewRouter(
 	userEps usershttp.Endpoints,
 	authn shared.TokenAuthenticator,
 	recordReputation endpoint.Endpoint,
+	syncReputation endpoint.Endpoint,
 	serviceToken string,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/auth/", http.StripPrefix("/auth", authhttp.NewHandler(authEps, authn)))
 	mux.Handle("/users/", http.StripPrefix("/users", usershttp.NewHandler(userEps, authn)))
-	internalapi.Mount(mux, recordReputation, serviceToken)
+	internalapi.Mount(mux, recordReputation, syncReputation, serviceToken)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

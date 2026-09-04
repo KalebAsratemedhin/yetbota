@@ -9,7 +9,7 @@ import (
 )
 
 func TestValidateCreateModes(t *testing.T) {
-	s := NewService(nil, nil, nil, nil, FeedConfig{}, 10, 10, 20, 50, "http://localhost:3000")
+	s := NewService(nil, nil, nil, nil, FeedConfig{}, ReputationConfig{}, 10, 10, 20, 50, "http://localhost:3000")
 	author := uuid.New()
 	img := domain.CreateMediaInput{Kind: domain.KindImage, CloudinaryPublicID: "a", URL: "https://x/a"}
 	vid := domain.CreateMediaInput{Kind: domain.KindVideo, CloudinaryPublicID: "v", URL: "https://x/v", DurationMs: 5000}

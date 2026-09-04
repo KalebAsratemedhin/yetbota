@@ -11,12 +11,12 @@ import {
 } from "lucide-react";
 import type { Badge } from "@/lib/auth/types";
 
-/** Matches identity-service LevelForScore bands. */
+/** Matches identity-service LevelForScore bands (OpenAPI UserInfo). */
 const LEVELS = [
   { name: "Explorer", min: 0 },
-  { name: "Contributor", min: 50 },
-  { name: "Local Guide", min: 200 },
-  { name: "Pathfinder", min: 500 },
+  { name: "Contributor", min: 100 },
+  { name: "Local Guide", min: 400 },
+  { name: "Pathfinder", min: 1000 },
 ] as const;
 
 const BADGE_ICON: Record<string, { icon: ElementType; tint: string }> = {

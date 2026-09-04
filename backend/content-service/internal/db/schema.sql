@@ -73,3 +73,12 @@ CREATE TABLE post_bookmarks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, post_id)
 );
+
+CREATE TABLE post_interaction_events (
+    id UUID PRIMARY KEY,
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL,
+    actor_id UUID NOT NULL,
+    kind TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

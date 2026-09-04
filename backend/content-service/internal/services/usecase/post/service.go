@@ -27,13 +27,14 @@ type FollowingStore interface {
 
 type ReputationNotifier interface {
 	Enabled() bool
-	Record(ctx context.Context, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID) error
+	SyncScore(ctx context.Context, userID uuid.UUID, score, postsCreated, likesReceived int64) error
 }
 
 type FeedConfig struct {
 	Gravity          float64
 	CommentWeight    float64
 	ShareWeight      float64
+	BookmarkWeight   float64
 	FollowBoost      float64
 	GeoD0Km          float64
 	NearbyRadiusKm   float64
@@ -47,6 +48,7 @@ type Service struct {
 	follows            FollowingStore
 	reputation         ReputationNotifier
 	feed               FeedConfig
+	repCfg             ReputationConfig
 	maxImages          int
 	maxAVDurationMs    int
 	defaultPageSize    int
@@ -60,6 +62,7 @@ func NewService(
 	follows FollowingStore,
 	reputation ReputationNotifier,
 	feed FeedConfig,
+	repCfg ReputationConfig,
 	maxImages, maxAVDurationSec, defaultPageSize, maxPageSize int,
 	sharePublicBaseURL string,
 ) *Service {
@@ -79,10 +82,13 @@ func NewService(
 		feed.Gravity = 1.5
 	}
 	if feed.CommentWeight <= 0 {
-		feed.CommentWeight = 2
+		feed.CommentWeight = 3
 	}
 	if feed.ShareWeight <= 0 {
-		feed.ShareWeight = 3
+		feed.ShareWeight = 4
+	}
+	if feed.BookmarkWeight <= 0 {
+		feed.BookmarkWeight = 3
 	}
 	if feed.FollowBoost <= 0 {
 		feed.FollowBoost = 0.35
@@ -99,8 +105,10 @@ func NewService(
 	if feed.LookbackDays <= 0 {
 		feed.LookbackDays = 14
 	}
+	repCfg = repCfg.withDefaults()
 	return &Service{
-		posts: posts, signer: signer, follows: follows, reputation: reputation, feed: feed,
+		posts: posts, signer: signer, follows: follows, reputation: reputation,
+		feed: feed, repCfg: repCfg,
 		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
 		defaultPageSize: defaultPageSize, maxPageSize: maxPageSize,
 		sharePublicBaseURL: strings.TrimRight(sharePublicBaseURL, "/"),
@@ -195,7 +203,7 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 	if err != nil {
 		return domain.Post{}, err
 	}
-	s.notifyReputation(ctx, in.AuthorID, nil, "post.created", "post", &p.ID)
+	s.syncAuthorReputation(ctx, in.AuthorID)
 	return p, nil
 }
 
@@ -225,26 +233,12 @@ func (s *Service) SetReaction(ctx context.Context, postID, userID uuid.UUID, rea
 			})
 		}
 	}
-	before, err := s.posts.ByID(ctx, postID)
-	if err != nil {
-		return domain.Post{}, err
-	}
-	// Infer previous like via recount is hard; call SetReaction then compare counts.
-	// Better: track via repo - for now detect by like_count delta after.
-	prevLikeCount := before.LikeCount
 	p, err := s.posts.SetReaction(ctx, postID, userID, reaction)
 	if err != nil {
 		return domain.Post{}, err
 	}
-	authorID := p.AuthorID
-	actor := userID
-	if authorID != actor {
-		sid := p.ID
-		if p.LikeCount > prevLikeCount {
-			s.notifyReputation(ctx, authorID, &actor, "post.liked", "post", &sid)
-		} else if p.LikeCount < prevLikeCount {
-			s.notifyReputation(ctx, authorID, &actor, "post.unliked", "post", &sid)
-		}
+	if p.AuthorID != userID {
+		s.syncAuthorReputation(ctx, p.AuthorID)
 	}
 	return p, nil
 }
@@ -259,7 +253,15 @@ func (s *Service) AddComment(ctx context.Context, postID, authorID uuid.UUID, bo
 			Field: "body", Code: "TOO_LONG", Message: "body must be at most 2000 characters",
 		})
 	}
-	return s.posts.AddComment(ctx, postID, authorID, body, parentID)
+	c, err := s.posts.AddComment(ctx, postID, authorID, body, parentID)
+	if err != nil {
+		return domain.Comment{}, err
+	}
+	post, err := s.posts.ByID(ctx, postID)
+	if err == nil && post.AuthorID != authorID {
+		s.syncAuthorReputation(ctx, post.AuthorID)
+	}
+	return c, nil
 }
 
 func (s *Service) ListComments(ctx context.Context, postID uuid.UUID, in ListInput) (CommentPageResult, error) {
@@ -308,11 +310,25 @@ func (s *Service) SetCommentReaction(ctx context.Context, commentID, userID uuid
 }
 
 func (s *Service) AddBookmark(ctx context.Context, userID, postID uuid.UUID) (domain.Post, error) {
-	return s.posts.AddBookmark(ctx, userID, postID)
+	p, err := s.posts.AddBookmark(ctx, userID, postID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if p.AuthorID != userID {
+		s.syncAuthorReputation(ctx, p.AuthorID)
+	}
+	return p, nil
 }
 
 func (s *Service) RemoveBookmark(ctx context.Context, userID, postID uuid.UUID) (domain.Post, error) {
-	return s.posts.RemoveBookmark(ctx, userID, postID)
+	p, err := s.posts.RemoveBookmark(ctx, userID, postID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if p.AuthorID != userID {
+		s.syncAuthorReputation(ctx, p.AuthorID)
+	}
+	return p, nil
 }
 
 func (s *Service) ListBookmarks(ctx context.Context, userID uuid.UUID, in ListInput) (PageResult, error) {
@@ -327,10 +343,13 @@ func (s *Service) ListBookmarks(ctx context.Context, userID uuid.UUID, in ListIn
 	return toPageResult(page), nil
 }
 
-func (s *Service) Share(ctx context.Context, postID uuid.UUID) (ShareResult, error) {
-	p, err := s.posts.Share(ctx, postID)
+func (s *Service) Share(ctx context.Context, postID, actorID uuid.UUID) (ShareResult, error) {
+	p, err := s.posts.Share(ctx, postID, actorID)
 	if err != nil {
 		return ShareResult{}, err
+	}
+	if p.AuthorID != actorID {
+		s.syncAuthorReputation(ctx, p.AuthorID)
 	}
 	return ShareResult{
 		Post:     p,
@@ -499,7 +518,10 @@ func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
 }
 
 func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng *float64, now time.Time) float64 {
-	engagement := float64(p.LikeCount) + s.feed.CommentWeight*float64(p.CommentCount) + s.feed.ShareWeight*float64(p.ShareCount)
+	engagement := float64(p.LikeCount) +
+		s.feed.CommentWeight*float64(p.CommentCount) +
+		s.feed.ShareWeight*float64(p.ShareCount) +
+		s.feed.BookmarkWeight*float64(p.BookmarkCount)
 	ageHours := now.Sub(p.CreatedAt.UTC()).Hours()
 	if ageHours < 0 {
 		ageHours = 0
@@ -527,11 +549,17 @@ func haversineKm(lat1, lng1, lat2, lng2 float64) float64 {
 	return 2 * R * math.Asin(math.Sqrt(a))
 }
 
-func (s *Service) notifyReputation(ctx context.Context, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID) {
+func (s *Service) syncAuthorReputation(ctx context.Context, authorID uuid.UUID) {
 	if s.reputation == nil || !s.reputation.Enabled() {
 		return
 	}
-	_ = s.reputation.Record(ctx, userID, actorID, eventType, subjectType, subjectID)
+	since := time.Now().UTC().Add(-time.Duration(s.repCfg.LookbackDays) * 24 * time.Hour)
+	events, err := s.posts.ListAuthorInteractions(ctx, authorID, since, s.repCfg.CandidateLimit)
+	if err != nil {
+		return
+	}
+	score, postsCreated, likesReceived := authorReputationFromEvents(events, time.Now().UTC(), s.repCfg)
+	_ = s.reputation.SyncScore(ctx, authorID, score, postsCreated, likesReceived)
 }
 
 func (s *Service) validateCreate(in CreatePostInput) (domain.MediaMode, []domain.CreateMediaInput, []string, error) {

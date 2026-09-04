@@ -43,7 +43,7 @@ export type UserInfo = {
   /** Empty when no avatar */
   avatar_url: string;
   reputation_score: number;
-  /** Explorer | Contributor | Local Guide | Pathfinder */
+  /** Explorer (<100) | Contributor (≥100) | Local Guide (≥400) | Pathfinder (≥1000) */
   reputation_level: string;
   badges: Badge[];
 };

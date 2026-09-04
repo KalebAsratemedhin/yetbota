@@ -37,6 +37,22 @@ func (r *Repo) AdjustScore(ctx context.Context, userID uuid.UUID, delta int64) (
 	return row.ReputationScore, nil
 }
 
+func (r *Repo) SetScore(ctx context.Context, userID uuid.UUID, score int64) (int64, error) {
+	if score < 0 {
+		score = 0
+	}
+	row, err := r.q.SetReputationScore(ctx, db.SetReputationScoreParams{
+		ID: pgUUID(userID), Score: score,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, apperr.ErrNotFound
+		}
+		return 0, apperr.Wrap(err, apperr.CodeInternal, "set reputation")
+	}
+	return row.ReputationScore, nil
+}
+
 func (r *Repo) InsertEvent(ctx context.Context, id uuid.UUID, userID uuid.UUID, actorID *uuid.UUID, eventType, subjectType string, subjectID *uuid.UUID, delta int32) error {
 	_, err := r.q.InsertReputationEvent(ctx, db.InsertReputationEventParams{
 		ID: pgUUID(id), UserID: pgUUID(userID), ActorID: optUUID(actorID),

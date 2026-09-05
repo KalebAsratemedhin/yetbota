@@ -7,18 +7,26 @@ import {
   ArrowLeft,
   KeyRound,
   LogOut,
+  MapPin,
   Palette,
   UserRound,
 } from "lucide-react";
 import { DangerZonePanel, SessionPanel } from "@/components/profile/AccountActions";
 import AppearanceSettings from "@/components/profile/AppearanceSettings";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
+import LocationSettings from "@/components/profile/LocationSettings";
 import ProfileEditForm from "@/components/profile/ProfileEditForm";
 import UserAvatar from "@/components/shared/UserAvatar";
 import type { UserInfo } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "appearance" | "profile" | "security" | "session" | "danger";
+type SettingsSection =
+  | "appearance"
+  | "location"
+  | "profile"
+  | "security"
+  | "session"
+  | "danger";
 
 const NAV: {
   id: SettingsSection;
@@ -28,6 +36,7 @@ const NAV: {
   tone?: "danger";
 }[] = [
   { id: "appearance", label: "Appearance", hint: "Theme on this device", icon: Palette },
+  { id: "location", label: "Location", hint: "Nearby feed ranking", icon: MapPin },
   { id: "profile", label: "Profile", hint: "Name, contact, bio", icon: UserRound },
   { id: "security", label: "Security", hint: "Change password", icon: KeyRound },
   { id: "session", label: "Session", hint: "Sign out here", icon: LogOut },
@@ -48,6 +57,12 @@ const PANEL: Record<
     eyebrow: "Look & feel",
     title: "Appearance",
     description: "Pick light or dark. Preference stays on this browser.",
+  },
+  location: {
+    eyebrow: "Feed",
+    title: "Location",
+    description:
+      "Control whether the home feed uses your device location for nearby places.",
   },
   profile: {
     eyebrow: "Public identity",
@@ -235,6 +250,7 @@ export default function ProfileSettingsView({
           </div>
 
           {section === "appearance" && <AppearanceSettings framed={false} />}
+          {section === "location" && <LocationSettings framed={false} />}
           {section === "profile" && (
             <ProfileEditForm
               key={`${user.user_id}-${user.avatar_url}-${user.full_name}-${user.phone}-${user.address}-${user.bio}`}

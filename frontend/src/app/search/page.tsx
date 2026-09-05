@@ -163,6 +163,7 @@ function SearchContent() {
             initial={postsQ.data}
             emptyTitle="No matching places"
             emptyBody="Try another phrase or open the hashtag shortcut above."
+            searchQuery={debounced}
             onLoadMore={async (cursor) =>
               fetchMorePosts({ q: debounced, limit: 20, cursor }).unwrap()
             }

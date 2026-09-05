@@ -10,6 +10,7 @@ import AuthInput from "@/components/auth/AuthInput";
 import { useSignUpMutation } from "@/lib/api/authApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { useAppSelector } from "@/lib/hooks";
+import { markLocationPromptAfterAuth } from "@/lib/locationPrefs";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function SignUpPage() {
         username: username.trim(),
         password,
       }).unwrap();
+      markLocationPromptAfterAuth();
       toast.success("Account created", { description: "Welcome to Yet Bota." });
       router.replace("/");
     } catch (err) {

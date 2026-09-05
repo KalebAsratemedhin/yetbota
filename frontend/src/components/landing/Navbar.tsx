@@ -11,6 +11,7 @@ import { useLogoutMutation, useMeQuery } from "@/lib/api/authApi";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
 import UserAvatar from "@/components/shared/UserAvatar";
+import { APP_SHELL_CLASS } from "@/lib/layout";
 
 export default function Navbar() {
   const t = useContent();
@@ -47,7 +48,7 @@ export default function Navbar() {
 
   return (
     <header className="fixed top-0 right-0 left-0 z-50 border-b border-border-subtle bg-bg/95 shadow-[0_4px_16px_-8px_rgba(15,23,42,0.08)] backdrop-blur-md dark:shadow-none">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
+      <div className={APP_SHELL_CLASS}>
         <div className="flex h-20 items-center justify-between">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <Image

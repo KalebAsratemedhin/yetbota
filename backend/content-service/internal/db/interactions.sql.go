@@ -86,3 +86,43 @@ func (q *Queries) ListAuthorInteractionEventsSince(ctx context.Context, arg List
 	}
 	return items, nil
 }
+
+const listInteractionEventsSince = `-- name: ListInteractionEventsSince :many
+SELECT id, post_id, author_id, actor_id, kind, created_at
+FROM post_interaction_events
+WHERE created_at >= $1::timestamptz
+ORDER BY created_at DESC, id DESC
+LIMIT $2
+`
+
+type ListInteractionEventsSinceParams struct {
+	Since       pgtype.Timestamptz `json:"since"`
+	ResultLimit int32              `json:"result_limit"`
+}
+
+func (q *Queries) ListInteractionEventsSince(ctx context.Context, arg ListInteractionEventsSinceParams) ([]PostInteractionEvent, error) {
+	rows, err := q.db.Query(ctx, listInteractionEventsSince, arg.Since, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PostInteractionEvent{}
+	for rows.Next() {
+		var i PostInteractionEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.PostID,
+			&i.AuthorID,
+			&i.ActorID,
+			&i.Kind,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

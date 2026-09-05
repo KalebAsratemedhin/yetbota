@@ -2,7 +2,10 @@ package post
 
 import (
 	"math"
+	"sort"
 	"time"
+
+	"github.com/google/uuid"
 
 	domain "github.com/yetbota/content-service/internal/domain/post"
 )
@@ -31,7 +34,7 @@ func (c ReputationConfig) withDefaults() ReputationConfig {
 		c.CommentWeight = 3
 	}
 	if c.ShareWeight <= 0 {
-		c.ShareWeight = 4
+		c.ShareWeight = 3
 	}
 	if c.BookmarkWeight <= 0 {
 		c.BookmarkWeight = 3
@@ -40,7 +43,7 @@ func (c ReputationConfig) withDefaults() ReputationConfig {
 		c.DislikeWeight = 1
 	}
 	if c.CreateWeight <= 0 {
-		c.CreateWeight = 0.25
+		c.CreateWeight = 0.1
 	}
 	if c.Alpha <= 0 {
 		c.Alpha = 0.8
@@ -48,11 +51,12 @@ func (c ReputationConfig) withDefaults() ReputationConfig {
 	if c.Gravity <= 0 {
 		c.Gravity = 1.5
 	}
+	// Larger time base so brand-new events are not worth ~w/2.8 each (was inflating to ~120).
 	if c.TimeBaseHours <= 0 {
-		c.TimeBaseHours = 2
+		c.TimeBaseHours = 4
 	}
 	if c.Scale <= 0 {
-		c.Scale = 100
+		c.Scale = 40
 	}
 	if c.LookbackDays <= 0 {
 		c.LookbackDays = 90
@@ -88,7 +92,7 @@ func interactionWeight(kind string, cfg ReputationConfig) float64 {
 	}
 }
 
-// eventContribution = w(kind) / (ageHours + T0)^G  (freshness of the interaction).
+// eventContribution = w(kind) / (ageHours + T0)^G
 func eventContribution(ev domain.InteractionEvent, now time.Time, cfg ReputationConfig) float64 {
 	w := interactionWeight(ev.Kind, cfg)
 	if w == 0 {
@@ -101,7 +105,7 @@ func eventContribution(ev domain.InteractionEvent, now time.Time, cfg Reputation
 	return w / math.Pow(ageHours+cfg.TimeBaseHours, cfg.Gravity)
 }
 
-// authorReputationFromEvents = round(scale × log(1 + max(0, Σ contributions)^α))
+// authorReputationFromEvents = round(scale × log10(1 + max(0, Σ contributions)^α))
 func authorReputationFromEvents(events []domain.InteractionEvent, now time.Time, cfg ReputationConfig) (score int64, postsCreated, likesReceived int64) {
 	cfg = cfg.withDefaults()
 	var raw float64
@@ -125,9 +129,49 @@ func authorReputationFromEvents(events []domain.InteractionEvent, now time.Time,
 		raw = 0
 	}
 	compressed := math.Pow(raw, cfg.Alpha)
-	score = int64(math.Round(cfg.Scale * math.Log(1+compressed)))
+	score = int64(math.Round(cfg.Scale * math.Log10(1+compressed)))
 	if score < 0 {
 		score = 0
 	}
 	return score, postsCreated, likesReceived
+}
+
+// rankTrendingCreators groups events by author, scores with reputation formula, returns top N.
+func rankTrendingCreators(events []domain.InteractionEvent, now time.Time, cfg ReputationConfig, limit int) []TrendingCreator {
+	cfg = cfg.withDefaults()
+	byAuthor := map[uuid.UUID][]domain.InteractionEvent{}
+	for _, ev := range events {
+		byAuthor[ev.AuthorID] = append(byAuthor[ev.AuthorID], ev)
+	}
+	type scored struct {
+		id    uuid.UUID
+		raw   float64
+		score int64
+	}
+	items := make([]scored, 0, len(byAuthor))
+	for authorID, evs := range byAuthor {
+		score, _, _ := authorReputationFromEvents(evs, now, cfg)
+		if score <= 0 {
+			continue
+		}
+		var raw float64
+		for _, ev := range evs {
+			raw += eventContribution(ev, now, cfg)
+		}
+		items = append(items, scored{id: authorID, raw: raw, score: score})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].raw == items[j].raw {
+			return items[i].id.String() > items[j].id.String()
+		}
+		return items[i].raw > items[j].raw
+	})
+	if limit > len(items) {
+		limit = len(items)
+	}
+	out := make([]TrendingCreator, 0, limit)
+	for _, it := range items[:limit] {
+		out = append(out, TrendingCreator{UserID: it.id, Score: it.score})
+	}
+	return out
 }

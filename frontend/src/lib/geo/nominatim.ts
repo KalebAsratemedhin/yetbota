@@ -29,6 +29,43 @@ export const DEFAULT_CENTER = { lat: 9.0192, lng: 38.7525 };
 /** Zoom at which we load named POIs onto the map. */
 export const POI_MIN_ZOOM = 15;
 
+export {
+  looksLikeGoogleMapsLink,
+  parseGoogleMapsUrl,
+  isShortGoogleMapsLink,
+  type MapsLinkCoords,
+} from "@/lib/geo/googleMapsLink";
+
+export async function resolveGoogleMapsLink(
+  url: string
+): Promise<{ lat: number; lng: number; label?: string }> {
+  const res = await fetch(
+    `/api/geo/maps-link?url=${encodeURIComponent(url.trim())}`
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || "Could not resolve Maps link");
+  }
+  const data = (await res.json()) as {
+    lat?: number;
+    lng?: number;
+    label?: string;
+  };
+  if (
+    typeof data.lat !== "number" ||
+    typeof data.lng !== "number" ||
+    !Number.isFinite(data.lat) ||
+    !Number.isFinite(data.lng)
+  ) {
+    throw new Error("Could not read coordinates from Maps link");
+  }
+  return {
+    lat: data.lat,
+    lng: data.lng,
+    ...(data.label ? { label: data.label } : {}),
+  };
+}
+
 export async function searchPlaces(
   q: string,
   bias?: { lat: number; lng: number }

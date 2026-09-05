@@ -4,20 +4,30 @@ import Link from "next/link";
 import { MapPin } from "lucide-react";
 import PostActions from "@/components/posts/PostActions";
 import PostMediaGallery from "@/components/posts/PostMediaGallery";
-import { relativeTime } from "@/lib/content/helpers";
+import { placeTitle, relativeTime } from "@/lib/content/helpers";
 import type { Post } from "@/lib/content/types";
 
 export default function PostCard({
   post,
   bookmarked,
   fromUser,
+  searchQuery,
 }: {
   post: Post;
   bookmarked?: boolean;
   /** Opens post in author-continuation mode (profile Locations). */
   fromUser?: boolean;
+  /** Opens post with related continuation using this search query. */
+  searchQuery?: string;
 }) {
-  const href = fromUser ? `/posts/${post.id}?from=user` : `/posts/${post.id}`;
+  const qs = new URLSearchParams();
+  if (fromUser) qs.set("from", "user");
+  if (searchQuery?.trim()) qs.set("q", searchQuery.trim());
+  const query = qs.toString();
+  const href = query ? `/posts/${post.id}?${query}` : `/posts/${post.id}`;
+  const commentsQs = new URLSearchParams(qs);
+  commentsQs.set("comments", "1");
+  const commentsHref = `/posts/${post.id}?${commentsQs.toString()}`;
   return (
     <article className="group overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-[0_12px_40px_-28px_rgba(0,0,0,0.55)] transition-transform hover:-translate-y-0.5">
       <Link href={href} className="block">
@@ -30,7 +40,7 @@ export default function PostCard({
               href={href}
               className="line-clamp-2 text-sm font-semibold text-fg transition-colors hover:text-brand"
             >
-              {post.caption.trim() || "Untitled place drop"}
+              {placeTitle(post)}
             </Link>
             <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-fg-faint">
               <a
@@ -73,11 +83,7 @@ export default function PostCard({
           post={post}
           initialBookmarked={bookmarked}
           compact
-          commentsHref={
-            fromUser
-              ? `/posts/${post.id}?from=user&comments=1`
-              : `/posts/${post.id}?comments=1`
-          }
+          commentsHref={commentsHref}
         />
       </div>
     </article>

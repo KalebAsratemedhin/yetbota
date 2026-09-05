@@ -9,16 +9,16 @@ import (
 )
 
 func TestValidateCreateModes(t *testing.T) {
-	s := NewService(nil, nil, nil, nil, FeedConfig{}, ReputationConfig{}, 10, 10, 20, 50, "http://localhost:3000")
+	s := NewService(nil, nil, nil, nil, FeedConfig{}, TrendingConfig{}, ReputationConfig{}, 10, 10, 20, 50, "http://localhost:3000")
 	author := uuid.New()
 	img := domain.CreateMediaInput{Kind: domain.KindImage, CloudinaryPublicID: "a", URL: "https://x/a"}
 	vid := domain.CreateMediaInput{Kind: domain.KindVideo, CloudinaryPublicID: "v", URL: "https://x/v", DurationMs: 5000}
 	aud := domain.CreateMediaInput{Kind: domain.KindAudio, CloudinaryPublicID: "s", URL: "https://x/s", DurationMs: 5000}
 
 	ok := []CreatePostInput{
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{img}},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeImagesAudio, Media: []domain.CreateMediaInput{img, aud}},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{vid}},
+		{AuthorID: author, Title: "Place A", Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{img}},
+		{AuthorID: author, Title: "Place B", Lat: 9, Lng: 38, MediaMode: domain.ModeImagesAudio, Media: []domain.CreateMediaInput{img, aud}},
+		{AuthorID: author, Title: "Place C", Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{vid}},
 	}
 	for i, in := range ok {
 		if _, _, _, err := s.validateCreate(in); err != nil {
@@ -27,14 +27,15 @@ func TestValidateCreateModes(t *testing.T) {
 	}
 
 	bad := []CreatePostInput{
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: nil},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{vid}},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeImagesAudio, Media: []domain.CreateMediaInput{img}},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{img, vid}},
-		{AuthorID: author, Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{
+		{AuthorID: author, Title: "", Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{img}},
+		{AuthorID: author, Title: "x", Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: nil},
+		{AuthorID: author, Title: "x", Lat: 9, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{vid}},
+		{AuthorID: author, Title: "x", Lat: 9, Lng: 38, MediaMode: domain.ModeImagesAudio, Media: []domain.CreateMediaInput{img}},
+		{AuthorID: author, Title: "x", Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{img, vid}},
+		{AuthorID: author, Title: "x", Lat: 9, Lng: 38, MediaMode: domain.ModeVideo, Media: []domain.CreateMediaInput{
 			{Kind: domain.KindVideo, CloudinaryPublicID: "v", URL: "https://x/v", DurationMs: 20000},
 		}},
-		{AuthorID: author, Lat: 99, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{img}},
+		{AuthorID: author, Title: "x", Lat: 99, Lng: 38, MediaMode: domain.ModeImages, Media: []domain.CreateMediaInput{img}},
 	}
 	for i, in := range bad {
 		if _, _, _, err := s.validateCreate(in); err == nil {

@@ -8,6 +8,7 @@ export default function PostsGrid({
   initial,
   bookmarked,
   fromUser,
+  searchQuery,
   onLoadMore,
   emptyTitle,
   emptyBody,
@@ -15,6 +16,7 @@ export default function PostsGrid({
   initial: PostsPage | undefined;
   bookmarked?: boolean;
   fromUser?: boolean;
+  searchQuery?: string;
   onLoadMore?: (cursor: string) => Promise<PostsPage>;
   emptyTitle: string;
   emptyBody: string;
@@ -68,7 +70,13 @@ export default function PostsGrid({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {posts.map((post) => (
-          <PostCard key={post.id} post={post} bookmarked={bookmarked} fromUser={fromUser} />
+          <PostCard
+            key={post.id}
+            post={post}
+            bookmarked={bookmarked}
+            fromUser={fromUser}
+            searchQuery={searchQuery}
+          />
         ))}
       </div>
       {next && onLoadMore ? (

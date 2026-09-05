@@ -9,25 +9,40 @@ import (
 	domain "github.com/yetbota/content-service/internal/domain/post"
 )
 
-func TestAuthorReputationFromEvents_FreshLikeBeatsStale(t *testing.T) {
+func TestAuthorReputationFromEvents_OneBurstStaysModest(t *testing.T) {
 	cfg := ReputationConfig{}.withDefaults()
-	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	author := uuid.New()
 	actor := uuid.New()
-	postID := uuid.New()
+	events := []domain.InteractionEvent{
+		{AuthorID: author, ActorID: author, Kind: domain.InteractionCreate, CreatedAt: now},
+		{AuthorID: author, ActorID: actor, Kind: domain.InteractionLike, CreatedAt: now},
+		{AuthorID: author, ActorID: actor, Kind: domain.InteractionComment, CreatedAt: now},
+		{AuthorID: author, ActorID: actor, Kind: domain.InteractionShare, CreatedAt: now},
+	}
+	score, posts, likes := authorReputationFromEvents(events, now, cfg)
+	if posts != 1 || likes != 1 {
+		t.Fatalf("posts=%d likes=%d", posts, likes)
+	}
+	// Must stay well below Contributor (100); previously ~120.
+	if score < 1 || score > 25 {
+		t.Fatalf("expected modest score ~5–20, got %d", score)
+	}
+}
+
+func TestAuthorReputationFromEvents_FreshLikeBeatsStale(t *testing.T) {
+	cfg := ReputationConfig{}.withDefaults()
+	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
+	author := uuid.New()
+	actor := uuid.New()
 	fresh := domain.InteractionEvent{
-		PostID: postID, AuthorID: author, ActorID: actor,
-		Kind: domain.InteractionLike, CreatedAt: now.Add(-1 * time.Hour),
+		AuthorID: author, ActorID: actor, Kind: domain.InteractionLike, CreatedAt: now.Add(-1 * time.Hour),
 	}
 	stale := domain.InteractionEvent{
-		PostID: postID, AuthorID: author, ActorID: actor,
-		Kind: domain.InteractionLike, CreatedAt: now.Add(-72 * time.Hour),
+		AuthorID: author, ActorID: actor, Kind: domain.InteractionLike, CreatedAt: now.Add(-72 * time.Hour),
 	}
-	sFresh, _, likes := authorReputationFromEvents([]domain.InteractionEvent{fresh}, now, cfg)
+	sFresh, _, _ := authorReputationFromEvents([]domain.InteractionEvent{fresh}, now, cfg)
 	sStale, _, _ := authorReputationFromEvents([]domain.InteractionEvent{stale}, now, cfg)
-	if likes != 1 {
-		t.Fatalf("likes=%d", likes)
-	}
 	if sFresh <= sStale {
 		t.Fatalf("fresh %d should beat stale %d", sFresh, sStale)
 	}
@@ -37,48 +52,54 @@ func TestAuthorReputationFromEvents_ShareWorthMoreThanLike(t *testing.T) {
 	cfg := ReputationConfig{}.withDefaults()
 	now := time.Now().UTC()
 	author := uuid.New()
-	evLike := domain.InteractionEvent{
-		AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionLike, CreatedAt: now,
-	}
-	evShare := domain.InteractionEvent{
-		AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionShare, CreatedAt: now,
-	}
-	sLike, _, _ := authorReputationFromEvents([]domain.InteractionEvent{evLike}, now, cfg)
-	sShare, _, _ := authorReputationFromEvents([]domain.InteractionEvent{evShare}, now, cfg)
+	sLike, _, _ := authorReputationFromEvents([]domain.InteractionEvent{
+		{AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionLike, CreatedAt: now},
+	}, now, cfg)
+	sShare, _, _ := authorReputationFromEvents([]domain.InteractionEvent{
+		{AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionShare, CreatedAt: now},
+	}, now, cfg)
 	if sShare <= sLike {
 		t.Fatalf("share %d should beat like %d", sShare, sLike)
 	}
 }
 
-func TestAuthorReputationFromEvents_UnlikeClawsBack(t *testing.T) {
+func TestRankTrendingCreators_OrdersByEngagement(t *testing.T) {
 	cfg := ReputationConfig{}.withDefaults()
-	now := time.Now().UTC()
-	author := uuid.New()
+	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
+	hot := uuid.New()
+	cold := uuid.New()
+	actor := uuid.New()
 	events := []domain.InteractionEvent{
-		{AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionLike, CreatedAt: now},
-		{AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionUnlike, CreatedAt: now},
+		{AuthorID: cold, ActorID: actor, Kind: domain.InteractionLike, CreatedAt: now},
+		{AuthorID: hot, ActorID: actor, Kind: domain.InteractionLike, CreatedAt: now},
+		{AuthorID: hot, ActorID: actor, Kind: domain.InteractionComment, CreatedAt: now},
+		{AuthorID: hot, ActorID: actor, Kind: domain.InteractionShare, CreatedAt: now},
 	}
-	score, _, likes := authorReputationFromEvents(events, now, cfg)
-	if likes != 0 {
-		t.Fatalf("likes=%d", likes)
+	out := rankTrendingCreators(events, now, cfg, 10)
+	if len(out) < 2 {
+		t.Fatalf("expected >=2 creators, got %d", len(out))
 	}
-	if score != 0 {
-		t.Fatalf("expected 0 after clawback, got %d", score)
+	if out[0].UserID != hot {
+		t.Fatalf("expected hot author first, got %s", out[0].UserID)
+	}
+	if out[0].Score <= out[1].Score {
+		t.Fatalf("hot score %d should beat cold %d", out[0].Score, out[1].Score)
 	}
 }
 
-func TestAuthorReputationFromEvents_CreateCounted(t *testing.T) {
+func TestRankTrendingCreators_RespectsLimit(t *testing.T) {
 	cfg := ReputationConfig{}.withDefaults()
 	now := time.Now().UTC()
-	author := uuid.New()
-	events := []domain.InteractionEvent{
-		{AuthorID: author, ActorID: author, Kind: domain.InteractionCreate, CreatedAt: now},
+	events := []domain.InteractionEvent{}
+	for i := 0; i < 5; i++ {
+		author := uuid.New()
+		events = append(events, domain.InteractionEvent{
+			AuthorID: author, ActorID: uuid.New(), Kind: domain.InteractionShare, CreatedAt: now,
+		})
 	}
-	score, posts, _ := authorReputationFromEvents(events, now, cfg)
-	if posts != 1 {
-		t.Fatalf("posts=%d", posts)
-	}
-	if score <= 0 {
-		t.Fatalf("create should yield tiny positive score, got %d", score)
+	out := rankTrendingCreators(events, now, cfg, 2)
+	if len(out) != 2 {
+		t.Fatalf("limit 2 → got %d", len(out))
 	}
 }
+

@@ -1,6 +1,7 @@
 CREATE TABLE posts (
     id UUID PRIMARY KEY,
     author_id UUID NOT NULL,
+    title TEXT NOT NULL,
     caption TEXT NOT NULL DEFAULT '',
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
@@ -81,4 +82,46 @@ CREATE TABLE post_interaction_events (
     actor_id UUID NOT NULL,
     kind TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE questions (
+    id UUID PRIMARY KEY,
+    author_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
+    upvote_count BIGINT NOT NULL DEFAULT 0,
+    downvote_count BIGINT NOT NULL DEFAULT 0,
+    answer_count BIGINT NOT NULL DEFAULT 0,
+    closed_at TIMESTAMPTZ,
+    closed_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE question_votes (
+    question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    vote TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (question_id, user_id)
+);
+
+CREATE TABLE answers (
+    id UUID PRIMARY KEY,
+    question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL,
+    body TEXT NOT NULL,
+    upvote_count BIGINT NOT NULL DEFAULT 0,
+    downvote_count BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE answer_votes (
+    answer_id UUID NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    vote TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (answer_id, user_id)
 );

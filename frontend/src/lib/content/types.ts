@@ -26,6 +26,7 @@ export type CreateMedia = {
 };
 
 export type CreatePostRequest = {
+  title: string;
   caption?: string;
   lat: number;
   lng: number;
@@ -49,6 +50,7 @@ export type Media = {
 export type Post = {
   id: string;
   author_id: string;
+  title: string;
   caption: string;
   lat: number;
   lng: number;
@@ -66,6 +68,23 @@ export type Post = {
 export type PostsPage = {
   posts: Post[];
   next_cursor?: string;
+};
+
+export type RelatedPostsSource = "search" | "similar" | "mixed";
+
+export type RelatedPostsPage = {
+  posts: Post[];
+  next_cursor?: string;
+  source: RelatedPostsSource;
+};
+
+export type TrendingCreator = {
+  user_id: string;
+  score: number;
+};
+
+export type TrendingCreatorsPage = {
+  creators: TrendingCreator[];
 };
 
 export type Comment = {
@@ -88,6 +107,56 @@ export type CommentsPage = {
 export type ShareResponse = {
   post: Post;
   share_url: string;
+};
+
+export type QaVote = "up" | "down";
+
+export type CreateQuestionRequest = {
+  title: string;
+  body: string;
+  post_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+};
+
+export type VoteRequest = {
+  vote?: QaVote | null;
+};
+
+export type Question = {
+  id: string;
+  author_id: string;
+  title: string;
+  body: string;
+  post_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  upvote_count: number;
+  downvote_count: number;
+  answer_count: number;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  created_at: string;
+};
+
+export type QuestionsPage = {
+  questions: Question[];
+  next_cursor?: string;
+};
+
+export type Answer = {
+  id: string;
+  question_id: string;
+  author_id: string;
+  body: string;
+  upvote_count: number;
+  downvote_count: number;
+  created_at: string;
+};
+
+export type AnswersPage = {
+  answers: Answer[];
+  next_cursor?: string;
 };
 
 export type CloudinaryUploadResult = {

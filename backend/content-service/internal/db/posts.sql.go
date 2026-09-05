@@ -83,7 +83,7 @@ func (q *Queries) AdjustCommentLikeCount(ctx context.Context, arg AdjustCommentL
 }
 
 const adjustPostDislikeCount = `-- name: AdjustPostDislikeCount :one
-UPDATE posts SET dislike_count = dislike_count + $2 WHERE id = $1 RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+UPDATE posts SET dislike_count = dislike_count + $2 WHERE id = $1 RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 type AdjustPostDislikeCountParams struct {
@@ -97,6 +97,7 @@ func (q *Queries) AdjustPostDislikeCount(ctx context.Context, arg AdjustPostDisl
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -112,7 +113,7 @@ func (q *Queries) AdjustPostDislikeCount(ctx context.Context, arg AdjustPostDisl
 }
 
 const adjustPostLikeCount = `-- name: AdjustPostLikeCount :one
-UPDATE posts SET like_count = like_count + $2 WHERE id = $1 RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+UPDATE posts SET like_count = like_count + $2 WHERE id = $1 RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 type AdjustPostLikeCountParams struct {
@@ -126,6 +127,7 @@ func (q *Queries) AdjustPostLikeCount(ctx context.Context, arg AdjustPostLikeCou
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -179,17 +181,18 @@ func (q *Queries) CreateComment(ctx context.Context, arg CreateCommentParams) (P
 
 const createPost = `-- name: CreatePost :one
 INSERT INTO posts (
-    id, author_id, caption, lat, lng, media_mode, search_vector
+    id, author_id, title, caption, lat, lng, media_mode, search_vector
 ) VALUES (
-    $1, $2, $3, $4, $5, $6,
-    to_tsvector('english', coalesce($3, '') || ' ' || coalesce($7::text, ''))
+    $1, $2, $3, $4, $5, $6, $7,
+    to_tsvector('english', coalesce($3, '') || ' ' || coalesce($4, '') || ' ' || coalesce($8::text, ''))
 )
-RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 type CreatePostParams struct {
 	ID          pgtype.UUID `json:"id"`
 	AuthorID    pgtype.UUID `json:"author_id"`
+	Title       string      `json:"title"`
 	Caption     string      `json:"caption"`
 	Lat         float64     `json:"lat"`
 	Lng         float64     `json:"lng"`
@@ -201,6 +204,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 	row := q.db.QueryRow(ctx, createPost,
 		arg.ID,
 		arg.AuthorID,
+		arg.Title,
 		arg.Caption,
 		arg.Lat,
 		arg.Lng,
@@ -211,6 +215,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -296,7 +301,7 @@ func (q *Queries) GetCommentReaction(ctx context.Context, arg GetCommentReaction
 }
 
 const getPostByID = `-- name: GetPostByID :one
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts WHERE id = $1
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts WHERE id = $1
 `
 
 func (q *Queries) GetPostByID(ctx context.Context, id pgtype.UUID) (Post, error) {
@@ -305,6 +310,7 @@ func (q *Queries) GetPostByID(ctx context.Context, id pgtype.UUID) (Post, error)
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -316,6 +322,31 @@ func (q *Queries) GetPostByID(ctx context.Context, id pgtype.UUID) (Post, error)
 		&i.BookmarkCount,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getPostSeedText = `-- name: GetPostSeedText :one
+SELECT
+    p.title,
+    p.caption,
+    coalesce(string_agg(h.tag, ' ' ORDER BY h.tag), '')::text AS hashtags
+FROM posts p
+LEFT JOIN post_hashtags ph ON ph.post_id = p.id
+LEFT JOIN hashtags h ON h.id = ph.hashtag_id
+WHERE p.id = $1
+GROUP BY p.id, p.title, p.caption
+`
+
+type GetPostSeedTextRow struct {
+	Title    string `json:"title"`
+	Caption  string `json:"caption"`
+	Hashtags string `json:"hashtags"`
+}
+
+func (q *Queries) GetPostSeedText(ctx context.Context, id pgtype.UUID) (GetPostSeedTextRow, error) {
+	row := q.db.QueryRow(ctx, getPostSeedText, id)
+	var i GetPostSeedTextRow
+	err := row.Scan(&i.Title, &i.Caption, &i.Hashtags)
 	return i, err
 }
 
@@ -341,7 +372,7 @@ func (q *Queries) GetReaction(ctx context.Context, arg GetReactionParams) (PostR
 }
 
 const incrementBookmarkCount = `-- name: IncrementBookmarkCount :one
-UPDATE posts SET bookmark_count = bookmark_count + $2 WHERE id = $1 RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+UPDATE posts SET bookmark_count = bookmark_count + $2 WHERE id = $1 RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 type IncrementBookmarkCountParams struct {
@@ -355,6 +386,7 @@ func (q *Queries) IncrementBookmarkCount(ctx context.Context, arg IncrementBookm
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -370,7 +402,7 @@ func (q *Queries) IncrementBookmarkCount(ctx context.Context, arg IncrementBookm
 }
 
 const incrementCommentCount = `-- name: IncrementCommentCount :one
-UPDATE posts SET comment_count = comment_count + 1 WHERE id = $1 RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+UPDATE posts SET comment_count = comment_count + 1 WHERE id = $1 RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 func (q *Queries) IncrementCommentCount(ctx context.Context, id pgtype.UUID) (Post, error) {
@@ -379,6 +411,7 @@ func (q *Queries) IncrementCommentCount(ctx context.Context, id pgtype.UUID) (Po
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -415,7 +448,7 @@ func (q *Queries) IncrementReplyCount(ctx context.Context, id pgtype.UUID) (Post
 }
 
 const incrementShareCount = `-- name: IncrementShareCount :one
-UPDATE posts SET share_count = share_count + 1 WHERE id = $1 RETURNING id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+UPDATE posts SET share_count = share_count + 1 WHERE id = $1 RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
 `
 
 func (q *Queries) IncrementShareCount(ctx context.Context, id pgtype.UUID) (Post, error) {
@@ -424,6 +457,7 @@ func (q *Queries) IncrementShareCount(ctx context.Context, id pgtype.UUID) (Post
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
+		&i.Title,
 		&i.Caption,
 		&i.Lat,
 		&i.Lng,
@@ -507,7 +541,7 @@ func (q *Queries) LinkPostHashtag(ctx context.Context, arg LinkPostHashtagParams
 
 const listBookmarkedPosts = `-- name: ListBookmarkedPosts :many
 SELECT
-    p.id, p.author_id, p.caption, p.lat, p.lng, p.media_mode,
+    p.id, p.author_id, p.title, p.caption, p.lat, p.lng, p.media_mode,
     p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count,
     p.created_at,
     b.created_at AS bookmarked_at
@@ -532,6 +566,7 @@ type ListBookmarkedPostsParams struct {
 type ListBookmarkedPostsRow struct {
 	ID            pgtype.UUID        `json:"id"`
 	AuthorID      pgtype.UUID        `json:"author_id"`
+	Title         string             `json:"title"`
 	Caption       string             `json:"caption"`
 	Lat           float64            `json:"lat"`
 	Lng           float64            `json:"lng"`
@@ -562,6 +597,7 @@ func (q *Queries) ListBookmarkedPosts(ctx context.Context, arg ListBookmarkedPos
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -726,7 +762,7 @@ func (q *Queries) ListMediaByPostIDs(ctx context.Context, postIds []pgtype.UUID)
 }
 
 const listNearbyPosts = `-- name: ListNearbyPosts :many
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE created_at >= $1::timestamptz
   AND lat BETWEEN $2 AND $3
   AND lng BETWEEN $4 AND $5
@@ -763,6 +799,7 @@ func (q *Queries) ListNearbyPosts(ctx context.Context, arg ListNearbyPostsParams
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -785,7 +822,7 @@ func (q *Queries) ListNearbyPosts(ctx context.Context, arg ListNearbyPostsParams
 }
 
 const listPostsByAuthor = `-- name: ListPostsByAuthor :many
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE author_id = $1
   AND (
     $2::timestamptz IS NULL
@@ -819,6 +856,7 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -841,7 +879,7 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 }
 
 const listPostsByAuthorIDs = `-- name: ListPostsByAuthorIDs :many
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE author_id = ANY($1::uuid[])
   AND created_at >= $2::timestamptz
 ORDER BY created_at DESC, id DESC
@@ -866,6 +904,7 @@ func (q *Queries) ListPostsByAuthorIDs(ctx context.Context, arg ListPostsByAutho
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -888,7 +927,7 @@ func (q *Queries) ListPostsByAuthorIDs(ctx context.Context, arg ListPostsByAutho
 }
 
 const listPostsByHashtag = `-- name: ListPostsByHashtag :many
-SELECT p.id, p.author_id, p.caption, p.lat, p.lng, p.media_mode, p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count, p.created_at FROM posts p
+SELECT p.id, p.author_id, p.title, p.caption, p.lat, p.lng, p.media_mode, p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count, p.created_at FROM posts p
 INNER JOIN post_hashtags ph ON ph.post_id = p.id
 INNER JOIN hashtags h ON h.id = ph.hashtag_id
 WHERE h.tag = $1
@@ -924,6 +963,7 @@ func (q *Queries) ListPostsByHashtag(ctx context.Context, arg ListPostsByHashtag
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -946,7 +986,7 @@ func (q *Queries) ListPostsByHashtag(ctx context.Context, arg ListPostsByHashtag
 }
 
 const listRecentPosts = `-- name: ListRecentPosts :many
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE created_at >= $1::timestamptz
 ORDER BY created_at DESC, id DESC
 LIMIT $2
@@ -970,6 +1010,7 @@ func (q *Queries) ListRecentPosts(ctx context.Context, arg ListRecentPostsParams
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -1033,6 +1074,104 @@ func (q *Queries) ListRepliesByParent(ctx context.Context, arg ListRepliesByPare
 			&i.DislikeCount,
 			&i.ReplyCount,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSimilarPosts = `-- name: ListSimilarPosts :many
+SELECT
+    p.id, p.author_id, p.title, p.caption, p.lat, p.lng, p.media_mode,
+    p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count, p.created_at,
+    ts_rank(p.search_vector, plainto_tsquery('english', $1::text))::float8 AS rank
+FROM posts p
+WHERE p.id <> $2
+  AND length(trim($1::text)) > 0
+  AND p.search_vector @@ plainto_tsquery('english', $1::text)
+  AND (
+    $3::text IS NULL
+    OR length(trim($3::text)) = 0
+    OR NOT (p.search_vector @@ plainto_tsquery('english', $3::text))
+  )
+  AND (
+    $4::float8 IS NULL
+    OR (
+      ts_rank(p.search_vector, plainto_tsquery('english', $1::text)) < $4::float8
+      OR (
+        ts_rank(p.search_vector, plainto_tsquery('english', $1::text)) = $4::float8
+        AND (p.created_at, p.id) < ($5::timestamptz, $6::uuid)
+      )
+    )
+  )
+ORDER BY rank DESC, p.created_at DESC, p.id DESC
+LIMIT $7
+`
+
+type ListSimilarPostsParams struct {
+	SeedText        string             `json:"seed_text"`
+	ExcludeID       pgtype.UUID        `json:"exclude_id"`
+	ExcludeQuery    pgtype.Text        `json:"exclude_query"`
+	CursorRank      pgtype.Float8      `json:"cursor_rank"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	ResultLimit     int32              `json:"result_limit"`
+}
+
+type ListSimilarPostsRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	AuthorID      pgtype.UUID        `json:"author_id"`
+	Title         string             `json:"title"`
+	Caption       string             `json:"caption"`
+	Lat           float64            `json:"lat"`
+	Lng           float64            `json:"lng"`
+	MediaMode     string             `json:"media_mode"`
+	LikeCount     int64              `json:"like_count"`
+	DislikeCount  int64              `json:"dislike_count"`
+	CommentCount  int64              `json:"comment_count"`
+	ShareCount    int64              `json:"share_count"`
+	BookmarkCount int64              `json:"bookmark_count"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Rank          float64            `json:"rank"`
+}
+
+func (q *Queries) ListSimilarPosts(ctx context.Context, arg ListSimilarPostsParams) ([]ListSimilarPostsRow, error) {
+	rows, err := q.db.Query(ctx, listSimilarPosts,
+		arg.SeedText,
+		arg.ExcludeID,
+		arg.ExcludeQuery,
+		arg.CursorRank,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSimilarPostsRow{}
+	for rows.Next() {
+		var i ListSimilarPostsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Title,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+			&i.Rank,
 		); err != nil {
 			return nil, err
 		}
@@ -1116,7 +1255,7 @@ func (q *Queries) RemoveBookmark(ctx context.Context, arg RemoveBookmarkParams) 
 }
 
 const searchPosts = `-- name: SearchPosts :many
-SELECT id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE search_vector @@ plainto_tsquery('english', $1::text)
   AND (
     $2::timestamptz IS NULL
@@ -1150,6 +1289,67 @@ func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]Pos
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
+			&i.Title,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchPostsExcluding = `-- name: SearchPostsExcluding :many
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE search_vector @@ plainto_tsquery('english', $1::text)
+  AND id <> $2
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type SearchPostsExcludingParams struct {
+	Query           string             `json:"query"`
+	ExcludeID       pgtype.UUID        `json:"exclude_id"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	ResultLimit     int32              `json:"result_limit"`
+}
+
+func (q *Queries) SearchPostsExcluding(ctx context.Context, arg SearchPostsExcludingParams) ([]Post, error) {
+	rows, err := q.db.Query(ctx, searchPostsExcluding,
+		arg.Query,
+		arg.ExcludeID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Title,
 			&i.Caption,
 			&i.Lat,
 			&i.Lng,
@@ -1173,7 +1373,7 @@ func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]Pos
 
 const updatePostSearchVector = `-- name: UpdatePostSearchVector :exec
 UPDATE posts
-SET search_vector = to_tsvector('english', coalesce(caption, '') || ' ' || coalesce($1::text, ''))
+SET search_vector = to_tsvector('english', coalesce(title, '') || ' ' || coalesce(caption, '') || ' ' || coalesce($1::text, ''))
 WHERE id = $2
 `
 

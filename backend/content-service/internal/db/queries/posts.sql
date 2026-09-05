@@ -1,9 +1,9 @@
 -- name: CreatePost :one
 INSERT INTO posts (
-    id, author_id, caption, lat, lng, media_mode, search_vector
+    id, author_id, title, caption, lat, lng, media_mode, search_vector
 ) VALUES (
-    $1, $2, $3, $4, $5, $6,
-    to_tsvector('english', coalesce($3, '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
+    $1, $2, $3, $4, $5, $6, $7,
+    to_tsvector('english', coalesce($3, '') || ' ' || coalesce($4, '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
 )
 RETURNING *;
 
@@ -146,7 +146,7 @@ UPDATE posts SET bookmark_count = bookmark_count + $2 WHERE id = $1 RETURNING *;
 
 -- name: ListBookmarkedPosts :many
 SELECT
-    p.id, p.author_id, p.caption, p.lat, p.lng, p.media_mode,
+    p.id, p.author_id, p.title, p.caption, p.lat, p.lng, p.media_mode,
     p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count,
     p.created_at,
     b.created_at AS bookmarked_at
@@ -187,7 +187,7 @@ LIMIT sqlc.arg(result_limit);
 
 -- name: UpdatePostSearchVector :exec
 UPDATE posts
-SET search_vector = to_tsvector('english', coalesce(caption, '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
+SET search_vector = to_tsvector('english', coalesce(title, '') || ' ' || coalesce(caption, '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
 WHERE id = sqlc.arg(id);
 
 -- name: ListPostsByAuthorIDs :many
@@ -211,4 +211,53 @@ LIMIT sqlc.arg(result_limit);
 SELECT * FROM posts
 WHERE created_at >= sqlc.arg(since)::timestamptz
 ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(result_limit);
+
+-- name: GetPostSeedText :one
+SELECT
+    p.title,
+    p.caption,
+    coalesce(string_agg(h.tag, ' ' ORDER BY h.tag), '')::text AS hashtags
+FROM posts p
+LEFT JOIN post_hashtags ph ON ph.post_id = p.id
+LEFT JOIN hashtags h ON h.id = ph.hashtag_id
+WHERE p.id = sqlc.arg(id)
+GROUP BY p.id, p.title, p.caption;
+
+-- name: SearchPostsExcluding :many
+SELECT * FROM posts
+WHERE search_vector @@ plainto_tsquery('english', sqlc.arg(query)::text)
+  AND id <> sqlc.arg(exclude_id)
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(result_limit);
+
+-- name: ListSimilarPosts :many
+SELECT
+    p.id, p.author_id, p.title, p.caption, p.lat, p.lng, p.media_mode,
+    p.like_count, p.dislike_count, p.comment_count, p.share_count, p.bookmark_count, p.created_at,
+    ts_rank(p.search_vector, plainto_tsquery('english', sqlc.arg(seed_text)::text))::float8 AS rank
+FROM posts p
+WHERE p.id <> sqlc.arg(exclude_id)
+  AND length(trim(sqlc.arg(seed_text)::text)) > 0
+  AND p.search_vector @@ plainto_tsquery('english', sqlc.arg(seed_text)::text)
+  AND (
+    sqlc.narg(exclude_query)::text IS NULL
+    OR length(trim(sqlc.narg(exclude_query)::text)) = 0
+    OR NOT (p.search_vector @@ plainto_tsquery('english', sqlc.narg(exclude_query)::text))
+  )
+  AND (
+    sqlc.narg(cursor_rank)::float8 IS NULL
+    OR (
+      ts_rank(p.search_vector, plainto_tsquery('english', sqlc.arg(seed_text)::text)) < sqlc.narg(cursor_rank)::float8
+      OR (
+        ts_rank(p.search_vector, plainto_tsquery('english', sqlc.arg(seed_text)::text)) = sqlc.narg(cursor_rank)::float8
+        AND (p.created_at, p.id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+      )
+    )
+  )
+ORDER BY rank DESC, p.created_at DESC, p.id DESC
 LIMIT sqlc.arg(result_limit);

@@ -55,6 +55,7 @@ type InteractionEvent struct {
 type Post struct {
 	ID            uuid.UUID
 	AuthorID      uuid.UUID
+	Title         string // place name
 	Caption       string
 	Lat           float64
 	Lng           float64
@@ -127,6 +128,7 @@ type CreateMediaInput struct {
 
 type CreateInput struct {
 	AuthorID  uuid.UUID
+	Title     string
 	Caption   string
 	Lat       float64
 	Lng       float64
@@ -155,4 +157,24 @@ type Repository interface {
 	ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]Post, error)
 	ListRecent(ctx context.Context, since time.Time, limit int) ([]Post, error)
 	ListAuthorInteractions(ctx context.Context, authorID uuid.UUID, since time.Time, limit int) ([]InteractionEvent, error)
+	ListInteractionsSince(ctx context.Context, since time.Time, limit int) ([]InteractionEvent, error)
+	SearchExcluding(ctx context.Context, query string, excludeID uuid.UUID, p ListParams) (Page, error)
+	ListSimilar(ctx context.Context, seedText string, excludeID uuid.UUID, excludeQuery string, cursor *SimilarCursor, limit int) (ScoredPage, error)
+	SeedText(ctx context.Context, postID uuid.UUID) (string, error)
+}
+
+type SimilarCursor struct {
+	Rank      float64
+	CreatedAt time.Time
+	ID        uuid.UUID
+}
+
+type ScoredPost struct {
+	Post Post
+	Rank float64
+}
+
+type ScoredPage struct {
+	Posts   []ScoredPost
+	HasMore bool
 }

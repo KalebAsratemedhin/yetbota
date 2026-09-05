@@ -42,12 +42,21 @@ type FeedConfig struct {
 	LookbackDays     int
 }
 
+// TrendingConfig windows discovery lists (posts + creators). Scoring reuses feed /
+// reputation weights; lookback is shorter than feed/reputation defaults.
+type TrendingConfig struct {
+	LookbackDays      int
+	CandidateLimit    int
+	CreatorEventLimit int
+}
+
 type Service struct {
 	posts              domain.Repository
 	signer             media.Signer
 	follows            FollowingStore
 	reputation         ReputationNotifier
 	feed               FeedConfig
+	trending           TrendingConfig
 	repCfg             ReputationConfig
 	maxImages          int
 	maxAVDurationMs    int
@@ -62,6 +71,7 @@ func NewService(
 	follows FollowingStore,
 	reputation ReputationNotifier,
 	feed FeedConfig,
+	trending TrendingConfig,
 	repCfg ReputationConfig,
 	maxImages, maxAVDurationSec, defaultPageSize, maxPageSize int,
 	sharePublicBaseURL string,
@@ -105,10 +115,19 @@ func NewService(
 	if feed.LookbackDays <= 0 {
 		feed.LookbackDays = 14
 	}
+	if trending.LookbackDays <= 0 {
+		trending.LookbackDays = 7
+	}
+	if trending.CandidateLimit <= 0 {
+		trending.CandidateLimit = 500
+	}
+	if trending.CreatorEventLimit <= 0 {
+		trending.CreatorEventLimit = 5000
+	}
 	repCfg = repCfg.withDefaults()
 	return &Service{
 		posts: posts, signer: signer, follows: follows, reputation: reputation,
-		feed: feed, repCfg: repCfg,
+		feed: feed, trending: trending, repCfg: repCfg,
 		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
 		defaultPageSize: defaultPageSize, maxPageSize: maxPageSize,
 		sharePublicBaseURL: strings.TrimRight(sharePublicBaseURL, "/"),
@@ -127,6 +146,7 @@ type SignMediaResult struct {
 
 type CreatePostInput struct {
 	AuthorID  uuid.UUID
+	Title     string
 	Caption   string
 	Lat       float64
 	Lng       float64
@@ -163,6 +183,34 @@ type FeedInput struct {
 	Cursor   string
 }
 
+type RelatedInput struct {
+	SeedID uuid.UUID
+	Query  string // search query when opened from search results; optional
+	Limit  int
+	Cursor string
+}
+
+type RelatedResult struct {
+	Posts      []domain.Post
+	NextCursor string
+	// Source is search | similar | mixed — not a home feed.
+	Source string
+}
+
+type TrendingListInput struct {
+	Limit  int
+	Cursor string
+}
+
+type TrendingCreator struct {
+	UserID uuid.UUID
+	Score  int64
+}
+
+type TrendingCreatorsResult struct {
+	Creators []TrendingCreator
+}
+
 func (s *Service) SignMedia(ctx context.Context, in SignMediaInput) (SignMediaResult, error) {
 	res, err := s.signer.SignUpload(ctx, media.SignRequest{
 		UserID: in.UserID,
@@ -193,6 +241,7 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 	}
 	p, err := s.posts.Create(ctx, domain.CreateInput{
 		AuthorID:  in.AuthorID,
+		Title:     strings.TrimSpace(in.Title),
 		Caption:   strings.TrimSpace(in.Caption),
 		Lat:       in.Lat,
 		Lng:       in.Lng,
@@ -517,6 +566,90 @@ func (s *Service) Feed(ctx context.Context, in FeedInput) (PageResult, error) {
 	return out, nil
 }
 
+// TrendingPosts ranks recent posts with the feed HN formula (no follow/geo boost).
+func (s *Service) TrendingPosts(ctx context.Context, in TrendingListInput) (PageResult, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = s.defaultPageSize
+	}
+	if limit > s.maxPageSize {
+		limit = s.maxPageSize
+	}
+	since := time.Now().UTC().Add(-time.Duration(s.trending.LookbackDays) * 24 * time.Hour)
+	candidates, err := s.posts.ListRecent(ctx, since, s.trending.CandidateLimit)
+	if err != nil {
+		return PageResult{}, err
+	}
+
+	type scored struct {
+		post  domain.Post
+		score float64
+	}
+	now := time.Now().UTC()
+	items := make([]scored, 0, len(candidates))
+	for _, p := range candidates {
+		items = append(items, scored{
+			post:  p,
+			score: s.rankScore(p, false, nil, nil, now),
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].score == items[j].score {
+			return items[i].post.ID.String() > items[j].post.ID.String()
+		}
+		return items[i].score > items[j].score
+	})
+
+	cursorScore, cursorID, hasCursor, err := decodeFeedCursor(in.Cursor)
+	if err != nil {
+		return PageResult{}, err
+	}
+	start := 0
+	if hasCursor {
+		for start < len(items) {
+			it := items[start]
+			if it.score < cursorScore || (it.score == cursorScore && it.post.ID.String() < cursorID.String()) {
+				break
+			}
+			start++
+		}
+	}
+	end := start + limit
+	hasMore := end < len(items)
+	if end > len(items) {
+		end = len(items)
+	}
+	pageItems := items[start:end]
+	posts := make([]domain.Post, 0, len(pageItems))
+	for _, it := range pageItems {
+		posts = append(posts, it.post)
+	}
+	out := PageResult{Posts: posts}
+	if hasMore && len(pageItems) > 0 {
+		last := pageItems[len(pageItems)-1]
+		out.NextCursor = encodeFeedCursor(last.score, last.post.ID)
+	}
+	return out, nil
+}
+
+// TrendingCreators ranks authors by recent interaction-event score (reputation weights).
+func (s *Service) TrendingCreators(ctx context.Context, in TrendingListInput) (TrendingCreatorsResult, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = s.defaultPageSize
+	}
+	if limit > s.maxPageSize {
+		limit = s.maxPageSize
+	}
+	since := time.Now().UTC().Add(-time.Duration(s.trending.LookbackDays) * 24 * time.Hour)
+	events, err := s.posts.ListInteractionsSince(ctx, since, s.trending.CreatorEventLimit)
+	if err != nil {
+		return TrendingCreatorsResult{}, err
+	}
+	creators := rankTrendingCreators(events, time.Now().UTC(), s.repCfg, limit)
+	return TrendingCreatorsResult{Creators: creators}, nil
+}
+
 func (s *Service) rankScore(p domain.Post, followed bool, viewerLat, viewerLng *float64, now time.Time) float64 {
 	engagement := float64(p.LikeCount) +
 		s.feed.CommentWeight*float64(p.CommentCount) +
@@ -562,8 +695,216 @@ func (s *Service) syncAuthorReputation(ctx context.Context, authorID uuid.UUID) 
 	_ = s.reputation.SyncScore(ctx, authorID, score, postsCreated, likesReceived)
 }
 
+// Related returns other search hits for q (excluding the seed), then similar posts
+// by caption/hashtag text match. Not the home feed.
+func (s *Service) Related(ctx context.Context, in RelatedInput) (RelatedResult, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = s.defaultPageSize
+	}
+	if limit > s.maxPageSize {
+		limit = s.maxPageSize
+	}
+	if _, err := s.posts.ByID(ctx, in.SeedID); err != nil {
+		return RelatedResult{}, err
+	}
+	q := strings.TrimSpace(in.Query)
+	phase, searchCur, simCur, err := decodeRelatedCursor(in.Cursor)
+	if err != nil {
+		return RelatedResult{}, err
+	}
+
+	var posts []domain.Post
+	source := "similar"
+	next := ""
+
+	if phase == relatedPhaseSearch || (phase == "" && q != "") {
+		need := limit
+		var listParams domain.ListParams
+		listParams.Limit = need
+		if searchCur != nil {
+			listParams.Cursor = searchCur
+		}
+		page, err := s.posts.SearchExcluding(ctx, q, in.SeedID, listParams)
+		if err != nil {
+			return RelatedResult{}, err
+		}
+		posts = append(posts, page.Posts...)
+		if page.NextCursor != nil {
+			next = encodeRelatedSearchCursor(*page.NextCursor)
+			source = "search"
+		} else {
+			// Search exhausted — fill remainder with similar on this page if needed,
+			// or advance cursor into similar phase when page is full of search hits.
+			remain := limit - len(posts)
+			if remain > 0 {
+				simPosts, simNext, err := s.relatedSimilarPage(ctx, in.SeedID, q, nil, remain)
+				if err != nil {
+					return RelatedResult{}, err
+				}
+				posts = append(posts, simPosts...)
+				next = simNext
+				if len(simPosts) > 0 && len(page.Posts) > 0 {
+					source = "mixed"
+				} else if len(simPosts) > 0 {
+					source = "similar"
+				} else {
+					source = "search"
+				}
+			} else {
+				// Full page of search; next request should start similar.
+				seedText, err := s.posts.SeedText(ctx, in.SeedID)
+				if err != nil {
+					return RelatedResult{}, err
+				}
+				probe, err := s.posts.ListSimilar(ctx, seedText, in.SeedID, q, nil, 1)
+				if err != nil {
+					return RelatedResult{}, err
+				}
+				if len(probe.Posts) > 0 {
+					next = encodeRelatedSimilarStart()
+				}
+				source = "search"
+			}
+		}
+		return RelatedResult{Posts: posts, NextCursor: next, Source: source}, nil
+	}
+
+	// Similar-only phase (no q, or cursor already in similar).
+	var cur *domain.SimilarCursor
+	if phase == relatedPhaseSimilar {
+		cur = simCur
+	}
+	simPosts, simNext, err := s.relatedSimilarPage(ctx, in.SeedID, q, cur, limit)
+	if err != nil {
+		return RelatedResult{}, err
+	}
+	return RelatedResult{Posts: simPosts, NextCursor: simNext, Source: "similar"}, nil
+}
+
+func (s *Service) relatedSimilarPage(ctx context.Context, seedID uuid.UUID, excludeQuery string, cursor *domain.SimilarCursor, limit int) ([]domain.Post, string, error) {
+	seedText, err := s.posts.SeedText(ctx, seedID)
+	if err != nil {
+		return nil, "", err
+	}
+	page, err := s.posts.ListSimilar(ctx, seedText, seedID, excludeQuery, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	posts := make([]domain.Post, 0, len(page.Posts))
+	for _, sp := range page.Posts {
+		posts = append(posts, sp.Post)
+	}
+	next := ""
+	if page.HasMore && len(page.Posts) > 0 {
+		last := page.Posts[len(page.Posts)-1]
+		next = encodeRelatedSimilarCursor(last.Rank, last.Post.CreatedAt, last.Post.ID)
+	}
+	return posts, next, nil
+}
+
+const (
+	relatedPhaseSearch  = "s"
+	relatedPhaseSimilar = "m"
+)
+
+func encodeRelatedSearchCursor(c domain.PageCursor) string {
+	raw := fmt.Sprintf("%s|%d|%s", relatedPhaseSearch, c.CreatedAt.UTC().UnixNano(), c.ID.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func encodeRelatedSimilarStart() string {
+	raw := relatedPhaseSimilar + "|start"
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func encodeRelatedSimilarCursor(rank float64, createdAt time.Time, id uuid.UUID) string {
+	raw := fmt.Sprintf("%s|%g|%d|%s", relatedPhaseSimilar, rank, createdAt.UTC().UnixNano(), id.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeRelatedCursor(raw string) (phase string, searchCur *domain.PageCursor, simCur *domain.SimilarCursor, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, nil, nil
+	}
+	b, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return "", nil, nil, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	parts := strings.Split(string(b), "|")
+	if len(parts) < 2 {
+		return "", nil, nil, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	switch parts[0] {
+	case relatedPhaseSearch:
+		if len(parts) != 3 {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		ns, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		id, err := uuid.Parse(parts[2])
+		if err != nil {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		c := domain.PageCursor{CreatedAt: time.Unix(0, ns).UTC(), ID: id}
+		return relatedPhaseSearch, &c, nil, nil
+	case relatedPhaseSimilar:
+		if parts[1] == "start" {
+			return relatedPhaseSimilar, nil, nil, nil
+		}
+		if len(parts) != 4 {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		rank, err := strconv.ParseFloat(parts[1], 64)
+		if err != nil {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		ns, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		id, err := uuid.Parse(parts[3])
+		if err != nil {
+			return "", nil, nil, apperr.Validation(apperr.Field{
+				Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+			})
+		}
+		c := domain.SimilarCursor{Rank: rank, CreatedAt: time.Unix(0, ns).UTC(), ID: id}
+		return relatedPhaseSimilar, nil, &c, nil
+	default:
+		return "", nil, nil, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+}
+
 func (s *Service) validateCreate(in CreatePostInput) (domain.MediaMode, []domain.CreateMediaInput, []string, error) {
 	var details []apperr.Field
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		details = append(details, apperr.Required("title"))
+	} else if utf8.RuneCountInString(title) > 200 {
+		details = append(details, apperr.Field{Field: "title", Code: "TOO_LONG", Message: "title must be at most 200 characters"})
+	}
 	if in.Lat < -90 || in.Lat > 90 {
 		details = append(details, apperr.Field{Field: "lat", Code: "INVALID", Message: "lat must be between -90 and 90"})
 	}

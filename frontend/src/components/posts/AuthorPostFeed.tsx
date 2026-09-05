@@ -1,216 +1,56 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import CommentsPanel from "@/components/posts/CommentsPanel";
-import { sidePanelGridClass } from "@/components/posts/commentsLayout";
-import PostDetailCard from "@/components/posts/PostDetailCard";
-import PostMapPanel from "@/components/posts/PostMapPanel";
-import { usePostSidePanel } from "@/hooks/use-post-side-panel";
+import { useCallback, useMemo } from "react";
+import FeedShell from "@/components/feed/FeedShell";
+import SnapFeed from "@/components/feed/SnapFeed";
 import { useLazyListUserPostsQuery } from "@/lib/api/contentApi";
 import { encodeContentCursor } from "@/lib/content/cursor";
-import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
-import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 6;
 
 /**
- * Which post should own A/V: the last one whose top edge has crossed mid-screen.
- * When the next post's top hits mid-viewport, the previous one must stop.
+ * Profile → post: same shell + snap UI as the home feed, continuing the author's posts.
  */
-function pickFocusedPostId(orderedIds: string[]): string | null {
-  if (orderedIds.length === 0) return null;
-  const mid = window.innerHeight * 0.5;
-  let focused = orderedIds[0]!;
-  for (const id of orderedIds) {
-    const el = document.querySelector<HTMLElement>(`[data-post-id="${id}"]`);
-    if (!el) continue;
-    if (el.getBoundingClientRect().top <= mid) focused = id;
-    else break;
-  }
-  return focused;
-}
-
-function AuthorPostFeedSession({
+export default function AuthorPostFeed({
   seed,
-  initialMobileComments,
+  initialMobileComments = false,
 }: {
   seed: Post;
   initialMobileComments?: boolean;
 }) {
-  const initialCursor = (() => {
+  const [fetchPage] = useLazyListUserPostsQuery();
+
+  const initialCursor = useMemo(() => {
     try {
       return encodeContentCursor(seed.created_at, seed.id);
     } catch {
-      return null;
+      return undefined;
     }
-  })();
+  }, [seed.created_at, seed.id]);
 
-  const [posts, setPosts] = useState<Post[]>([seed]);
-  const [cursor, setCursor] = useState<string | null>(initialCursor);
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(initialCursor == null);
-  const [focusedId, setFocusedId] = useState(seed.id);
-  const {
-    commentsOpen,
-    mapOpen,
-    sideOpen,
-    panelPostId,
-    onCommentsClick,
-    onMapClick,
-    closeMobile,
-    followFocusedPost,
-  } = usePostSidePanel({
-    initialMode: initialMobileComments ? "comments" : "none",
-    initialPostId: seed.id,
-  });
-  const [fetchPage] = useLazyListUserPostsQuery();
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const loadingRef = useRef(false);
-  const idsRef = useRef<string[]>([seed.id]);
-
-  const activeSidePost =
-    posts.find((p) => p.id === (panelPostId || focusedId)) ?? seed;
-
-  useEffect(() => {
-    idsRef.current = posts.map((p) => p.id);
-    prefetchPostMedia(seed);
-    for (const p of posts.slice(0, 3)) prefetchPostMedia(p);
-  }, [posts, seed]);
-
-  const refreshFocus = useCallback(() => {
-    const next = pickFocusedPostId(idsRef.current);
-    if (next) setFocusedId(next);
-  }, []);
-
-  useEffect(() => {
-    refreshFocus();
-    window.addEventListener("scroll", refreshFocus, { passive: true });
-    window.addEventListener("resize", refreshFocus);
-    return () => {
-      window.removeEventListener("scroll", refreshFocus);
-      window.removeEventListener("resize", refreshFocus);
-    };
-  }, [refreshFocus, posts.length]);
-
-  useEffect(() => {
-    const idx = posts.findIndex((p) => p.id === focusedId);
-    if (idx < 0) return;
-    for (const p of posts.slice(Math.max(0, idx - 1), idx + 2)) {
-      prefetchPostMedia(p);
-    }
-  }, [focusedId, posts]);
-
-  useEffect(() => {
-    followFocusedPost(focusedId);
-  }, [focusedId, followFocusedPost]);
-
-  const loadMore = useCallback(async () => {
-    if (!cursor || loadingRef.current || done) return;
-    loadingRef.current = true;
-    setLoading(true);
-    try {
-      const page = await fetchPage({
+  const onLoadMore = useCallback(
+    async (cursor: string) => {
+      return fetchPage({
         id: seed.author_id,
         limit: PAGE_SIZE,
         cursor,
       }).unwrap();
-      setPosts((prev) => {
-        const seen = new Set(prev.map((p) => p.id));
-        const next = page.posts.filter((p) => !seen.has(p.id));
-        return next.length ? [...prev, ...next] : prev;
-      });
-      if (!page.next_cursor || page.posts.length === 0) {
-        setDone(true);
-        setCursor(null);
-      } else {
-        setCursor(page.next_cursor);
-      }
-    } catch {
-      setDone(true);
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  }, [cursor, done, fetchPage, seed.author_id]);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || done) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) void loadMore();
-      },
-      { root: null, rootMargin: "800px 0px", threshold: 0 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [loadMore, done]);
-
-  return (
-    <div
-      className={cn(
-        sidePanelGridClass(sideOpen),
-        sideOpen && "pb-[min(52vh,28rem)] lg:pb-0"
-      )}
-    >
-      <div className="mx-auto w-full max-w-xl lg:mx-0">
-        {posts.map((p) => (
-          <PostDetailCard
-            key={p.id}
-            post={p}
-            active={p.id === focusedId}
-            fromUser
-            onOpenComments={() => onCommentsClick(p.id)}
-            onOpenMap={() => onMapClick(p.id)}
-          />
-        ))}
-        <div ref={sentinelRef} className="h-10" aria-hidden />
-        {loading ? (
-          <p className="py-6 text-center text-sm text-fg-faint">Loading more…</p>
-        ) : null}
-        {done && posts.length > 1 ? (
-          <p className="py-8 text-center text-xs text-fg-faint">No more posts</p>
-        ) : null}
-      </div>
-
-      {commentsOpen ? (
-        <CommentsPanel
-          postId={panelPostId || focusedId}
-          mobileOpen={commentsOpen}
-          onMobileClose={closeMobile}
-          desktopOpen={commentsOpen}
-        />
-      ) : null}
-      {mapOpen ? (
-        <PostMapPanel
-          lat={activeSidePost.lat}
-          lng={activeSidePost.lng}
-          mobileOpen={mapOpen}
-          onMobileClose={closeMobile}
-          desktopOpen={mapOpen}
-        />
-      ) : null}
-    </div>
+    },
+    [fetchPage, seed.author_id]
   );
-}
 
-/**
- * Continues an author's posts below the opened one (profile → post flow).
- * Remounts when seed changes (keyed by id).
- */
-export default function AuthorPostFeed({
-  seed,
-  initialMobileComments,
-}: {
-  seed: Post;
-  initialMobileComments?: boolean;
-}) {
   return (
-    <AuthorPostFeedSession
-      key={seed.id}
-      seed={seed}
-      initialMobileComments={initialMobileComments}
-    />
+    <FeedShell>
+      <SnapFeed
+        key={seed.id}
+        embedded
+        fromUser
+        initialPosts={[seed]}
+        nextCursor={initialCursor}
+        onLoadMore={onLoadMore}
+        initialCommentsOpen={initialMobileComments}
+      />
+    </FeedShell>
   );
 }

@@ -55,6 +55,7 @@ function ComposeContent() {
   const [mode, setMode] = useState<MediaMode>("images");
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [caption, setCaption] = useState("");
+  const [title, setTitle] = useState("");
   const [tagsRaw, setTagsRaw] = useState("");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
@@ -186,13 +187,21 @@ function ComposeContent() {
     if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
     setLat(nextLat);
     setLng(nextLng);
-    if (label) setPlaceLabel(label);
+    if (label) {
+      setPlaceLabel(label);
+      setTitle((prev) => (prev.trim() ? prev : label.slice(0, 200)));
+    }
   }
 
   async function onPublish(e: React.FormEvent) {
     e.preventDefault();
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       toast.error("Pick a location on the map");
+      return;
+    }
+    const placeName = title.trim();
+    if (!placeName) {
+      toast.error("Add a place title");
       return;
     }
 
@@ -242,6 +251,7 @@ function ComposeContent() {
       }
 
       const post = await createPost({
+        title: placeName,
         caption: caption.trim(),
         lat,
         lng,
@@ -264,6 +274,7 @@ function ComposeContent() {
   const imageCount = previews.filter((p) => p.kind === "image").length;
   const hasAudio = previews.some((p) => p.kind === "audio");
   const canPublish =
+    title.trim().length > 0 &&
     lat != null &&
     lng != null &&
     Number.isFinite(lat) &&
@@ -288,7 +299,7 @@ function ComposeContent() {
           <div className="border-b border-border-subtle px-5 py-5 sm:px-6">
             <h1 className="text-xl font-bold tracking-tight text-fg">New post</h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Add media, write a caption, and pin where it happened.
+              Name the place, add media, write a caption, and pin it on the map.
             </p>
           </div>
 
@@ -401,6 +412,19 @@ function ComposeContent() {
             </section>
 
             <section className="space-y-3">
+              <div>
+                <label htmlFor="compose-title" className="mb-1.5 block text-sm font-medium text-fg">
+                  Place title
+                </label>
+                <input
+                  id="compose-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value.slice(0, 200))}
+                  placeholder="e.g. Tomoca Coffee – Piazza"
+                  maxLength={200}
+                  className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2.5 text-sm text-fg outline-none placeholder:text-fg-faint focus:border-brand/50"
+                />
+              </div>
               <div>
                 <label htmlFor="compose-caption" className="mb-1.5 block text-sm font-medium text-fg">
                   Caption

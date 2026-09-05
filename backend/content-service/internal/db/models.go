@@ -8,6 +8,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Answer struct {
+	ID            pgtype.UUID        `json:"id"`
+	QuestionID    pgtype.UUID        `json:"question_id"`
+	AuthorID      pgtype.UUID        `json:"author_id"`
+	Body          string             `json:"body"`
+	UpvoteCount   int64              `json:"upvote_count"`
+	DownvoteCount int64              `json:"downvote_count"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AnswerVote struct {
+	AnswerID  pgtype.UUID        `json:"answer_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Vote      string             `json:"vote"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CommentReaction struct {
 	CommentID pgtype.UUID        `json:"comment_id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -24,6 +41,7 @@ type Hashtag struct {
 type Post struct {
 	ID            pgtype.UUID        `json:"id"`
 	AuthorID      pgtype.UUID        `json:"author_id"`
+	Title         string             `json:"title"`
 	Caption       string             `json:"caption"`
 	Lat           float64            `json:"lat"`
 	Lng           float64            `json:"lng"`
@@ -86,4 +104,27 @@ type PostReaction struct {
 	UserID    pgtype.UUID        `json:"user_id"`
 	Reaction  string             `json:"reaction"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Question struct {
+	ID            pgtype.UUID        `json:"id"`
+	AuthorID      pgtype.UUID        `json:"author_id"`
+	Title         string             `json:"title"`
+	Body          string             `json:"body"`
+	PostID        pgtype.UUID        `json:"post_id"`
+	Lat           pgtype.Float8      `json:"lat"`
+	Lng           pgtype.Float8      `json:"lng"`
+	UpvoteCount   int64              `json:"upvote_count"`
+	DownvoteCount int64              `json:"downvote_count"`
+	AnswerCount   int64              `json:"answer_count"`
+	ClosedAt      pgtype.Timestamptz `json:"closed_at"`
+	ClosedBy      pgtype.UUID        `json:"closed_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type QuestionVote struct {
+	QuestionID pgtype.UUID        `json:"question_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Vote       string             `json:"vote"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }

@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: YetBota Content Service
-  description: Posts, signed Cloudinary media, reactions, comments (with replies), bookmarks, share, search, and home feed.
-  version: 0.3.0
+  description: Posts (with place title), Q&A, media, reactions, comments, bookmarks, share, search, feed, and trending.
+  version: 0.4.0
 servers:
   - url: /
     description: Current host
@@ -136,6 +136,50 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /posts/trending:
+    get:
+      tags: [Trending]
+      summary: Trending posts
+      description: |
+        Recent posts ranked with the feed HN-style formula (engagement ÷ age gravity),
+        without follow or geo boosts. Default lookback 7 days.
+      operationId: listTrendingPosts
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Ranked posts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /creators/trending:
+    get:
+      tags: [Trending]
+      summary: Trending creators
+      description: |
+        Authors ranked by recent `post_interaction_events` using reputation weights
+        and freshness. Returns `user_id` + display `score`; hydrate profiles via identity.
+        Top-N only (no cursor). Default lookback 7 days.
+      operationId: listTrendingCreators
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+      responses:
+        "200":
+          description: Ranked creators
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendingCreatorsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /posts/{id}:
     get:
       tags: [Posts]
@@ -150,6 +194,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Post"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /posts/{id}/related:
+    get:
+      tags: [Posts]
+      summary: Related posts (search matches, then similar)
+      description: |
+        Not the home feed. When `q` is set (e.g. opened from search), returns other
+        posts matching that query first; after those are exhausted, returns posts
+        similar to the seed by caption/hashtag full-text. Without `q`, only similar.
+      operationId: listRelatedPosts
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Original search query when navigating from search results
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Related posts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelatedPostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -411,6 +487,200 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /questions:
+    post:
+      tags: [Q&A]
+      summary: Ask a question
+      description: |
+        Stack Overflow–style question. Optional `post_id` links to a post.
+        Optional `lat`/`lng` (both or neither) for a location.
+      operationId: createQuestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestionRequest"
+      responses:
+        "200":
+          description: Created question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    get:
+      tags: [Q&A]
+      summary: List questions
+      operationId: listQuestions
+      parameters:
+        - name: post_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: When set, only questions linked to that post
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Questions page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /questions/{id}:
+    get:
+      tags: [Q&A]
+      summary: Get a question
+      operationId: getQuestion
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+      responses:
+        "200":
+          description: Question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /questions/{id}/close:
+    post:
+      tags: [Q&A]
+      summary: Close a question
+      description: Author only. Closed questions reject new answers; votes still allowed.
+      operationId: closeQuestion
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+      responses:
+        "200":
+          description: Closed question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /questions/{id}/vote:
+    post:
+      tags: [Q&A]
+      summary: Vote on a question
+      operationId: voteQuestion
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteRequest"
+      responses:
+        "200":
+          description: Updated question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /questions/{id}/answers:
+    post:
+      tags: [Q&A]
+      summary: Answer a question
+      description: Rejected if the question is closed.
+      operationId: createAnswer
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  maxLength: 10000
+      responses:
+        "200":
+          description: Created answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Q&A]
+      summary: List answers
+      operationId: listAnswers
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Answers page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswersPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /answers/{id}/vote:
+    post:
+      tags: [Q&A]
+      summary: Vote on an answer
+      operationId: voteAnswer
+      parameters:
+        - $ref: "#/components/parameters/AnswerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteRequest"
+      responses:
+        "200":
+          description: Updated answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -427,6 +697,20 @@ components:
         type: string
         format: uuid
     CommentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QuestionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AnswerId:
       name: id
       in: path
       required: true
@@ -492,8 +776,12 @@ components:
           enum: [image, video]
     CreatePostRequest:
       type: object
-      required: [lat, lng, media_mode, media]
+      required: [title, lat, lng, media_mode, media]
       properties:
+        title:
+          type: string
+          description: Place name (required)
+          maxLength: 200
         caption:
           type: string
         lat:
@@ -534,7 +822,7 @@ components:
           type: string
     Post:
       type: object
-      required: [id, author_id, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at, media, hashtags]
+      required: [id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at, media, hashtags]
       properties:
         id:
           type: string
@@ -542,6 +830,9 @@ components:
         author_id:
           type: string
           format: uuid
+        title:
+          type: string
+          description: Place name
         caption:
           type: string
         lat:
@@ -609,6 +900,39 @@ components:
             $ref: "#/components/schemas/Post"
         next_cursor:
           type: string
+    RelatedPostsPage:
+      type: object
+      required: [posts, source]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Post"
+        next_cursor:
+          type: string
+        source:
+          type: string
+          enum: [search, similar, mixed]
+          description: Which pool filled this page (not a home feed)
+    TrendingCreatorsPage:
+      type: object
+      required: [creators]
+      properties:
+        creators:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendingCreator"
+    TrendingCreator:
+      type: object
+      required: [user_id, score]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+          format: int64
+          description: Compressed engagement score over the trending window
     Comment:
       type: object
       required: [id, post_id, author_id, body, like_count, dislike_count, reply_count, created_at]
@@ -657,6 +981,122 @@ components:
         post:
           $ref: "#/components/schemas/Post"
         share_url:
+          type: string
+    CreateQuestionRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+          maxLength: 300
+        body:
+          type: string
+          maxLength: 10000
+        post_id:
+          type: string
+          format: uuid
+          nullable: true
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+    VoteRequest:
+      type: object
+      properties:
+        vote:
+          type: string
+          nullable: true
+          enum: [up, down]
+          description: Omit or null to clear vote
+    Question:
+      type: object
+      required: [id, author_id, title, body, upvote_count, downvote_count, answer_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        post_id:
+          type: string
+          format: uuid
+          nullable: true
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+        upvote_count:
+          type: integer
+          format: int64
+        downvote_count:
+          type: integer
+          format: int64
+        answer_count:
+          type: integer
+          format: int64
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        closed_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    QuestionsPage:
+      type: object
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Question"
+        next_cursor:
+          type: string
+    Answer:
+      type: object
+      required: [id, question_id, author_id, body, upvote_count, downvote_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        question_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        upvote_count:
+          type: integer
+          format: int64
+        downvote_count:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+    AnswersPage:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Answer"
+        next_cursor:
           type: string
     Error:
       type: object

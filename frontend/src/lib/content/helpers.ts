@@ -33,6 +33,15 @@ export function parseHashtags(raw: string): string[] {
   return [...new Set(parts)];
 }
 
+/** Place title for cards; falls back if older payloads omit title. */
+export function placeTitle(post: { title?: string; caption?: string }): string {
+  const title = post.title?.trim();
+  if (title) return title;
+  const caption = post.caption?.trim();
+  if (caption) return caption;
+  return "Untitled place";
+}
+
 export function coverUrl(post: { media: { kind: string; url: string; sort_order: number }[] }): string | null {
   const sorted = [...post.media].sort((a, b) => a.sort_order - b.sort_order);
   const image = sorted.find((m) => m.kind === "image");

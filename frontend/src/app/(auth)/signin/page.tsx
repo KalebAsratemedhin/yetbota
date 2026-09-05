@@ -10,6 +10,7 @@ import AuthInput from "@/components/auth/AuthInput";
 import { useSignInMutation } from "@/lib/api/authApi";
 import { getApiErrorMessage, safeNextPath } from "@/lib/auth/errors";
 import { useAppSelector } from "@/lib/hooks";
+import { markLocationPromptAfterAuth } from "@/lib/locationPrefs";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function SignInPage() {
     e.preventDefault();
     try {
       await signIn({ username: username.trim(), password }).unwrap();
+      markLocationPromptAfterAuth();
       toast.success("Signed in", { description: "Welcome back." });
       const next = safeNextPath(new URLSearchParams(window.location.search).get("next"));
       router.replace(next);

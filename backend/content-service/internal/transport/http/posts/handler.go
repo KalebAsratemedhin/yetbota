@@ -32,6 +32,9 @@ type Endpoints struct {
 	Search             endpoint.Endpoint
 	ListHashtag        endpoint.Endpoint
 	Feed               endpoint.Endpoint
+	Related            endpoint.Endpoint
+	TrendingPosts      endpoint.Endpoint
+	TrendingCreators   endpoint.Endpoint
 }
 
 func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
@@ -45,6 +48,7 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	mux.Handle("POST /media/sign", auth(eps.SignMedia, decodeSignMedia))
 	mux.Handle("POST /posts", auth(eps.Create, decodeCreate))
 	mux.Handle("GET /posts/search", auth(eps.Search, decodeSearch))
+	mux.Handle("GET /posts/trending", auth(eps.TrendingPosts, decodeTrending))
 	mux.Handle("GET /posts/{id}", auth(eps.Get, decodePostID))
 	mux.Handle("POST /posts/{id}/reaction", auth(eps.SetReaction, decodeReaction))
 	mux.Handle("POST /posts/{id}/comments", auth(eps.AddComment, decodeComment))
@@ -58,6 +62,8 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	mux.Handle("GET /me/bookmarks", auth(eps.ListBookmarks, decodeMeList))
 	mux.Handle("GET /hashtags/{tag}/posts", auth(eps.ListHashtag, decodeHashtag))
 	mux.Handle("GET /feed", auth(eps.Feed, decodeFeed))
+	mux.Handle("GET /posts/{id}/related", auth(eps.Related, decodeRelated))
+	mux.Handle("GET /creators/trending", auth(eps.TrendingCreators, decodeTrendingCreators))
 }
 
 func decodeSignMedia(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -282,6 +288,54 @@ func decodeFeed(ctx context.Context, r *http.Request) (interface{}, error) {
 	return svcendpoint.FeedRequest{
 		Principal: p, Lat: lat, Lng: lng, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
 	}, nil
+}
+
+func decodeRelated(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := svcendpoint.ParsePostID(r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
+	if err != nil {
+		return nil, err
+	}
+	return svcendpoint.RelatedRequest{
+		Principal: p,
+		PostID:    id,
+		Query:     r.URL.Query().Get("q"),
+		Limit:     limit,
+		Cursor:    r.URL.Query().Get("cursor"),
+	}, nil
+}
+
+func decodeTrending(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
+	if err != nil {
+		return nil, err
+	}
+	return svcendpoint.TrendingRequest{
+		Principal: p, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}, nil
+}
+
+func decodeTrendingCreators(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
+	if err != nil {
+		return nil, err
+	}
+	return svcendpoint.TrendingRequest{Principal: p, Limit: limit}, nil
 }
 
 func decodeJSON(r *http.Request, dest interface{}) error {

@@ -32,6 +32,9 @@ type PostService interface {
 	Search(ctx context.Context, query string, in postuc.ListInput) (postuc.PageResult, error)
 	ListByHashtag(ctx context.Context, tag string, in postuc.ListInput) (postuc.PageResult, error)
 	Feed(ctx context.Context, in postuc.FeedInput) (postuc.PageResult, error)
+	Related(ctx context.Context, in postuc.RelatedInput) (postuc.RelatedResult, error)
+	TrendingPosts(ctx context.Context, in postuc.TrendingListInput) (postuc.PageResult, error)
+	TrendingCreators(ctx context.Context, in postuc.TrendingListInput) (postuc.TrendingCreatorsResult, error)
 }
 
 type SignMediaRequest struct {
@@ -41,6 +44,7 @@ type SignMediaRequest struct {
 
 type CreatePostRequest struct {
 	Principal auth.Principal
+	Title     string            `json:"title"`
 	Caption   string            `json:"caption"`
 	Lat       *float64          `json:"lat"`
 	Lng       *float64          `json:"lng"`
@@ -127,6 +131,35 @@ type FeedRequest struct {
 	Cursor    string
 }
 
+type RelatedRequest struct {
+	Principal auth.Principal
+	PostID    uuid.UUID
+	Query     string
+	Limit     int
+	Cursor    string
+}
+
+type TrendingRequest struct {
+	Principal auth.Principal
+	Limit     int
+	Cursor    string
+}
+
+type RelatedPageJSON struct {
+	Posts      []PostJSON `json:"posts"`
+	NextCursor string     `json:"next_cursor,omitempty"`
+	Source     string     `json:"source"`
+}
+
+type TrendingCreatorJSON struct {
+	UserID string `json:"user_id"`
+	Score  int64  `json:"score"`
+}
+
+type TrendingCreatorsPageJSON struct {
+	Creators []TrendingCreatorJSON `json:"creators"`
+}
+
 type MediaJSON struct {
 	ID                 string `json:"id"`
 	Kind               string `json:"kind"`
@@ -142,6 +175,7 @@ type MediaJSON struct {
 type PostJSON struct {
 	ID            string      `json:"id"`
 	AuthorID      string      `json:"author_id"`
+	Title         string      `json:"title"`
 	Caption       string      `json:"caption"`
 	Lat           float64     `json:"lat"`
 	Lng           float64     `json:"lng"`
@@ -211,7 +245,7 @@ func MakeCreatePostEndpoint(svc PostService) endpoint.Endpoint {
 			})
 		}
 		p, err := svc.Create(ctx, postuc.CreatePostInput{
-			AuthorID: authorID, Caption: req.Caption, Lat: *req.Lat, Lng: *req.Lng,
+			AuthorID: authorID, Title: req.Title, Caption: req.Caption, Lat: *req.Lat, Lng: *req.Lng,
 			MediaMode: domain.MediaMode(req.MediaMode), Media: media, Hashtags: req.Hashtags,
 		})
 		if err != nil {
@@ -437,6 +471,57 @@ func MakeFeedEndpoint(svc PostService) endpoint.Endpoint {
 	}
 }
 
+func MakeRelatedEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(RelatedRequest)
+		page, err := svc.Related(ctx, postuc.RelatedInput{
+			SeedID: req.PostID,
+			Query:  req.Query,
+			Limit:  req.Limit,
+			Cursor: req.Cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		posts := make([]PostJSON, 0, len(page.Posts))
+		for _, p := range page.Posts {
+			posts = append(posts, toPostJSON(p))
+		}
+		return RelatedPageJSON{Posts: posts, NextCursor: page.NextCursor, Source: page.Source}, nil
+	}
+}
+
+func MakeTrendingPostsEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(TrendingRequest)
+		page, err := svc.TrendingPosts(ctx, postuc.TrendingListInput{
+			Limit: req.Limit, Cursor: req.Cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return toPostsPageJSON(page), nil
+	}
+}
+
+func MakeTrendingCreatorsEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(TrendingRequest)
+		page, err := svc.TrendingCreators(ctx, postuc.TrendingListInput{Limit: req.Limit})
+		if err != nil {
+			return nil, err
+		}
+		creators := make([]TrendingCreatorJSON, 0, len(page.Creators))
+		for _, c := range page.Creators {
+			creators = append(creators, TrendingCreatorJSON{
+				UserID: c.UserID.String(),
+				Score:  c.Score,
+			})
+		}
+		return TrendingCreatorsPageJSON{Creators: creators}, nil
+	}
+}
+
 func ParseOptionalCoord(raw, field string) (*float64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -509,7 +594,7 @@ func toPostJSON(p domain.Post) PostJSON {
 		tags = []string{}
 	}
 	return PostJSON{
-		ID: p.ID.String(), AuthorID: p.AuthorID.String(), Caption: p.Caption,
+		ID: p.ID.String(), AuthorID: p.AuthorID.String(), Title: p.Title, Caption: p.Caption,
 		Lat: p.Lat, Lng: p.Lng, MediaMode: string(p.MediaMode),
 		LikeCount: p.LikeCount, DislikeCount: p.DislikeCount, CommentCount: p.CommentCount,
 		ShareCount: p.ShareCount, BookmarkCount: p.BookmarkCount,

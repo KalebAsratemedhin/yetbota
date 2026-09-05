@@ -9,6 +9,8 @@ import {
   DEFAULT_CENTER,
   POI_MIN_ZOOM,
   fetchMapPois,
+  looksLikeGoogleMapsLink,
+  resolveGoogleMapsLink,
   reversePlace,
   searchPlaces,
   type GeoHit,
@@ -40,11 +42,13 @@ export default function LocationPicker({
   const [resolvedFor, setResolvedFor] = useState("");
   const [label, setLabel] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [resolvingLink, setResolvingLink] = useState(false);
   const [searchOpen, setSearchOpen] = useState(true);
   const [pois, setPois] = useState<MapPoi[]>([]);
   const [view, setView] = useState<MapView | null>(null);
   const [poisLoading, setPoisLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mapsHandledRef = useRef<string | null>(null);
   const debounced = useDebouncedValue(query.trim(), 400);
   const debouncedView = useDebouncedValue(view, 550);
   const viewKeyRef = useRef("");
@@ -61,6 +65,37 @@ export default function LocationPicker({
 
   useEffect(() => {
     if (!searchOpen || debounced.length < 2) return;
+
+    if (looksLikeGoogleMapsLink(debounced)) {
+      if (mapsHandledRef.current === debounced) {
+        setResolvedFor(debounced);
+        return;
+      }
+      let cancelled = false;
+      setResolvingLink(true);
+      setHits([]);
+      void resolveGoogleMapsLink(debounced)
+        .then(async (coords) => {
+          if (cancelled) return;
+          mapsHandledRef.current = debounced;
+          await pick(coords.lat, coords.lng, coords.label);
+          toast.success("Location set from Maps link");
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          toast.error("Could not use Maps link", {
+            description: err instanceof Error ? err.message : undefined,
+          });
+          setResolvedFor(debounced);
+        })
+        .finally(() => {
+          if (!cancelled) setResolvingLink(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     let cancelled = false;
     searchPlaces(debounced, bias)
       .then((rows) => {
@@ -76,7 +111,7 @@ export default function LocationPicker({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- search on query; bias read at fire time
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search on query; bias/pick read at fire time
   }, [debounced, searchOpen]);
 
   useEffect(() => {
@@ -122,7 +157,29 @@ export default function LocationPicker({
 
   const shownHits = searchOpen && debounced.length >= 2 ? hits : [];
   const searching =
-    searchOpen && debounced.length >= 2 && resolvedFor !== debounced;
+    searchOpen &&
+    debounced.length >= 2 &&
+    (resolvingLink ||
+      (!looksLikeGoogleMapsLink(debounced) && resolvedFor !== debounced));
+
+  async function applyMapsLink(url: string) {
+    const trimmed = url.trim();
+    mapsHandledRef.current = trimmed;
+    setResolvingLink(true);
+    setHits([]);
+    try {
+      const coords = await resolveGoogleMapsLink(trimmed);
+      await pick(coords.lat, coords.lng, coords.label);
+      toast.success("Location set from Maps link");
+    } catch (err: unknown) {
+      toast.error("Could not use Maps link", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+      setResolvedFor(trimmed);
+    } finally {
+      setResolvingLink(false);
+    }
+  }
 
   function closeSearch() {
     setSearchOpen(false);
@@ -208,11 +265,18 @@ export default function LocationPicker({
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search shops, streets, landmarks…"
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text")?.trim() ?? "";
+                  if (!looksLikeGoogleMapsLink(text)) return;
+                  e.preventDefault();
+                  setQuery(text);
+                  void applyMapsLink(text);
+                }}
+                placeholder="Search or paste a Google Maps link…"
                 className="w-full rounded-xl border border-white/15 bg-black/75 py-2.5 pr-16 pl-9 text-sm text-white outline-none backdrop-blur-sm placeholder:text-white/40 focus:border-brand/50"
               />
               <div className="absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center gap-0.5">
-                {searching ? (
+                {searching || resolvingLink ? (
                   <Loader2 className="h-4 w-4 animate-spin text-brand" />
                 ) : null}
                 <button
@@ -290,7 +354,7 @@ export default function LocationPicker({
             {label ??
               (pinned
                 ? `${lat!.toFixed(5)}, ${lng!.toFixed(5)}`
-                : "Search, tap a place, or the map")}
+                : "Search, paste Maps link, or tap the map")}
           </p>
           {view && view.zoom < POI_MIN_ZOOM ? (
             <p className="mt-1 text-[10px] text-white/45">Zoom in to see places</p>

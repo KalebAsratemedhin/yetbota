@@ -18,6 +18,7 @@ type Config struct {
 	Media          MediaConfig      `yaml:"media"`
 	Share          ShareConfig      `yaml:"share"`
 	Feed           FeedConfig       `yaml:"feed"`
+	Trending       TrendingConfig   `yaml:"trending"`
 	Reputation     ReputationConfig `yaml:"reputation"`
 	CORS           CORSConfig       `yaml:"cors"`
 	MigrateOnStart bool             `yaml:"migrate_on_start"`
@@ -54,6 +55,12 @@ type FeedConfig struct {
 	NearbyRadiusKm float64 `yaml:"nearby_radius_km"`
 	CandidateLimit int     `yaml:"candidate_limit"`
 	LookbackDays   int     `yaml:"lookback_days"`
+}
+
+type TrendingConfig struct {
+	LookbackDays      int `yaml:"lookback_days"`
+	CandidateLimit    int `yaml:"candidate_limit"`
+	CreatorEventLimit int `yaml:"creator_event_limit"`
 }
 
 type ReputationConfig struct {
@@ -229,6 +236,15 @@ func Load(path string) (Config, error) {
 	if cfg.Feed.LookbackDays <= 0 {
 		cfg.Feed.LookbackDays = 14
 	}
+	if cfg.Trending.LookbackDays <= 0 {
+		cfg.Trending.LookbackDays = 7
+	}
+	if cfg.Trending.CandidateLimit <= 0 {
+		cfg.Trending.CandidateLimit = 500
+	}
+	if cfg.Trending.CreatorEventLimit <= 0 {
+		cfg.Trending.CreatorEventLimit = 5000
+	}
 	if cfg.Reputation.LikeWeight <= 0 {
 		cfg.Reputation.LikeWeight = 1
 	}
@@ -245,7 +261,7 @@ func Load(path string) (Config, error) {
 		cfg.Reputation.DislikeWeight = 1
 	}
 	if cfg.Reputation.CreateWeight <= 0 {
-		cfg.Reputation.CreateWeight = 0.25
+		cfg.Reputation.CreateWeight = 0.1
 	}
 	if cfg.Reputation.Alpha <= 0 {
 		cfg.Reputation.Alpha = 0.8
@@ -254,10 +270,10 @@ func Load(path string) (Config, error) {
 		cfg.Reputation.Gravity = cfg.Feed.Gravity
 	}
 	if cfg.Reputation.TimeBaseHours <= 0 {
-		cfg.Reputation.TimeBaseHours = 2
+		cfg.Reputation.TimeBaseHours = 4
 	}
 	if cfg.Reputation.Scale <= 0 {
-		cfg.Reputation.Scale = 100
+		cfg.Reputation.Scale = 40
 	}
 	if cfg.Reputation.LookbackDays <= 0 {
 		cfg.Reputation.LookbackDays = 90

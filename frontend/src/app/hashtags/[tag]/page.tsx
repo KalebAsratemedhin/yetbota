@@ -55,6 +55,7 @@ function HashtagContent({ tag }: { tag: string }) {
           initial={data}
           emptyTitle="No posts with this tag"
           emptyBody="Be the first to publish something under this hashtag."
+          searchQuery={clean}
           onLoadMore={async (cursor) =>
             fetchMore({ tag: clean, limit: 20, cursor }).unwrap()
           }

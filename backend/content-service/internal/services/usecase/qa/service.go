@@ -1,0 +1,248 @@
+package qa
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+
+	"github.com/yetbota/content-service/internal/domain/apperr"
+	domain "github.com/yetbota/content-service/internal/domain/qa"
+)
+
+type Service struct {
+	repo            domain.Repository
+	defaultPageSize int
+	maxPageSize     int
+}
+
+func NewService(repo domain.Repository, defaultPageSize, maxPageSize int) *Service {
+	if defaultPageSize <= 0 {
+		defaultPageSize = 20
+	}
+	if maxPageSize <= 0 {
+		maxPageSize = 50
+	}
+	return &Service{repo: repo, defaultPageSize: defaultPageSize, maxPageSize: maxPageSize}
+}
+
+type CreateQuestionInput struct {
+	AuthorID uuid.UUID
+	Title    string
+	Body     string
+	PostID   *uuid.UUID
+	Lat      *float64
+	Lng      *float64
+}
+
+type ListInput struct {
+	Limit  int
+	Cursor string
+	PostID *uuid.UUID
+}
+
+type PageResult struct {
+	Questions  []domain.Question
+	NextCursor string
+}
+
+type AnswerPageResult struct {
+	Answers    []domain.Answer
+	NextCursor string
+}
+
+func (s *Service) CreateQuestion(ctx context.Context, in CreateQuestionInput) (domain.Question, error) {
+	title := strings.TrimSpace(in.Title)
+	body := strings.TrimSpace(in.Body)
+	var details []apperr.Field
+	if title == "" {
+		details = append(details, apperr.Required("title"))
+	} else if utf8.RuneCountInString(title) > 300 {
+		details = append(details, apperr.Field{Field: "title", Code: "TOO_LONG", Message: "title must be at most 300 characters"})
+	}
+	if body == "" {
+		details = append(details, apperr.Required("body"))
+	} else if utf8.RuneCountInString(body) > 10000 {
+		details = append(details, apperr.Field{Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters"})
+	}
+	if (in.Lat == nil) != (in.Lng == nil) {
+		details = append(details, apperr.Field{
+			Field: "lat/lng", Code: "INVALID", Message: "lat and lng must both be provided or both omitted",
+		})
+	} else if in.Lat != nil && (*in.Lat < -90 || *in.Lat > 90 || *in.Lng < -180 || *in.Lng > 180) {
+		details = append(details, apperr.Field{Field: "lat/lng", Code: "INVALID", Message: "lat/lng out of range"})
+	}
+	if len(details) > 0 {
+		return domain.Question{}, apperr.Validation(details...)
+	}
+	if in.PostID != nil {
+		ok, err := s.repo.PostExists(ctx, *in.PostID)
+		if err != nil {
+			return domain.Question{}, err
+		}
+		if !ok {
+			return domain.Question{}, apperr.Validation(apperr.Field{
+				Field: "post_id", Code: "NOT_FOUND", Message: "post not found",
+			})
+		}
+	}
+	return s.repo.CreateQuestion(ctx, domain.CreateQuestionInput{
+		AuthorID: in.AuthorID, Title: title, Body: body,
+		PostID: in.PostID, Lat: in.Lat, Lng: in.Lng,
+	})
+}
+
+func (s *Service) GetQuestion(ctx context.Context, id uuid.UUID) (domain.Question, error) {
+	return s.repo.GetQuestion(ctx, id)
+}
+
+func (s *Service) ListQuestions(ctx context.Context, in ListInput) (PageResult, error) {
+	p, err := s.listParams(in.Limit, in.Cursor)
+	if err != nil {
+		return PageResult{}, err
+	}
+	p.PostID = in.PostID
+	page, err := s.repo.ListQuestions(ctx, p)
+	if err != nil {
+		return PageResult{}, err
+	}
+	out := PageResult{Questions: page.Questions}
+	if page.NextCursor != nil {
+		out.NextCursor = encodeCursor(*page.NextCursor)
+	}
+	return out, nil
+}
+
+func (s *Service) CloseQuestion(ctx context.Context, id, actorID uuid.UUID) (domain.Question, error) {
+	q, err := s.repo.GetQuestion(ctx, id)
+	if err != nil {
+		return domain.Question{}, err
+	}
+	if q.AuthorID != actorID {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "FORBIDDEN", Message: "only the author can close this question",
+		})
+	}
+	if q.Closed() {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "CLOSED", Message: "question is already closed",
+		})
+	}
+	return s.repo.CloseQuestion(ctx, id, actorID)
+}
+
+func (s *Service) SetQuestionVote(ctx context.Context, questionID, userID uuid.UUID, vote *domain.Vote) (domain.Question, error) {
+	if err := validateVote(vote); err != nil {
+		return domain.Question{}, err
+	}
+	return s.repo.SetQuestionVote(ctx, questionID, userID, vote)
+}
+
+func (s *Service) AddAnswer(ctx context.Context, questionID, authorID uuid.UUID, body string) (domain.Answer, error) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return domain.Answer{}, apperr.Validation(apperr.Required("body"))
+	}
+	if utf8.RuneCountInString(body) > 10000 {
+		return domain.Answer{}, apperr.Validation(apperr.Field{
+			Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters",
+		})
+	}
+	return s.repo.CreateAnswer(ctx, domain.CreateAnswerInput{
+		QuestionID: questionID, AuthorID: authorID, Body: body,
+	})
+}
+
+func (s *Service) ListAnswers(ctx context.Context, questionID uuid.UUID, in ListInput) (AnswerPageResult, error) {
+	p, err := s.listParams(in.Limit, in.Cursor)
+	if err != nil {
+		return AnswerPageResult{}, err
+	}
+	page, err := s.repo.ListAnswers(ctx, questionID, p)
+	if err != nil {
+		return AnswerPageResult{}, err
+	}
+	out := AnswerPageResult{Answers: page.Answers}
+	if page.NextCursor != nil {
+		out.NextCursor = encodeCursor(*page.NextCursor)
+	}
+	return out, nil
+}
+
+func (s *Service) SetAnswerVote(ctx context.Context, answerID, userID uuid.UUID, vote *domain.Vote) (domain.Answer, error) {
+	if err := validateVote(vote); err != nil {
+		return domain.Answer{}, err
+	}
+	return s.repo.SetAnswerVote(ctx, answerID, userID, vote)
+}
+
+func validateVote(vote *domain.Vote) error {
+	if vote == nil {
+		return nil
+	}
+	switch *vote {
+	case domain.VoteUp, domain.VoteDown:
+		return nil
+	default:
+		return apperr.Validation(apperr.Field{
+			Field: "vote", Code: "INVALID", Message: "vote must be up, down, or null",
+		})
+	}
+}
+
+func (s *Service) listParams(limit int, cursor string) (domain.ListParams, error) {
+	if limit <= 0 {
+		limit = s.defaultPageSize
+	}
+	if limit > s.maxPageSize {
+		limit = s.maxPageSize
+	}
+	p := domain.ListParams{Limit: limit}
+	if strings.TrimSpace(cursor) == "" {
+		return p, nil
+	}
+	c, err := decodeCursor(cursor)
+	if err != nil {
+		return domain.ListParams{}, err
+	}
+	p.Cursor = &c
+	return p, nil
+}
+
+func encodeCursor(c domain.PageCursor) string {
+	raw := fmt.Sprintf("%d|%s", c.CreatedAt.UTC().UnixNano(), c.ID.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeCursor(raw string) (domain.PageCursor, error) {
+	b, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil {
+		return domain.PageCursor{}, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	parts := strings.Split(string(b), "|")
+	if len(parts) != 2 {
+		return domain.PageCursor{}, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	ns, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return domain.PageCursor{}, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return domain.PageCursor{}, apperr.Validation(apperr.Field{
+			Field: "cursor", Code: "INVALID", Message: "cursor is invalid",
+		})
+	}
+	return domain.PageCursor{CreatedAt: time.Unix(0, ns).UTC(), ID: id}, nil
+}

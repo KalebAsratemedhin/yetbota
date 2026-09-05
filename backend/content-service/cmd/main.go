@@ -19,9 +19,12 @@ import (
 	"github.com/yetbota/content-service/drivers/surreal"
 	"github.com/yetbota/content-service/internal/services/endpoint"
 	postrepo "github.com/yetbota/content-service/internal/services/repository/post"
+	qarepo "github.com/yetbota/content-service/internal/services/repository/qa"
 	postuc "github.com/yetbota/content-service/internal/services/usecase/post"
+	qauc "github.com/yetbota/content-service/internal/services/usecase/qa"
 	httptransport "github.com/yetbota/content-service/internal/transport/http"
 	postshttp "github.com/yetbota/content-service/internal/transport/http/posts"
+	qahttp "github.com/yetbota/content-service/internal/transport/http/qa"
 	"github.com/yetbota/content-service/internal/transport/http/shared"
 )
 
@@ -99,6 +102,11 @@ func main() {
 			CandidateLimit:   cfg.Feed.CandidateLimit,
 			LookbackDays:     cfg.Feed.LookbackDays,
 		},
+		postuc.TrendingConfig{
+			LookbackDays:      cfg.Trending.LookbackDays,
+			CandidateLimit:    cfg.Trending.CandidateLimit,
+			CreatorEventLimit: cfg.Trending.CreatorEventLimit,
+		},
 		postuc.ReputationConfig{
 			LikeWeight:     cfg.Reputation.LikeWeight,
 			CommentWeight:  cfg.Reputation.CommentWeight,
@@ -137,9 +145,24 @@ func main() {
 		Search:             endpoint.MakeSearchEndpoint(svc),
 		ListHashtag:        endpoint.MakeListByHashtagEndpoint(svc),
 		Feed:               endpoint.MakeFeedEndpoint(svc),
+		Related:            endpoint.MakeRelatedEndpoint(svc),
+		TrendingPosts:      endpoint.MakeTrendingPostsEndpoint(svc),
+		TrendingCreators:   endpoint.MakeTrendingCreatorsEndpoint(svc),
 	}
 
-	router := httptransport.NewRouter(eps, idClient)
+	qaSvc := qauc.NewService(qarepo.New(pool), cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
+	qaEps := qahttp.Endpoints{
+		CreateQuestion: endpoint.MakeCreateQuestionEndpoint(qaSvc),
+		GetQuestion:    endpoint.MakeGetQuestionEndpoint(qaSvc),
+		ListQuestions:  endpoint.MakeListQuestionsEndpoint(qaSvc),
+		CloseQuestion:  endpoint.MakeCloseQuestionEndpoint(qaSvc),
+		QuestionVote:   endpoint.MakeQuestionVoteEndpoint(qaSvc),
+		AddAnswer:      endpoint.MakeAddAnswerEndpoint(qaSvc),
+		ListAnswers:    endpoint.MakeListAnswersEndpoint(qaSvc),
+		AnswerVote:     endpoint.MakeAnswerVoteEndpoint(qaSvc),
+	}
+
+	router := httptransport.NewRouter(eps, qaEps, idClient)
 	handler := shared.AccessLog(shared.CORS(cfg.CORS.AllowedOrigins, router))
 
 	log.Info("listening", "addr", cfg.HTTP.Addr)

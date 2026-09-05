@@ -131,12 +131,29 @@ export default function ContributionsPanel({
       ) : null}
 
       {tab === "qa" ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border-subtle bg-surface px-6 py-12 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border-subtle bg-surface px-6 py-12 text-center">
           <HelpCircle className="h-8 w-8 text-fg-faint" />
-          <p className="text-sm font-semibold text-fg">Q&A coming later</p>
+          <p className="text-sm font-semibold text-fg">Community Q&A</p>
           <p className="max-w-xs text-xs text-fg-faint">
-            Threaded place questions aren’t in this SRS slice yet.
+            Ask and answer place questions — votes, answers, and closed threads.
           </p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/qa"
+              className="text-sm font-semibold text-brand hover:underline"
+            >
+              Browse Q&A
+            </Link>
+            {mode === "own" ? (
+              <Link
+                href="/qa/ask"
+                className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-bold text-black hover:bg-brand-dark"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Ask
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

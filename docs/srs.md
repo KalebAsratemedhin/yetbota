@@ -17,7 +17,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Layer | Choice | Notes |
 | --- | --- | --- |
 | Frontend | Next.js | |
-| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, **home feed** |
+| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A** |
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
 | ai-service | Python | |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
@@ -56,7 +56,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-017 | An authenticated user shall be able to search users by username or full name. | Min query length 2; max 20 results |
 | FR-018 | An authenticated user shall be able to upload and delete a profile avatar. | Stored on Cloudinary; URL on user |
 | FR-019 | An authenticated user shall obtain a Cloudinary signed upload for post media. | Issued by content-service |
-| FR-020 | An authenticated user shall be able to create a post with caption, required lat/lng, hashtags, and media. | Must include visual media: image(s) and/or video per allowed modes |
+| FR-020 | An authenticated user shall be able to create a post with a required place `title`, caption, required lat/lng, hashtags, and media. | `title` is the place name; must include visual media per allowed modes |
 | FR-021 | Post media shall be one of: (1) 1–10 images; (2) 1–10 images + one audio; (3) exactly one video. | No text-only; no audio-only; no video combined with images or audio |
 | FR-022 | Max images per post shall be 10; max video and audio duration shall default to 10 seconds and be configurable. | Config/env on content-service |
 | FR-023 | An authenticated user shall be able to fetch a post by id. | Public post payload |
@@ -66,8 +66,9 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-027 | An authenticated user shall be able to bookmark and unbookmark a post. | |
 | FR-028 | An authenticated user shall be able to list their own bookmarked posts. | Caller only; not visible to other users |
 | FR-029 | An authenticated user shall be able to share a post. | Returns share URL; increments share count |
-| FR-030 | An authenticated user shall be able to search posts by text and hashtags. | Full-text over caption + hashtags |
+| FR-030 | An authenticated user shall be able to search posts by text and hashtags. | Full-text over title + caption + hashtags |
 | FR-031 | An authenticated user shall be able to list posts for a hashtag. | Keyset pagination |
+| FR-031a | An authenticated user shall be able to list posts related to a seed post: remaining search matches for an optional query, then similar posts. | Not the home feed; keyset pagination |
 | FR-032 | An authenticated user shall be able to reply to a top-level comment and list those replies. | One level only (no reply-to-reply); keyset pagination |
 | FR-033 | An authenticated user shall be able to like, dislike, or clear their reaction on a comment. | At most one of like/dislike per user per comment |
 | FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
@@ -77,6 +78,13 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-038 | An authenticated user shall be able to fetch their reputation score, level, and earned badges. | Also exposed on public profile (score, level, badges) |
 | FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; lat/lng optional (enables nearby + geo boost) |
 | FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
+| FR-041 | An authenticated user shall be able to list trending posts. | HN-style score without follow/geo; keyset pagination; default 7-day window |
+| FR-042 | An authenticated user shall be able to list trending creators. | Ranked by recent interaction events; top-N; hydrate profiles via identity |
+| FR-043 | An authenticated user shall be able to ask a question with title and body, optionally linked to a post and/or lat/lng. | |
+| FR-044 | An authenticated user shall be able to list and fetch questions (optionally filter by `post_id`). | Keyset pagination |
+| FR-045 | An authenticated user shall be able to upvote, downvote, or clear their vote on a question or answer. | At most one vote per user per item |
+| FR-046 | The author of a question shall be able to mark it closed. | Closed questions reject new answers; votes still allowed |
+| FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
 
 ## Feed ranking (non-ML)
 
@@ -108,24 +116,54 @@ comment / share / bookmark / unbookmark (self-actions skipped except `create`).
 Score is recomputed from that log and synced to identity:
 
 \[
-c_i = \frac{w(\mathrm{kind}_i)}{(t_i+2)^{1.5}},\quad
-R(u)=\mathrm{round}\Big(100\log\big(1+(\max(0,\sum c_i))^{0.8}\big)\Big)
+c_i = \frac{w(\mathrm{kind}_i)}{(t_i+4)^{1.5}},\quad
+R(u)=\mathrm{round}\Big(40\log_{10}\big(1+(\max(0,\sum c_i))^{0.8}\big)\Big)
 \]
 
 | Kind | Weight \(w\) |
 | --- | --- |
-| create | 0.25 |
+| create | 0.1 |
 | like / unlike | +1 / −1 |
 | dislike / undislike | −1 / +1 |
 | comment | 3 |
-| share | 4 |
+| share | 3 |
 | bookmark / unbookmark | +3 / −3 |
 
+One create + like + comment + share from a viewer lands around **~10 pts**, not Contributor. Levels stay 100 / 400 / 1000.
 Lookback 90 days (up to 5000 events). Feed still uses denormalized counters for ranking.
-Levels: 100 Contributor / 400 Local Guide / 1000 Pathfinder.
 
 Ownership: event log on **content-service**; denormalized score + badges on **identity-service**.
 See `docs/reputation-engagement-scoring.md`.
+
+## Related posts (from search)
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /posts/{id}/related?q=` | Other posts matching `q` first (excluding seed); then FTS-similar posts that do **not** match `q`. Without `q`, similar only. |
+| Response `source` | `search` \| `similar` \| `mixed` — this is **not** the home feed |
+
+## Trending (non-ML)
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /posts/trending` | Recent posts (default 7 days) ranked with feed HN formula **without** follow/geo boosts; keyset via `cursor` |
+| `GET /creators/trending` | Authors ranked by reputation-weighted interaction events in the same window; `{ user_id, score }[]` top-N (no cursor) |
+
+Config under content-service `trending.*` (`lookback_days`, `candidate_limit`, `creator_event_limit`).
+
+## Q&A (Stack Overflow–style)
+
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /questions` | Create with title + body; optional `post_id`, optional lat/lng |
+| `GET /questions` | List (optional `post_id` filter); keyset cursor |
+| `GET /questions/{id}` | Detail |
+| `POST /questions/{id}/vote` | `{ vote: "up"\|"down"\|null }` |
+| `POST /questions/{id}/close` | Author only; blocks new answers |
+| `POST/GET /questions/{id}/answers` | Create/list answers (create rejected if closed) |
+| `POST /answers/{id}/vote` | Same vote shape |
+
+Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption + hashtags. Migration may wipe local post rows to apply NOT NULL.
 
 ## Use cases
 
@@ -314,3 +352,38 @@ See `docs/reputation-engagement-scoring.md`.
 - **Goal:** Browse posts from people they follow and from nearby places
 - **Main flow:** Client sends viewer location → content-service builds following + nearby candidate pools → ranks with the documented heuristic → returns a paginated feed.
 - **Related FRs:** FR-039, FR-040
+
+### UC-028 — Trending posts
+
+- **Actor:** User
+- **Goal:** Discover posts that are hot right now
+- **Main flow:** Client calls `GET /posts/trending` → content-service loads recent posts in the trending window → ranks with HN gravity (no follow/geo) → returns a paginated page.
+- **Related FRs:** FR-041
+
+### UC-029 — Trending creators
+
+- **Actor:** User
+- **Goal:** Discover creators gaining engagement
+- **Main flow:** Client calls `GET /creators/trending` → content-service aggregates recent interaction events by author → returns ranked `user_id` + score; client hydrates public profiles from identity.
+- **Related FRs:** FR-042
+
+### UC-030 — Ask a question
+
+- **Actor:** User
+- **Goal:** Ask the community about a place or topic
+- **Main flow:** Submit title + body (optional post link and/or lat/lng) → question is stored open for answers.
+- **Related FRs:** FR-043
+
+### UC-031 — Answer and vote on Q&A
+
+- **Actor:** User
+- **Goal:** Contribute or rank answers
+- **Main flow:** Answer an open question and/or upvote/downvote questions and answers (one vote per user per item).
+- **Related FRs:** FR-045, FR-047
+
+### UC-032 — Close a question
+
+- **Actor:** Question author
+- **Goal:** Stop new answers
+- **Main flow:** Author closes the question → further answers are rejected; existing content and votes remain.
+- **Related FRs:** FR-046

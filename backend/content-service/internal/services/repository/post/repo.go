@@ -41,6 +41,7 @@ func (r *Repo) Create(ctx context.Context, in domain.CreateInput) (domain.Post, 
 	row, err := q.CreatePost(ctx, db.CreatePostParams{
 		ID:          pgUUID(postID),
 		AuthorID:    pgUUID(in.AuthorID),
+		Title:       in.Title,
 		Caption:     in.Caption,
 		Lat:         in.Lat,
 		Lng:         in.Lng,
@@ -521,7 +522,7 @@ func (r *Repo) ListBookmarks(ctx context.Context, userID uuid.UUID, p domain.Lis
 	ids := make([]pgtype.UUID, len(rows))
 	for i, row := range rows {
 		posts = append(posts, db.Post{
-			ID: row.ID, AuthorID: row.AuthorID, Caption: row.Caption,
+			ID: row.ID, AuthorID: row.AuthorID, Title: row.Title, Caption: row.Caption,
 			Lat: row.Lat, Lng: row.Lng, MediaMode: row.MediaMode,
 			LikeCount: row.LikeCount, DislikeCount: row.DislikeCount,
 			CommentCount: row.CommentCount, ShareCount: row.ShareCount,
@@ -587,6 +588,23 @@ func (r *Repo) ListAuthorInteractions(ctx context.Context, authorID uuid.UUID, s
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "list author interactions")
 	}
+	return interactionsFromRows(rows)
+}
+
+func (r *Repo) ListInteractionsSince(ctx context.Context, since time.Time, limit int) ([]domain.InteractionEvent, error) {
+	if limit <= 0 {
+		return []domain.InteractionEvent{}, nil
+	}
+	rows, err := r.q.ListInteractionEventsSince(ctx, db.ListInteractionEventsSinceParams{
+		Since: pgtype.Timestamptz{Time: since, Valid: true}, ResultLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list interactions since")
+	}
+	return interactionsFromRows(rows)
+}
+
+func interactionsFromRows(rows []db.PostInteractionEvent) ([]domain.InteractionEvent, error) {
 	out := make([]domain.InteractionEvent, 0, len(rows))
 	for _, row := range rows {
 		ev, err := interactionFromDB(row)
@@ -643,6 +661,80 @@ func (r *Repo) Search(ctx context.Context, query string, p domain.ListParams) (d
 		return domain.Page{}, apperr.Wrap(err, apperr.CodeInternal, "search posts")
 	}
 	return r.hydratePage(ctx, rows, p.Limit)
+}
+
+func (r *Repo) SearchExcluding(ctx context.Context, query string, excludeID uuid.UUID, p domain.ListParams) (domain.Page, error) {
+	rows, err := r.q.SearchPostsExcluding(ctx, db.SearchPostsExcludingParams{
+		Query:           query,
+		ExcludeID:       pgUUID(excludeID),
+		CursorCreatedAt: cursorTime(p.Cursor),
+		CursorID:        cursorID(p.Cursor),
+		ResultLimit:     int32(p.Limit + 1),
+	})
+	if err != nil {
+		return domain.Page{}, apperr.Wrap(err, apperr.CodeInternal, "search posts excluding")
+	}
+	return r.hydratePage(ctx, rows, p.Limit)
+}
+
+func (r *Repo) SeedText(ctx context.Context, postID uuid.UUID) (string, error) {
+	row, err := r.q.GetPostSeedText(ctx, pgUUID(postID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", apperr.ErrNotFound
+		}
+		return "", apperr.Wrap(err, apperr.CodeInternal, "get seed text")
+	}
+	return strings.TrimSpace(row.Title + " " + row.Caption + " " + row.Hashtags), nil
+}
+
+func (r *Repo) ListSimilar(ctx context.Context, seedText string, excludeID uuid.UUID, excludeQuery string, cursor *domain.SimilarCursor, limit int) (domain.ScoredPage, error) {
+	seedText = strings.TrimSpace(seedText)
+	if seedText == "" || limit <= 0 {
+		return domain.ScoredPage{Posts: []domain.ScoredPost{}}, nil
+	}
+	params := db.ListSimilarPostsParams{
+		SeedText:    seedText,
+		ExcludeID:   pgUUID(excludeID),
+		ResultLimit: int32(limit + 1),
+	}
+	if q := strings.TrimSpace(excludeQuery); q != "" {
+		params.ExcludeQuery = pgtype.Text{String: q, Valid: true}
+	}
+	if cursor != nil {
+		params.CursorRank = pgtype.Float8{Float64: cursor.Rank, Valid: true}
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt.UTC(), Valid: true}
+		params.CursorID = pgUUID(cursor.ID)
+	}
+	rows, err := r.q.ListSimilarPosts(ctx, params)
+	if err != nil {
+		return domain.ScoredPage{}, apperr.Wrap(err, apperr.CodeInternal, "list similar posts")
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	dbPosts := make([]db.Post, 0, len(rows))
+	ranks := make([]float64, 0, len(rows))
+	for _, row := range rows {
+		dbPosts = append(dbPosts, db.Post{
+			ID: row.ID, AuthorID: row.AuthorID, Title: row.Title, Caption: row.Caption,
+			Lat: row.Lat, Lng: row.Lng, MediaMode: row.MediaMode,
+			LikeCount: row.LikeCount, DislikeCount: row.DislikeCount,
+			CommentCount: row.CommentCount, ShareCount: row.ShareCount,
+			BookmarkCount: row.BookmarkCount, CreatedAt: row.CreatedAt,
+		})
+		ranks = append(ranks, row.Rank)
+	}
+	page, err := r.hydratePosts(ctx, dbPosts, postIDs(dbPosts), limit, false)
+	if err != nil {
+		return domain.ScoredPage{}, err
+	}
+	out := make([]domain.ScoredPost, 0, len(page.Posts))
+	for i, p := range page.Posts {
+		out = append(out, domain.ScoredPost{Post: p, Rank: ranks[i]})
+	}
+	return domain.ScoredPage{Posts: out, HasMore: hasMore}, nil
 }
 
 func (r *Repo) ListByHashtag(ctx context.Context, tag string, p domain.ListParams) (domain.Page, error) {
@@ -847,7 +939,7 @@ func postFromDB(row db.Post) (domain.Post, error) {
 		return domain.Post{}, err
 	}
 	return domain.Post{
-		ID: id, AuthorID: aid, Caption: row.Caption, Lat: row.Lat, Lng: row.Lng,
+		ID: id, AuthorID: aid, Title: row.Title, Caption: row.Caption, Lat: row.Lat, Lng: row.Lng,
 		MediaMode: domain.MediaMode(row.MediaMode),
 		LikeCount: row.LikeCount, DislikeCount: row.DislikeCount,
 		CommentCount: row.CommentCount, ShareCount: row.ShareCount, BookmarkCount: row.BookmarkCount,

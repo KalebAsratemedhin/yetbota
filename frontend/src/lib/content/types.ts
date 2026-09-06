@@ -112,10 +112,11 @@ export type ShareResponse = {
 export type QaVote = "up" | "down";
 
 export type CreateQuestionRequest = {
-  title: string;
   body: string;
   post_id?: string | null;
+  /** Place latitude when attaching a location (with lng). */
   lat?: number | null;
+  /** Place longitude when attaching a location (with lat). */
   lng?: number | null;
 };
 
@@ -126,7 +127,6 @@ export type VoteRequest = {
 export type Question = {
   id: string;
   author_id: string;
-  title: string;
   body: string;
   post_id?: string | null;
   lat?: number | null;

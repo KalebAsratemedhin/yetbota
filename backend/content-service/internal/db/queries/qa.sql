@@ -1,8 +1,8 @@
 -- name: CreateQuestion :one
 INSERT INTO questions (
-    id, author_id, title, body, post_id, lat, lng
+    id, author_id, body, post_id, lat, lng
 ) VALUES (
-    $1, $2, $3, $4, sqlc.narg(post_id), sqlc.narg(lat), sqlc.narg(lng)
+    $1, $2, $3, sqlc.narg(post_id), sqlc.narg(lat), sqlc.narg(lng)
 )
 RETURNING *;
 

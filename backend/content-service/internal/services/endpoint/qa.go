@@ -27,7 +27,6 @@ type QAService interface {
 
 type CreateQuestionRequest struct {
 	Principal auth.Principal
-	Title     string   `json:"title"`
 	Body      string   `json:"body"`
 	PostID    *string  `json:"post_id"`
 	Lat       *float64 `json:"lat"`
@@ -74,7 +73,6 @@ type AnswerVoteRequest struct {
 type QuestionJSON struct {
 	ID            string   `json:"id"`
 	AuthorID      string   `json:"author_id"`
-	Title         string   `json:"title"`
 	Body          string   `json:"body"`
 	PostID        *string  `json:"post_id,omitempty"`
 	Lat           *float64 `json:"lat,omitempty"`
@@ -125,7 +123,7 @@ func MakeCreateQuestionEndpoint(svc QAService) endpoint.Endpoint {
 			postID = &id
 		}
 		q, err := svc.CreateQuestion(ctx, qauc.CreateQuestionInput{
-			AuthorID: authorID, Title: req.Title, Body: req.Body,
+			AuthorID: authorID, Body: req.Body,
 			PostID: postID, Lat: req.Lat, Lng: req.Lng,
 		})
 		if err != nil {
@@ -268,7 +266,7 @@ func parseVote(raw *string) (*domain.Vote, error) {
 func toQuestionJSON(q domain.Question) QuestionJSON {
 	out := QuestionJSON{
 		ID: q.ID.String(), AuthorID: q.AuthorID.String(),
-		Title: q.Title, Body: q.Body,
+		Body: q.Body,
 		UpvoteCount: q.UpvoteCount, DownvoteCount: q.DownvoteCount,
 		AnswerCount: q.AnswerCount,
 		CreatedAt:   q.CreatedAt.UTC().Format(time.RFC3339Nano),

@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import CommentsPanel from "@/components/posts/CommentsPanel";
 import PostDetailCard from "@/components/posts/PostDetailCard";
 import PostMapPanel from "@/components/posts/PostMapPanel";
+import PostQuestionsPanel from "@/components/posts/PostQuestionsPanel";
 import { usePostSidePanel } from "@/hooks/use-post-side-panel";
 import { prefetchPostMedia } from "@/lib/media/prefetch";
 import type { Post } from "@/lib/content/types";
@@ -49,10 +50,12 @@ export default function SnapFeed({
   const {
     commentsOpen,
     mapOpen,
+    qaOpen,
     sideOpen,
     panelPostId,
     onCommentsClick,
     onMapClick,
+    onQaClick,
     closeMobile,
     followFocusedPost,
   } = usePostSidePanel({
@@ -213,6 +216,7 @@ export default function SnapFeed({
               fromUser={fromUser}
               onOpenComments={() => onCommentsClick(p.id)}
               onOpenMap={() => onMapClick(p.id)}
+              onOpenQa={() => onQaClick(p.id)}
             />
           </section>
         ))}
@@ -243,6 +247,16 @@ export default function SnapFeed({
           mobileOpen={mapOpen}
           onMobileClose={closeMobile}
           desktopOpen={mapOpen}
+        />
+      ) : null}
+      {qaOpen && activeSidePost ? (
+        <PostQuestionsPanel
+          postId={activeSidePost.id}
+          lat={activeSidePost.lat}
+          lng={activeSidePost.lng}
+          mobileOpen={qaOpen}
+          onMobileClose={closeMobile}
+          desktopOpen={qaOpen}
         />
       ) : null}
     </div>

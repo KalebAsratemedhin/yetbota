@@ -49,21 +49,24 @@ function VoteColumn({
   onDown,
   myVote,
   disabled,
+  disabledReason,
 }: {
   score: number;
   onUp: () => void;
   onDown: () => void;
   myVote: QaVote | null;
   disabled?: boolean;
+  disabledReason?: string;
 }) {
   return (
     <div className="flex w-10 shrink-0 flex-col items-center gap-0.5">
       <button
         type="button"
         disabled={disabled}
+        title={disabled ? disabledReason : undefined}
         onClick={onUp}
         className={cn(
-          "rounded-lg p-1 transition-colors disabled:opacity-40",
+          "rounded-lg p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
           myVote === "up"
             ? "bg-brand/15 text-brand"
             : "text-fg-faint hover:bg-overlay hover:text-fg"
@@ -76,9 +79,10 @@ function VoteColumn({
       <button
         type="button"
         disabled={disabled}
+        title={disabled ? disabledReason : undefined}
         onClick={onDown}
         className={cn(
-          "rounded-lg p-1 transition-colors disabled:opacity-40",
+          "rounded-lg p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
           myVote === "down"
             ? "bg-rose-500/15 text-rose-400"
             : "text-fg-faint hover:bg-overlay hover:text-fg"
@@ -112,6 +116,7 @@ function QuestionBlock({ question }: { question: Question }) {
   });
 
   async function vote(clicked: QaVote) {
+    if (isAuthor) return;
     const prev = myVote;
     const vote = nextVote(clicked);
     setMyVote(vote);
@@ -138,24 +143,23 @@ function QuestionBlock({ question }: { question: Question }) {
         <VoteColumn
           score={question.upvote_count - question.downvote_count}
           myVote={myVote}
+          disabled={isAuthor}
+          disabledReason="You can’t vote on your own question"
           onUp={() => void vote("up")}
           onDown={() => void vote("down")}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-extrabold tracking-tight text-fg sm:text-2xl">
-              {question.title}
-            </h1>
+          <div className="flex flex-wrap items-start gap-2">
+            <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-fg sm:text-[15px]">
+              {question.body}
+            </p>
             {closed ? (
-              <span className="inline-flex items-center gap-1 rounded bg-fg-faint/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-fg-muted uppercase">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-fg-faint/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-fg-muted uppercase">
                 <Lock className="h-3 w-3" />
                 Closed
               </span>
             ) : null}
           </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-fg">
-            {question.body}
-          </p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg-faint">
             <AuthorLine userId={question.author_id} />
             <span>{relativeTime(question.created_at)}</span>
@@ -191,10 +195,13 @@ function AnswerRow({
   answer: Answer;
   questionId: string;
 }) {
+  const viewerId = useAppSelector((s) => s.auth.userId);
+  const isAuthor = Boolean(viewerId && viewerId === answer.author_id);
   const [voteAnswer] = useVoteAnswerMutation();
   const { myVote, setMyVote, nextVote } = useLocalVote();
 
   async function vote(clicked: QaVote) {
+    if (isAuthor) return;
     const prev = myVote;
     const vote = nextVote(clicked);
     setMyVote(vote);
@@ -211,6 +218,8 @@ function AnswerRow({
       <VoteColumn
         score={answer.upvote_count - answer.downvote_count}
         myVote={myVote}
+        disabled={isAuthor}
+        disabledReason="You can’t vote on your own answer"
         onUp={() => void vote("up")}
         onDown={() => void vote("down")}
       />

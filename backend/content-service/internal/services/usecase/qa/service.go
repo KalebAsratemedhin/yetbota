@@ -33,7 +33,6 @@ func NewService(repo domain.Repository, defaultPageSize, maxPageSize int) *Servi
 
 type CreateQuestionInput struct {
 	AuthorID uuid.UUID
-	Title    string
 	Body     string
 	PostID   *uuid.UUID
 	Lat      *float64
@@ -57,19 +56,14 @@ type AnswerPageResult struct {
 }
 
 func (s *Service) CreateQuestion(ctx context.Context, in CreateQuestionInput) (domain.Question, error) {
-	title := strings.TrimSpace(in.Title)
 	body := strings.TrimSpace(in.Body)
 	var details []apperr.Field
-	if title == "" {
-		details = append(details, apperr.Required("title"))
-	} else if utf8.RuneCountInString(title) > 300 {
-		details = append(details, apperr.Field{Field: "title", Code: "TOO_LONG", Message: "title must be at most 300 characters"})
-	}
 	if body == "" {
 		details = append(details, apperr.Required("body"))
 	} else if utf8.RuneCountInString(body) > 10000 {
 		details = append(details, apperr.Field{Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters"})
 	}
+	// Optional place location (same idea as post lat/lng — a chosen place, not only GPS).
 	if (in.Lat == nil) != (in.Lng == nil) {
 		details = append(details, apperr.Field{
 			Field: "lat/lng", Code: "INVALID", Message: "lat and lng must both be provided or both omitted",
@@ -92,7 +86,7 @@ func (s *Service) CreateQuestion(ctx context.Context, in CreateQuestionInput) (d
 		}
 	}
 	return s.repo.CreateQuestion(ctx, domain.CreateQuestionInput{
-		AuthorID: in.AuthorID, Title: title, Body: body,
+		AuthorID: in.AuthorID, Body: body,
 		PostID: in.PostID, Lat: in.Lat, Lng: in.Lng,
 	})
 }
@@ -140,6 +134,15 @@ func (s *Service) SetQuestionVote(ctx context.Context, questionID, userID uuid.U
 	if err := validateVote(vote); err != nil {
 		return domain.Question{}, err
 	}
+	q, err := s.repo.GetQuestion(ctx, questionID)
+	if err != nil {
+		return domain.Question{}, err
+	}
+	if q.AuthorID == userID {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "vote", Code: "FORBIDDEN", Message: "you can’t vote on your own question",
+		})
+	}
 	return s.repo.SetQuestionVote(ctx, questionID, userID, vote)
 }
 
@@ -177,6 +180,15 @@ func (s *Service) ListAnswers(ctx context.Context, questionID uuid.UUID, in List
 func (s *Service) SetAnswerVote(ctx context.Context, answerID, userID uuid.UUID, vote *domain.Vote) (domain.Answer, error) {
 	if err := validateVote(vote); err != nil {
 		return domain.Answer{}, err
+	}
+	a, err := s.repo.GetAnswer(ctx, answerID)
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	if a.AuthorID == userID {
+		return domain.Answer{}, apperr.Validation(apperr.Field{
+			Field: "vote", Code: "FORBIDDEN", Message: "you can’t vote on your own answer",
+		})
 	}
 	return s.repo.SetAnswerVote(ctx, answerID, userID, vote)
 }

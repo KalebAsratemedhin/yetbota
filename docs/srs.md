@@ -80,9 +80,9 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
 | FR-041 | An authenticated user shall be able to list trending posts. | HN-style score without follow/geo; keyset pagination; default 7-day window |
 | FR-042 | An authenticated user shall be able to list trending creators. | Ranked by recent interaction events; top-N; hydrate profiles via identity |
-| FR-043 | An authenticated user shall be able to ask a question with title and body, optionally linked to a post and/or lat/lng. | |
+| FR-043 | An authenticated user shall be able to ask a question with a body, optionally linked to a post and/or a place lat/lng. | Lat/lng optional; when set, both required — place location like posts, not GPS-only |
 | FR-044 | An authenticated user shall be able to list and fetch questions (optionally filter by `post_id`). | Keyset pagination |
-| FR-045 | An authenticated user shall be able to upvote, downvote, or clear their vote on a question or answer. | At most one vote per user per item |
+| FR-045 | An authenticated user shall be able to upvote, downvote, or clear their vote on a question or answer. | At most one vote per user per item; authors cannot vote on their own question/answer |
 | FR-046 | The author of a question shall be able to mark it closed. | Closed questions reject new answers; votes still allowed |
 | FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
 
@@ -155,7 +155,7 @@ Config under content-service `trending.*` (`lookback_days`, `candidate_limit`, `
 
 | Endpoint | Behavior |
 | --- | --- |
-| `POST /questions` | Create with title + body; optional `post_id`, optional lat/lng |
+| `POST /questions` | Create with `body`; optional `post_id`; optional place `lat`/`lng` (both or neither) |
 | `GET /questions` | List (optional `post_id` filter); keyset cursor |
 | `GET /questions/{id}` | Detail |
 | `POST /questions/{id}/vote` | `{ vote: "up"\|"down"\|null }` |
@@ -371,7 +371,7 @@ Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption 
 
 - **Actor:** User
 - **Goal:** Ask the community about a place or topic
-- **Main flow:** Submit title + body (optional post link and/or lat/lng) → question is stored open for answers.
+- **Main flow:** Submit body (optional post link and/or place lat/lng like a post) → question is stored open for answers.
 - **Related FRs:** FR-043
 
 ### UC-031 — Answer and vote on Q&A

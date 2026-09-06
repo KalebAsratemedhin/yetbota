@@ -87,7 +87,6 @@ CREATE TABLE post_interaction_events (
 CREATE TABLE questions (
     id UUID PRIMARY KEY,
     author_id UUID NOT NULL,
-    title TEXT NOT NULL,
     body TEXT NOT NULL DEFAULT '',
     post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
     lat DOUBLE PRECISION,

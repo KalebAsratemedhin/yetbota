@@ -492,8 +492,9 @@ paths:
       tags: [Q&A]
       summary: Ask a question
       description: |
-        Stack Overflow–style question. Optional `post_id` links to a post.
-        Optional `lat`/`lng` (both or neither) for a location.
+        Ask with a single `body`. Optional `post_id` links to a post.
+        Optional `lat`/`lng` (both or neither) attach a place location the same way
+        posts do (map pick / place coords), not only the device’s current GPS.
       operationId: createQuestion
       requestBody:
         required: true
@@ -580,6 +581,7 @@ paths:
     post:
       tags: [Q&A]
       summary: Vote on a question
+      description: Authors cannot vote on their own question.
       operationId: voteQuestion
       parameters:
         - $ref: "#/components/parameters/QuestionId"
@@ -659,6 +661,7 @@ paths:
     post:
       tags: [Q&A]
       summary: Vote on an answer
+      description: Authors cannot vote on their own answer.
       operationId: voteAnswer
       parameters:
         - $ref: "#/components/parameters/AnswerId"
@@ -984,11 +987,8 @@ components:
           type: string
     CreateQuestionRequest:
       type: object
-      required: [title, body]
+      required: [body]
       properties:
-        title:
-          type: string
-          maxLength: 300
         body:
           type: string
           maxLength: 10000
@@ -999,9 +999,11 @@ components:
         lat:
           type: number
           nullable: true
+          description: Place latitude when attaching a location (with lng)
         lng:
           type: number
           nullable: true
+          description: Place longitude when attaching a location (with lat)
     VoteRequest:
       type: object
       properties:
@@ -1012,7 +1014,7 @@ components:
           description: Omit or null to clear vote
     Question:
       type: object
-      required: [id, author_id, title, body, upvote_count, downvote_count, answer_count, created_at]
+      required: [id, author_id, body, upvote_count, downvote_count, answer_count, created_at]
       properties:
         id:
           type: string
@@ -1020,8 +1022,6 @@ components:
         author_id:
           type: string
           format: uuid
-        title:
-          type: string
         body:
           type: string
         post_id:

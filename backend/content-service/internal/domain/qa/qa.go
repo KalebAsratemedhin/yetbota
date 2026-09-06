@@ -17,7 +17,6 @@ const (
 type Question struct {
 	ID            uuid.UUID
 	AuthorID      uuid.UUID
-	Title         string
 	Body          string
 	PostID        *uuid.UUID
 	Lat           *float64
@@ -67,7 +66,6 @@ type AnswerPage struct {
 
 type CreateQuestionInput struct {
 	AuthorID uuid.UUID
-	Title    string
 	Body     string
 	PostID   *uuid.UUID
 	Lat      *float64

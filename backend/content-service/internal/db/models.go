@@ -109,7 +109,6 @@ type PostReaction struct {
 type Question struct {
 	ID            pgtype.UUID        `json:"id"`
 	AuthorID      pgtype.UUID        `json:"author_id"`
-	Title         string             `json:"title"`
 	Body          string             `json:"body"`
 	PostID        pgtype.UUID        `json:"post_id"`
 	Lat           pgtype.Float8      `json:"lat"`

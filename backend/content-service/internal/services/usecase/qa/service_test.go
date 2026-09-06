@@ -8,20 +8,13 @@ import (
 	"github.com/yetbota/content-service/internal/domain/apperr"
 )
 
-func TestCreateQuestion_RequiresTitleAndBody(t *testing.T) {
+func TestCreateQuestion_RequiresBody(t *testing.T) {
 	s := NewService(nil, 20, 50)
 	_, err := s.CreateQuestion(t.Context(), CreateQuestionInput{
-		AuthorID: uuid.New(), Title: "", Body: "x",
-	})
-	ae, ok := apperr.As(err)
-	if !ok || ae.Code != apperr.CodeValidation {
-		t.Fatalf("expected validation, got %v", err)
-	}
-	_, err = s.CreateQuestion(t.Context(), CreateQuestionInput{
-		AuthorID: uuid.New(), Title: "Q", Body: "",
+		AuthorID: uuid.New(), Body: "",
 	})
 	if _, ok := apperr.As(err); !ok {
-		t.Fatalf("expected validation for empty body")
+		t.Fatalf("expected validation for empty body, got %v", err)
 	}
 }
 
@@ -29,7 +22,7 @@ func TestCreateQuestion_LatLngPair(t *testing.T) {
 	s := NewService(nil, 20, 50)
 	lat := 9.0
 	_, err := s.CreateQuestion(t.Context(), CreateQuestionInput{
-		AuthorID: uuid.New(), Title: "Q", Body: "B", Lat: &lat,
+		AuthorID: uuid.New(), Body: "Is this open late?", Lat: &lat,
 	})
 	if _, ok := apperr.As(err); !ok {
 		t.Fatalf("expected validation when only lat set")

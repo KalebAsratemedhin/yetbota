@@ -46,15 +46,16 @@ function QuestionRow({ q }: { q: Question }) {
           <span className="text-[10px] text-fg-faint">votes</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-fg">{q.title}</h2>
+          <div className="flex flex-wrap items-start gap-2">
+            <p className="line-clamp-4 text-sm leading-relaxed text-fg">
+              {q.body}
+            </p>
             {closed ? (
-              <span className="rounded bg-fg-faint/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-fg-muted uppercase">
+              <span className="shrink-0 rounded bg-fg-faint/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-fg-muted uppercase">
                 Closed
               </span>
             ) : null}
           </div>
-          <p className="mt-1 line-clamp-2 text-sm text-fg-muted">{q.body}</p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-fg-faint">
             <QuestionAuthor userId={q.author_id} />
             <span>{relativeTime(q.created_at)}</span>

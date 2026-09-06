@@ -39,7 +39,7 @@ func (r *Repo) PostExists(ctx context.Context, postID uuid.UUID) (bool, error) {
 func (r *Repo) CreateQuestion(ctx context.Context, in domain.CreateQuestionInput) (domain.Question, error) {
 	params := db.CreateQuestionParams{
 		ID: pgUUID(uuid.New()), AuthorID: pgUUID(in.AuthorID),
-		Title: in.Title, Body: in.Body,
+		Body: in.Body,
 	}
 	if in.PostID != nil {
 		params.PostID = pgUUID(*in.PostID)
@@ -355,7 +355,7 @@ func questionFromDB(row db.Question) (domain.Question, error) {
 		return domain.Question{}, err
 	}
 	q := domain.Question{
-		ID: id, AuthorID: aid, Title: row.Title, Body: row.Body,
+		ID: id, AuthorID: aid, Body: row.Body,
 		UpvoteCount: row.UpvoteCount, DownvoteCount: row.DownvoteCount,
 		AnswerCount: row.AnswerCount, CreatedAt: row.CreatedAt.Time,
 	}

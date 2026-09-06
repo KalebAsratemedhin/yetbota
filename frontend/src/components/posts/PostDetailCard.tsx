@@ -214,6 +214,7 @@ export default function PostDetailCard({
   fromUser,
   onOpenComments,
   onOpenMap,
+  onOpenQa,
   layout = "default",
 }: {
   post: Post;
@@ -222,6 +223,7 @@ export default function PostDetailCard({
   fromUser?: boolean;
   onOpenComments?: () => void;
   onOpenMap?: () => void;
+  onOpenQa?: () => void;
   /** `snap` = full-height slide for vertical social feed. */
   layout?: "default" | "snap";
 }) {
@@ -237,7 +239,7 @@ export default function PostDetailCard({
       data-post-id={post.id}
       className={cn(
         snap
-          ? "flex h-[calc(100dvh-5rem)] min-h-[calc(100dvh-5rem)] flex-col bg-bg"
+          ? "flex min-h-[calc(100dvh-5rem)] flex-col bg-bg"
           : "border-b border-border-subtle",
         className
       )}
@@ -246,7 +248,12 @@ export default function PostDetailCard({
         <AuthorHeader authorId={post.author_id} createdAt={post.created_at} />
       </div>
 
-      <div className={cn(snap ? "min-h-0 flex-1 basis-0" : null)}>
+      <div
+        className={cn(
+          snap &&
+            "h-[min(58dvh,calc(100dvh-5rem-12rem))] min-h-[min(58dvh,calc(100dvh-5rem-12rem))] shrink-0"
+        )}
+      >
         <PostMediaGallery
           media={post.media}
           mode={post.media_mode}
@@ -267,6 +274,7 @@ export default function PostDetailCard({
           post={post}
           commentsHref={commentsHref}
           onCommentsClick={onOpenComments}
+          onQaClick={onOpenQa}
         />
 
         <p className="text-sm font-semibold text-fg">{title}</p>
@@ -282,13 +290,6 @@ export default function PostDetailCard({
             <CaptionAuthorLink authorId={post.author_id} />
           </p>
         )}
-
-        <Link
-          href={`/qa/ask?post_id=${encodeURIComponent(post.id)}`}
-          className="inline-flex text-xs font-semibold text-brand hover:underline"
-        >
-          Ask about this place
-        </Link>
 
         {!snap && post.hashtags.length > 0 ? (
           <p className="flex flex-wrap gap-x-2 gap-y-1 text-sm">

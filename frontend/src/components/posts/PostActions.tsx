@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Bookmark,
   BookmarkCheck,
+  CircleHelp,
   MessageCircle,
   Share2,
   ThumbsDown,
@@ -29,6 +30,7 @@ export default function PostActions({
   compact,
   commentsHref,
   onCommentsClick,
+  onQaClick,
 }: {
   post: Post;
   initialReaction?: Reaction | null;
@@ -38,6 +40,8 @@ export default function PostActions({
   commentsHref?: string;
   /** Opens the in-page comments panel (preferred on post detail). */
   onCommentsClick?: () => void;
+  /** Opens the place Q&A panel. */
+  onQaClick?: () => void;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
   const isOwn = Boolean(viewerId && viewerId === post.author_id);
@@ -211,6 +215,20 @@ export default function PostActions({
         >
           <Share2 className="h-3.5 w-3.5" />
         </button>
+        {onQaClick ? (
+          <button
+            type="button"
+            onClick={onQaClick}
+            className={cn(
+              "inline-flex items-center rounded-full border border-border-subtle bg-surface font-semibold text-fg-muted transition-colors hover:text-fg",
+              btn
+            )}
+            aria-label="Place Q&A"
+            title="Place Q&A"
+          >
+            <CircleHelp className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -277,6 +295,17 @@ export default function PostActions({
       >
         <Share2 className="h-5 w-5" />
       </button>
+      {onQaClick ? (
+        <button
+          type="button"
+          onClick={onQaClick}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm text-fg hover:bg-surface-2"
+          aria-label="Place Q&A"
+          title="Questions about this place"
+        >
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      ) : null}
       <button
         type="button"
         disabled={bookmarking || unbookmarking}

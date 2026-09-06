@@ -46,7 +46,7 @@ Contract: `backend/content-service/api/openapi.yaml`.
 | Feed | `GET /feed?lat=&lng=` — following + nearby; signed-in `/` uses geolocation (device pref) |
 | Related | `GET /posts/{id}/related?q=` — **not** home feed: other search hits for `q`, then FTS-similar; response includes `source` (`search`\|`similar`\|`mixed`) |
 | Trending | `GET /posts/trending`, `GET /creators/trending` — home/post left rail (xl+); creators need identity hydrate |
-| Q&A | `POST/GET /questions`, vote/close, `POST/GET /questions/{id}/answers`, `POST /answers/{id}/vote` |
+| Q&A | Body-only questions (`POST /questions` with `body`; optional `post_id` + place `lat`/`lng`); list/vote/close; answers + answer votes |
 | Engage | Reactions, comments (incl. replies + comment reactions), bookmark, share |
 
 ## Reputation (identity-service)
@@ -74,7 +74,7 @@ Exposed on `UserInfo` from `/auth/me` and public profiles: `reputation_score`, `
 | `/compose` | Create post (required place title + media modes + geo) |
 | `/posts/[id]` | Post detail snap feed + trending rail. From search: `?q=` + `/related`. From profile: `?from=user` author continuation |
 | `/qa` | Community Q&A list |
-| `/qa/ask` | Ask a question (`?post_id=` optional) |
+| `/qa/ask` | Ask like compose: map pin or search place posts; `?post_id=` preselects Place post mode |
 | `/qa/[id]` | Question detail, answers, votes, close |
 | `/hashtags/[tag]` | Posts for one hashtag |
 | `/forgot-password` | Stub (“reset unavailable”) |

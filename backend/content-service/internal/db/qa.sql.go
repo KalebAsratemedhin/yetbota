@@ -69,7 +69,7 @@ const adjustQuestionAnswerCount = `-- name: AdjustQuestionAnswerCount :one
 UPDATE questions
 SET answer_count = answer_count + $1
 WHERE id = $2
-RETURNING id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
 `
 
 type AdjustQuestionAnswerCountParams struct {
@@ -83,7 +83,6 @@ func (q *Queries) AdjustQuestionAnswerCount(ctx context.Context, arg AdjustQuest
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -102,7 +101,7 @@ const adjustQuestionDownvoteCount = `-- name: AdjustQuestionDownvoteCount :one
 UPDATE questions
 SET downvote_count = downvote_count + $1
 WHERE id = $2
-RETURNING id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
 `
 
 type AdjustQuestionDownvoteCountParams struct {
@@ -116,7 +115,6 @@ func (q *Queries) AdjustQuestionDownvoteCount(ctx context.Context, arg AdjustQue
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -135,7 +133,7 @@ const adjustQuestionUpvoteCount = `-- name: AdjustQuestionUpvoteCount :one
 UPDATE questions
 SET upvote_count = upvote_count + $1
 WHERE id = $2
-RETURNING id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
 `
 
 type AdjustQuestionUpvoteCountParams struct {
@@ -149,7 +147,6 @@ func (q *Queries) AdjustQuestionUpvoteCount(ctx context.Context, arg AdjustQuest
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -169,7 +166,7 @@ UPDATE questions
 SET closed_at = NOW(), closed_by = $1
 WHERE id = $2
   AND closed_at IS NULL
-RETURNING id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
 `
 
 type CloseQuestionParams struct {
@@ -183,7 +180,6 @@ func (q *Queries) CloseQuestion(ctx context.Context, arg CloseQuestionParams) (Q
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -233,17 +229,16 @@ func (q *Queries) CreateAnswer(ctx context.Context, arg CreateAnswerParams) (Ans
 
 const createQuestion = `-- name: CreateQuestion :one
 INSERT INTO questions (
-    id, author_id, title, body, post_id, lat, lng
+    id, author_id, body, post_id, lat, lng
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6
 )
-RETURNING id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
 `
 
 type CreateQuestionParams struct {
 	ID       pgtype.UUID   `json:"id"`
 	AuthorID pgtype.UUID   `json:"author_id"`
-	Title    string        `json:"title"`
 	Body     string        `json:"body"`
 	PostID   pgtype.UUID   `json:"post_id"`
 	Lat      pgtype.Float8 `json:"lat"`
@@ -254,7 +249,6 @@ func (q *Queries) CreateQuestion(ctx context.Context, arg CreateQuestionParams) 
 	row := q.db.QueryRow(ctx, createQuestion,
 		arg.ID,
 		arg.AuthorID,
-		arg.Title,
 		arg.Body,
 		arg.PostID,
 		arg.Lat,
@@ -264,7 +258,6 @@ func (q *Queries) CreateQuestion(ctx context.Context, arg CreateQuestionParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -351,7 +344,7 @@ func (q *Queries) GetAnswerVote(ctx context.Context, arg GetAnswerVoteParams) (A
 }
 
 const getQuestionByID = `-- name: GetQuestionByID :one
-SELECT id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at FROM questions WHERE id = $1
+SELECT id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at FROM questions WHERE id = $1
 `
 
 func (q *Queries) GetQuestionByID(ctx context.Context, id pgtype.UUID) (Question, error) {
@@ -360,7 +353,6 @@ func (q *Queries) GetQuestionByID(ctx context.Context, id pgtype.UUID) (Question
 	err := row.Scan(
 		&i.ID,
 		&i.AuthorID,
-		&i.Title,
 		&i.Body,
 		&i.PostID,
 		&i.Lat,
@@ -449,7 +441,7 @@ func (q *Queries) ListAnswersByQuestion(ctx context.Context, arg ListAnswersByQu
 }
 
 const listQuestions = `-- name: ListQuestions :many
-SELECT id, author_id, title, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at FROM questions
+SELECT id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at FROM questions
 WHERE (
     $1::uuid IS NULL
     OR post_id = $1
@@ -486,7 +478,6 @@ func (q *Queries) ListQuestions(ctx context.Context, arg ListQuestionsParams) ([
 		if err := rows.Scan(
 			&i.ID,
 			&i.AuthorID,
-			&i.Title,
 			&i.Body,
 			&i.PostID,
 			&i.Lat,

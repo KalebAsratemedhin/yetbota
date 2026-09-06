@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-export type SidePanelMode = "none" | "comments" | "map";
+export type SidePanelMode = "none" | "comments" | "map" | "qa";
 
 export function usePostSidePanel({
   initialMode = "none" as SidePanelMode,
@@ -38,6 +38,11 @@ export function usePostSidePanel({
     [toggleMode]
   );
 
+  const onQaClick = useCallback(
+    (postId: string) => toggleMode("qa", postId),
+    [toggleMode]
+  );
+
   const closeMobile = useCallback(() => setMode("none"), []);
 
   const followFocusedPost = useCallback((focusedId: string) => {
@@ -49,9 +54,11 @@ export function usePostSidePanel({
     panelPostId,
     commentsOpen: mode === "comments",
     mapOpen: mode === "map",
+    qaOpen: mode === "qa",
     sideOpen: mode !== "none",
     onCommentsClick,
     onMapClick,
+    onQaClick,
     closeMobile,
     followFocusedPost,
   };

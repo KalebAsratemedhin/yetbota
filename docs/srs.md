@@ -19,12 +19,14 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Frontend | Next.js | |
 | content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A** |
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
-| ai-service | Python | |
+| ai-service | Python | FastAPI; future RAG ingest + post similarity → Surreal edges |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follow relationships. Local: Docker in `backend/docker-compose.yml` |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
+| Migrations (Python) | Alembic | ai-service; version table `alembic_version_ai` |
 | Data access (Go) | sqlc + pgx | Postgres |
+| Data access (Python) | SQLAlchemy 2 + asyncpg | ai-service |
 | Password hashing | bcrypt | |
 | Access token | JWT (HS256), short-lived | |
 | Refresh token | Opaque, stored hashed | |

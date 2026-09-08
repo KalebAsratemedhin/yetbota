@@ -21,7 +21,8 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
 | ai-service | Python | FastAPI; future RAG ingest + post similarity → Surreal edges |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
-| Graph DB | SurrealDB | Shared; follow relationships. Local: Docker in `backend/docker-compose.yml` |
+| Graph DB | SurrealDB | Shared; follow relationships + future post embeddings/similarity. Local: Docker in `backend/docker-compose.yml` |
+| Messaging | RabbitMQ | `post.created` content → ai (`yetbota.events` / `ai.post.ingest`) |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
 | Migrations (Python) | Alembic | ai-service; version table `alembic_version_ai` |

@@ -15,6 +15,9 @@ httpx>=0.28.0,<1
 # SurrealDB graph
 surrealdb>=1.0.0,<2
 
+# Messaging (content → ai post.created)
+aio-pika>=9.4.0,<10
+
 # --- Planned for RAG / similarity (install when implementing ingest) ---
 # numpy>=2.0.0,<3
 # sentence-transformers>=3.0.0,<4

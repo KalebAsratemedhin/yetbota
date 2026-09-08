@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"math"
 	"regexp"
 	"sort"
@@ -28,6 +29,11 @@ type FollowingStore interface {
 type ReputationNotifier interface {
 	Enabled() bool
 	SyncScore(ctx context.Context, userID uuid.UUID, score, postsCreated, likesReceived int64) error
+}
+
+// PostCreatedPublisher notifies downstream services (ai-service) that a post exists.
+type PostCreatedPublisher interface {
+	PublishPostCreated(ctx context.Context, postID uuid.UUID) error
 }
 
 type FeedConfig struct {
@@ -55,6 +61,7 @@ type Service struct {
 	signer             media.Signer
 	follows            FollowingStore
 	reputation         ReputationNotifier
+	postEvents         PostCreatedPublisher
 	feed               FeedConfig
 	trending           TrendingConfig
 	repCfg             ReputationConfig
@@ -70,6 +77,7 @@ func NewService(
 	signer media.Signer,
 	follows FollowingStore,
 	reputation ReputationNotifier,
+	postEvents PostCreatedPublisher,
 	feed FeedConfig,
 	trending TrendingConfig,
 	repCfg ReputationConfig,
@@ -127,6 +135,7 @@ func NewService(
 	repCfg = repCfg.withDefaults()
 	return &Service{
 		posts: posts, signer: signer, follows: follows, reputation: reputation,
+		postEvents: postEvents,
 		feed: feed, trending: trending, repCfg: repCfg,
 		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
 		defaultPageSize: defaultPageSize, maxPageSize: maxPageSize,
@@ -253,6 +262,11 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 		return domain.Post{}, err
 	}
 	s.syncAuthorReputation(ctx, in.AuthorID)
+	if s.postEvents != nil {
+		if err := s.postEvents.PublishPostCreated(ctx, p.ID); err != nil {
+			slog.Warn("post_created_publish_failed", "post_id", p.ID.String(), "err", err.Error())
+		}
+	}
 	return p, nil
 }
 

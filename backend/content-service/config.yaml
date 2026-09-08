@@ -54,4 +54,6 @@ reputation:
 cors:
   allowed_origins:
     - "http://localhost:3000"
+rabbitmq:
+  url: "amqp://yetbota:yetbota@localhost:5672/"
 migrate_on_start: true

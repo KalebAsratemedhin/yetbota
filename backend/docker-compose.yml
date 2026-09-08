@@ -35,6 +35,21 @@ services:
       retries: 10
       start_period: 5s
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: yetbota-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: yetbota
+      RABBITMQ_DEFAULT_PASS: yetbota
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   yetbota_pgdata:
   yetbota_surreal:

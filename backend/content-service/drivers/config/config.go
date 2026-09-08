@@ -20,6 +20,7 @@ type Config struct {
 	Feed           FeedConfig       `yaml:"feed"`
 	Trending       TrendingConfig   `yaml:"trending"`
 	Reputation     ReputationConfig `yaml:"reputation"`
+	RabbitMQ       RabbitMQConfig   `yaml:"rabbitmq"`
 	CORS           CORSConfig       `yaml:"cors"`
 	MigrateOnStart bool             `yaml:"migrate_on_start"`
 }
@@ -100,6 +101,10 @@ type CORSConfig struct {
 	AllowedOrigins []string `yaml:"allowed_origins"`
 }
 
+type RabbitMQConfig struct {
+	URL string `yaml:"url"`
+}
+
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -173,6 +178,12 @@ func Load(path string) (Config, error) {
 	}
 	if v := os.Getenv("MIGRATE_ON_START"); v != "" {
 		cfg.MigrateOnStart = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("RABBITMQ_URL"); v != "" {
+		cfg.RabbitMQ.URL = v
+	}
+	if cfg.RabbitMQ.URL == "" {
+		cfg.RabbitMQ.URL = "amqp://yetbota:yetbota@localhost:5672/"
 	}
 	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
 		var origins []string

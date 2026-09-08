@@ -16,6 +16,7 @@ import (
 	"github.com/yetbota/content-service/drivers/identity"
 	"github.com/yetbota/content-service/drivers/logger"
 	"github.com/yetbota/content-service/drivers/postgres"
+	"github.com/yetbota/content-service/drivers/rabbitmq"
 	"github.com/yetbota/content-service/drivers/surreal"
 	"github.com/yetbota/content-service/internal/services/endpoint"
 	postrepo "github.com/yetbota/content-service/internal/services/repository/post"
@@ -86,11 +87,23 @@ func main() {
 
 	idClient := identity.NewClient(cfg.Identity.BaseURL)
 	repClient := identity.NewReputationClient(cfg.Identity.BaseURL, cfg.Identity.ServiceToken)
+
+	var postEvents postuc.PostCreatedPublisher
+	pub, err := rabbitmq.ConnectPublisher(cfg.RabbitMQ.URL)
+	if err != nil {
+		log.Warn("rabbitmq_unavailable", "err", err.Error())
+	} else {
+		postEvents = pub
+		defer func() { _ = pub.Close() }()
+		log.Info("rabbitmq_connected", "url_host", cfg.RabbitMQ.URL)
+	}
+
 	svc := postuc.NewService(
 		postrepo.New(pool),
 		signer,
 		follow.New(sdb),
 		repClient,
+		postEvents,
 		postuc.FeedConfig{
 			Gravity:          cfg.Feed.Gravity,
 			CommentWeight:    cfg.Feed.CommentWeight,

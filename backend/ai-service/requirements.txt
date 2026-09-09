@@ -18,7 +18,5 @@ surrealdb>=1.0.0,<2
 # Messaging (content → ai post.created)
 aio-pika>=9.4.0,<10
 
-# --- Planned for RAG / similarity (install when implementing ingest) ---
-# numpy>=2.0.0,<3
-# sentence-transformers>=3.0.0,<4
-# openai>=1.50.0,<2
+# Embeddings (ONNX MiniLM via fastembed — lighter than full PyTorch)
+fastembed>=0.4.0,<1

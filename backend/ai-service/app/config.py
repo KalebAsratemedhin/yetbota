@@ -27,8 +27,8 @@ class Settings(BaseSettings):
 
     rabbitmq_url: str = "amqp://yetbota:yetbota@localhost:5672/"
 
-    # Reserved for future ingest / embeddings (unused in scaffold).
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_dimensions: int = 384
     openai_api_key: str = ""
 
 

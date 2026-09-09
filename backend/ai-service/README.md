@@ -1,7 +1,7 @@
 # YetBota AI Service
 
-Python FastAPI service for post ingestion (RAG), embedding similarity, and writing
-similar-post data into SurrealDB.
+Ingests posts on `post.created` (RabbitMQ): load from Postgres → embed → upsert
+into SurrealDB table `post_embedding` (vector + metadata).
 
 ## Stack
 
@@ -9,26 +9,18 @@ similar-post data into SurrealDB.
 | --- | --- |
 | HTTP | FastAPI + Uvicorn |
 | Settings | pydantic-settings |
-| Postgres | SQLAlchemy 2 + asyncpg (same DB as Go services) |
-| Migrations | Alembic (`alembic_version_ai` — does not clash with goose) |
-| Graph | SurrealDB (embeddings + similarity later) |
-| Messaging | RabbitMQ — consumes `post.created` from content-service |
+| Postgres | SQLAlchemy 2 + asyncpg (read posts) |
+| Embeddings | fastembed `all-MiniLM-L6-v2` (384-d, ONNX) |
+| Vectors | SurrealDB `post_embedding` + HNSW cosine index |
+| Messaging | RabbitMQ `yetbota.events` / `post.created` → `ai.post.ingest` |
 
-## Layout
+## Flow
 
-```text
-app/
-  main.py                 # app factory + RabbitMQ consumer lifespan
-  config.py
-  api/routes/             # health
-  domain/ / services/     # future use cases
-  adapters/
-    postgres/
-    surreal/
-    rabbitmq/             # post.created consumer (log stub for now)
-  models/
-alembic/
-```
+1. content-service creates a post and publishes `{ event, post_id, occurred_at }`
+2. ai-service consumes the message
+3. Loads `title`, `caption`, hashtags from Postgres
+4. Embeds joined text
+5. `UPSERT post_embedding:<post_id>` in Surreal with `embedding`, `text`, geo, model
 
 ## Local setup
 
@@ -38,19 +30,9 @@ docker compose up -d postgres surrealdb rabbitmq
 
 cd ai-service
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # first run downloads MiniLM ONNX weights
 cp .env.example .env
 uvicorn app.main:app --reload --port 8083
 ```
 
-Payload from content-service after `POST /posts`:
-
-```json
-{ "event": "post.created", "post_id": "<uuid>", "occurred_at": "<rfc3339>" }
-```
-
-Exchange `yetbota.events` (topic), routing key `post.created`, queue `ai.post.ingest`.
-Consumer currently logs only — Surreal ingest TBD.
-
-Health: `GET http://localhost:8083/healthz`  
-RabbitMQ UI: `http://localhost:15672` (yetbota / yetbota)
+Health: `GET http://localhost:8083/healthz`

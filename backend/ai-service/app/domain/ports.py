@@ -1,18 +1,32 @@
-"""Domain ports — implement in adapters when ingest/similarity land.
+"""Ports used by ingest (implemented in adapters)."""
 
-Example shape (not enforced yet):
+from __future__ import annotations
 
-    class EmbeddingProvider(Protocol):
-        async def embed(self, texts: list[str]) -> list[list[float]]: ...
+from typing import Protocol, Sequence
+from uuid import UUID
 
-    class SimilarityGraph(Protocol):
-        async def upsert_similar(self, post_id: str, similar_ids: list[str], scores: list[float]) -> None: ...
-"""
-
-from typing import Protocol
+from app.domain.post_doc import PostDocument
 
 
-class HealthPort(Protocol):
-    """Placeholder so the ports module is importable."""
+class PostReader(Protocol):
+    async def get_post(self, post_id: UUID) -> PostDocument | None: ...
 
-    async def ping(self) -> bool: ...
+
+class EmbeddingProvider(Protocol):
+    @property
+    def model_name(self) -> str: ...
+
+    @property
+    def dimensions(self) -> int: ...
+
+    async def embed(self, text: str) -> list[float]: ...
+
+
+class PostEmbeddingStore(Protocol):
+    async def upsert_embedding(
+        self,
+        post: PostDocument,
+        text: str,
+        embedding: Sequence[float],
+        model: str,
+    ) -> None: ...

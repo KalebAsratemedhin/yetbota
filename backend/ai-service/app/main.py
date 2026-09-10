@@ -33,7 +33,13 @@ async def lifespan(app: FastAPI):
         embedding_dimensions=settings.embedding_dimensions,
     )
     await store.connect()
-    ingest = IngestService(PostgresPostReader(sessions), embedder, store)
+    ingest = IngestService(
+        PostgresPostReader(sessions),
+        embedder,
+        store,
+        similarity_top_k=settings.similarity_top_k,
+        similarity_min_score=settings.similarity_min_score,
+    )
 
     stop = asyncio.Event()
     task = asyncio.create_task(
@@ -41,10 +47,12 @@ async def lifespan(app: FastAPI):
         name="rabbitmq-consumer",
     )
     logger.info(
-        "ai_service_started rabbitmq=%s model=%s dim=%s",
+        "ai_service_started rabbitmq=%s model=%s dim=%s top_k=%s min_score=%s",
         settings.rabbitmq_url,
         settings.embedding_model,
         settings.embedding_dimensions,
+        settings.similarity_top_k,
+        settings.similarity_min_score,
     )
     try:
         yield
@@ -68,8 +76,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="YetBota AI Service",
         description=(
-            "Ingests posts from RabbitMQ post.created: embed title/caption/tags "
-            "and upsert vectors into SurrealDB post_embedding."
+            "Ingests posts from RabbitMQ post.created: embed title/caption/tags, "
+            "upsert Surreal post_embedding, and write similar relation edges."
         ),
         version="0.1.0",
         lifespan=lifespan,

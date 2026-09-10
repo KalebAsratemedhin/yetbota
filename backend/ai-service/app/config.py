@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
+    similarity_top_k: int = 10
+    similarity_min_score: float = 0.55
     openai_api_key: str = ""
 
 

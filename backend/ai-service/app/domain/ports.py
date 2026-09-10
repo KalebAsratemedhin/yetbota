@@ -1,4 +1,4 @@
-"""Ports used by ingest (implemented in adapters)."""
+"""Ports used by ingest / similarity (implemented in adapters)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Protocol, Sequence
 from uuid import UUID
 
 from app.domain.post_doc import PostDocument
+from app.domain.similarity import SimilarHit
 
 
 class PostReader(Protocol):
@@ -29,4 +30,19 @@ class PostEmbeddingStore(Protocol):
         text: str,
         embedding: Sequence[float],
         model: str,
+    ) -> None: ...
+
+    async def find_similar(
+        self,
+        embedding: Sequence[float],
+        exclude_post_id: UUID,
+        *,
+        top_k: int,
+        min_score: float,
+    ) -> list[SimilarHit]: ...
+
+    async def replace_similar_edges(
+        self,
+        from_post_id: UUID,
+        hits: Sequence[SimilarHit],
     ) -> None: ...

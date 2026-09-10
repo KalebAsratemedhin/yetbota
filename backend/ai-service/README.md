@@ -1,26 +1,26 @@
 # YetBota AI Service
 
 Ingests posts on `post.created` (RabbitMQ): load from Postgres → embed → upsert
-into SurrealDB table `post_embedding` (vector + metadata).
+Surreal `post_embedding`, then write outbound `similar` relation edges to nearest neighbors.
 
 ## Stack
 
 | Piece | Choice |
 | --- | --- |
 | HTTP | FastAPI + Uvicorn |
-| Settings | pydantic-settings |
-| Postgres | SQLAlchemy 2 + asyncpg (read posts) |
-| Embeddings | fastembed `all-MiniLM-L6-v2` (384-d, ONNX) |
-| Vectors | SurrealDB `post_embedding` + HNSW cosine index |
-| Messaging | RabbitMQ `yetbota.events` / `post.created` → `ai.post.ingest` |
+| Postgres | Read posts (title, caption, hashtags) |
+| Embeddings | fastembed MiniLM (384-d) |
+| Vectors | Surreal `post_embedding` (+ HNSW index) |
+| Graph | Surreal `similar` relation (`post_embedding` → `post_embedding`, `score`) |
+| Messaging | RabbitMQ `post.created` → `ai.post.ingest` |
 
 ## Flow
 
-1. content-service creates a post and publishes `{ event, post_id, occurred_at }`
-2. ai-service consumes the message
-3. Loads `title`, `caption`, hashtags from Postgres
-4. Embeds joined text
-5. `UPSERT post_embedding:<post_id>` in Surreal with `embedding`, `text`, geo, model
+1. content-service creates a post → publishes `{ event, post_id, occurred_at }`
+2. ai-service embeds title + caption + hashtags
+3. Upserts `post_embedding:<post_id>`
+4. Cosine-ranks other embeddings (`SIMILARITY_TOP_K`, `SIMILARITY_MIN_SCORE`)
+5. Replaces `post_embedding:A->similar->…` edges with scores
 
 ## Local setup
 
@@ -30,7 +30,7 @@ docker compose up -d postgres surrealdb rabbitmq
 
 cd ai-service
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt   # first run downloads MiniLM ONNX weights
+pip install -r requirements.txt
 cp .env.example .env
 uvicorn app.main:app --reload --port 8083
 ```

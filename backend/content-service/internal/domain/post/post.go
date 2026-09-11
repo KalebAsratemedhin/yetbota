@@ -161,6 +161,8 @@ type Repository interface {
 	SearchExcluding(ctx context.Context, query string, excludeID uuid.UUID, p ListParams) (Page, error)
 	ListSimilar(ctx context.Context, seedText string, excludeID uuid.UUID, excludeQuery string, cursor *SimilarCursor, limit int) (ScoredPage, error)
 	SeedText(ctx context.Context, postID uuid.UUID) (string, error)
+	ByIDs(ctx context.Context, ids []uuid.UUID) ([]Post, error)
+	IDsMatchingQuery(ctx context.Context, ids []uuid.UUID, query string) ([]uuid.UUID, error)
 }
 
 type SimilarCursor struct {

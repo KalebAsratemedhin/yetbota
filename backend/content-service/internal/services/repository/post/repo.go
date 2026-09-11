@@ -688,6 +688,62 @@ func (r *Repo) SeedText(ctx context.Context, postID uuid.UUID) (string, error) {
 	return strings.TrimSpace(row.Title + " " + row.Caption + " " + row.Hashtags), nil
 }
 
+func (r *Repo) ByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.Post, error) {
+	if len(ids) == 0 {
+		return []domain.Post{}, nil
+	}
+	pgIDs := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIDs[i] = pgUUID(id)
+	}
+	rows, err := r.q.ListPostsByIDs(ctx, pgIDs)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list posts by ids")
+	}
+	page, err := r.hydratePosts(ctx, rows, postIDs(rows), len(rows), false)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[uuid.UUID]domain.Post, len(page.Posts))
+	for _, p := range page.Posts {
+		byID[p.ID] = p
+	}
+	out := make([]domain.Post, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r *Repo) IDsMatchingQuery(ctx context.Context, ids []uuid.UUID, query string) ([]uuid.UUID, error) {
+	query = strings.TrimSpace(query)
+	if len(ids) == 0 || query == "" {
+		return nil, nil
+	}
+	pgIDs := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIDs[i] = pgUUID(id)
+	}
+	rows, err := r.q.ListPostIDsMatchingQuery(ctx, db.ListPostIDsMatchingQueryParams{
+		Ids:   pgIDs,
+		Query: query,
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list post ids matching query")
+	}
+	out := make([]uuid.UUID, 0, len(rows))
+	for _, id := range rows {
+		u, err := uuidFromPg(id)
+		if err != nil {
+			continue
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
 func (r *Repo) ListSimilar(ctx context.Context, seedText string, excludeID uuid.UUID, excludeQuery string, cursor *domain.SimilarCursor, limit int) (domain.ScoredPage, error) {
 	seedText = strings.TrimSpace(seedText)
 	if seedText == "" || limit <= 0 {

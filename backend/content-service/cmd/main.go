@@ -17,6 +17,7 @@ import (
 	"github.com/yetbota/content-service/drivers/logger"
 	"github.com/yetbota/content-service/drivers/postgres"
 	"github.com/yetbota/content-service/drivers/rabbitmq"
+	"github.com/yetbota/content-service/drivers/similar"
 	"github.com/yetbota/content-service/drivers/surreal"
 	"github.com/yetbota/content-service/internal/services/endpoint"
 	postrepo "github.com/yetbota/content-service/internal/services/repository/post"
@@ -102,6 +103,7 @@ func main() {
 		postrepo.New(pool),
 		signer,
 		follow.New(sdb),
+		similar.New(sdb),
 		repClient,
 		postEvents,
 		postuc.FeedConfig{

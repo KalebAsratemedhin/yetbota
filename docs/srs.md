@@ -21,7 +21,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
 | ai-service | Python | FastAPI; ingest embeddings + `similar` edges in Surreal |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
-| Graph DB | SurrealDB | Shared; follow relationships + future post embeddings/similarity. Local: Docker in `backend/docker-compose.yml` |
+| Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` cosine edges. Local: Docker in `backend/docker-compose.yml` |
 | Messaging | RabbitMQ | `post.created` content → ai (`yetbota.events` / `ai.post.ingest`) |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
@@ -71,7 +71,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-029 | An authenticated user shall be able to share a post. | Returns share URL; increments share count |
 | FR-030 | An authenticated user shall be able to search posts by text and hashtags. | Full-text over title + caption + hashtags |
 | FR-031 | An authenticated user shall be able to list posts for a hashtag. | Keyset pagination |
-| FR-031a | An authenticated user shall be able to list posts related to a seed post: remaining search matches for an optional query, then similar posts. | Not the home feed; keyset pagination |
+| FR-031a | An authenticated user shall be able to list posts related to a seed post: remaining search matches for an optional query, then similar posts from the Surreal cosine graph (FTS fallback if no edges). | Not the home feed; keyset pagination |
 | FR-032 | An authenticated user shall be able to reply to a top-level comment and list those replies. | One level only (no reply-to-reply); keyset pagination |
 | FR-033 | An authenticated user shall be able to like, dislike, or clear their reaction on a comment. | At most one of like/dislike per user per comment |
 | FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
@@ -142,7 +142,7 @@ See `docs/reputation-engagement-scoring.md`.
 
 | Endpoint | Behavior |
 | --- | --- |
-| `GET /posts/{id}/related?q=` | Other posts matching `q` first (excluding seed); then FTS-similar posts that do **not** match `q`. Without `q`, similar only. |
+| `GET /posts/{id}/related?q=` | Other posts matching `q` first (excluding seed); then Surreal `similar` graph neighbors (cosine) that do **not** match `q`. FTS similar if the graph has no edges. Without `q`, similar only. |
 | Response `source` | `search` \| `similar` \| `mixed` — this is **not** the home feed |
 
 ## Trending (non-ML)

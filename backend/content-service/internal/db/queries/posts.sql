@@ -213,6 +213,15 @@ WHERE created_at >= sqlc.arg(since)::timestamptz
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(result_limit);
 
+-- name: ListPostsByIDs :many
+SELECT * FROM posts
+WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
+-- name: ListPostIDsMatchingQuery :many
+SELECT id FROM posts
+WHERE id = ANY(sqlc.arg(ids)::uuid[])
+  AND search_vector @@ plainto_tsquery('english', sqlc.arg(query)::text);
+
 -- name: GetPostSeedText :one
 SELECT
     p.title,

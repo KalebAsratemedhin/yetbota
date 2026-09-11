@@ -205,7 +205,8 @@ paths:
       description: |
         Not the home feed. When `q` is set (e.g. opened from search), returns other
         posts matching that query first; after those are exhausted, returns posts
-        similar to the seed by caption/hashtag full-text. Without `q`, only similar.
+        similar to the seed via Surreal cosine `similar` edges (FTS fallback when
+        the graph has no neighbors). Without `q`, only similar.
       operationId: listRelatedPosts
       parameters:
         - $ref: "#/components/parameters/PostId"

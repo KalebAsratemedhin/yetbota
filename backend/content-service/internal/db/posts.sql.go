@@ -821,6 +821,37 @@ func (q *Queries) ListNearbyPosts(ctx context.Context, arg ListNearbyPostsParams
 	return items, nil
 }
 
+const listPostIDsMatchingQuery = `-- name: ListPostIDsMatchingQuery :many
+SELECT id FROM posts
+WHERE id = ANY($1::uuid[])
+  AND search_vector @@ plainto_tsquery('english', $2::text)
+`
+
+type ListPostIDsMatchingQueryParams struct {
+	Ids   []pgtype.UUID `json:"ids"`
+	Query string        `json:"query"`
+}
+
+func (q *Queries) ListPostIDsMatchingQuery(ctx context.Context, arg ListPostIDsMatchingQueryParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listPostIDsMatchingQuery, arg.Ids, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPostsByAuthor = `-- name: ListPostsByAuthor :many
 SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
 WHERE author_id = $1
@@ -953,6 +984,45 @@ func (q *Queries) ListPostsByHashtag(ctx context.Context, arg ListPostsByHashtag
 		arg.CursorID,
 		arg.ResultLimit,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Title,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPostsByIDs = `-- name: ListPostsByIDs :many
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListPostsByIDs(ctx context.Context, ids []pgtype.UUID) ([]Post, error) {
+	rows, err := q.db.Query(ctx, listPostsByIDs, ids)
 	if err != nil {
 		return nil, err
 	}

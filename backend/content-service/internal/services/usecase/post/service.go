@@ -26,6 +26,12 @@ type FollowingStore interface {
 	FollowingIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
+// SimilarNeighborStore reads cosine-similar post edges from Surreal (ai-service graph).
+type SimilarNeighborStore interface {
+	// Neighbors returns peer post IDs and cosine scores, highest score first.
+	Neighbors(ctx context.Context, seedID uuid.UUID) (ids []uuid.UUID, scores []float64, err error)
+}
+
 type ReputationNotifier interface {
 	Enabled() bool
 	SyncScore(ctx context.Context, userID uuid.UUID, score, postsCreated, likesReceived int64) error
@@ -60,6 +66,7 @@ type Service struct {
 	posts              domain.Repository
 	signer             media.Signer
 	follows            FollowingStore
+	similar            SimilarNeighborStore
 	reputation         ReputationNotifier
 	postEvents         PostCreatedPublisher
 	feed               FeedConfig
@@ -76,6 +83,7 @@ func NewService(
 	posts domain.Repository,
 	signer media.Signer,
 	follows FollowingStore,
+	similar SimilarNeighborStore,
 	reputation ReputationNotifier,
 	postEvents PostCreatedPublisher,
 	feed FeedConfig,
@@ -134,7 +142,7 @@ func NewService(
 	}
 	repCfg = repCfg.withDefaults()
 	return &Service{
-		posts: posts, signer: signer, follows: follows, reputation: reputation,
+		posts: posts, signer: signer, follows: follows, similar: similar, reputation: reputation,
 		postEvents: postEvents,
 		feed: feed, trending: trending, repCfg: repCfg,
 		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
@@ -710,7 +718,7 @@ func (s *Service) syncAuthorReputation(ctx context.Context, authorID uuid.UUID) 
 }
 
 // Related returns other search hits for q (excluding the seed), then similar posts
-// by caption/hashtag text match. Not the home feed.
+// from the Surreal cosine graph (FTS fallback when the graph has no edges).
 func (s *Service) Related(ctx context.Context, in RelatedInput) (RelatedResult, error) {
 	limit := in.Limit
 	if limit <= 0 {
@@ -766,16 +774,11 @@ func (s *Service) Related(ctx context.Context, in RelatedInput) (RelatedResult, 
 					source = "search"
 				}
 			} else {
-				// Full page of search; next request should start similar.
-				seedText, err := s.posts.SeedText(ctx, in.SeedID)
+				hasMore, err := s.hasSimilarNeighbors(ctx, in.SeedID, q)
 				if err != nil {
 					return RelatedResult{}, err
 				}
-				probe, err := s.posts.ListSimilar(ctx, seedText, in.SeedID, q, nil, 1)
-				if err != nil {
-					return RelatedResult{}, err
-				}
-				if len(probe.Posts) > 0 {
+				if hasMore {
 					next = encodeRelatedSimilarStart()
 				}
 				source = "search"
@@ -796,7 +799,113 @@ func (s *Service) Related(ctx context.Context, in RelatedInput) (RelatedResult, 
 	return RelatedResult{Posts: simPosts, NextCursor: simNext, Source: "similar"}, nil
 }
 
+func (s *Service) hasSimilarNeighbors(ctx context.Context, seedID uuid.UUID, excludeQuery string) (bool, error) {
+	ids, scores, err := s.graphNeighbors(ctx, seedID)
+	if err != nil {
+		return false, err
+	}
+	if len(ids) > 0 {
+		filtered, _, err := s.filterExcludedQuery(ctx, ids, scores, excludeQuery)
+		if err != nil {
+			return false, err
+		}
+		return len(filtered) > 0, nil
+	}
+	seedText, err := s.posts.SeedText(ctx, seedID)
+	if err != nil {
+		return false, err
+	}
+	probe, err := s.posts.ListSimilar(ctx, seedText, seedID, excludeQuery, nil, 1)
+	if err != nil {
+		return false, err
+	}
+	return len(probe.Posts) > 0, nil
+}
+
+func (s *Service) graphNeighbors(ctx context.Context, seedID uuid.UUID) ([]uuid.UUID, []float64, error) {
+	if s.similar == nil {
+		return nil, nil, nil
+	}
+	return s.similar.Neighbors(ctx, seedID)
+}
+
+func (s *Service) filterExcludedQuery(ctx context.Context, ids []uuid.UUID, scores []float64, excludeQuery string) ([]uuid.UUID, []float64, error) {
+	q := strings.TrimSpace(excludeQuery)
+	if q == "" || len(ids) == 0 {
+		return ids, scores, nil
+	}
+	matching, err := s.posts.IDsMatchingQuery(ctx, ids, q)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(matching) == 0 {
+		return ids, scores, nil
+	}
+	skip := make(map[uuid.UUID]struct{}, len(matching))
+	for _, id := range matching {
+		skip[id] = struct{}{}
+	}
+	outIDs := make([]uuid.UUID, 0, len(ids))
+	outScores := make([]float64, 0, len(ids))
+	for i, id := range ids {
+		if _, ok := skip[id]; ok {
+			continue
+		}
+		outIDs = append(outIDs, id)
+		outScores = append(outScores, scores[i])
+	}
+	return outIDs, outScores, nil
+}
+
 func (s *Service) relatedSimilarPage(ctx context.Context, seedID uuid.UUID, excludeQuery string, cursor *domain.SimilarCursor, limit int) ([]domain.Post, string, error) {
+	ids, scores, err := s.graphNeighbors(ctx, seedID)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(ids) == 0 {
+		return s.relatedSimilarFTS(ctx, seedID, excludeQuery, cursor, limit)
+	}
+	ids, scores, err = s.filterExcludedQuery(ctx, ids, scores, excludeQuery)
+	if err != nil {
+		return nil, "", err
+	}
+
+	start := 0
+	if cursor != nil {
+		start = len(ids)
+		for i := range ids {
+			score, id := scores[i], ids[i]
+			if score < cursor.Rank || (score == cursor.Rank && id.String() < cursor.ID.String()) {
+				start = i
+				break
+			}
+		}
+	}
+
+	pageIDs := ids[start:]
+	pageScores := scores[start:]
+	hasMore := len(pageIDs) > limit
+	if hasMore {
+		pageIDs = pageIDs[:limit]
+		pageScores = pageScores[:limit]
+	}
+	scoreByID := make(map[uuid.UUID]float64, len(pageIDs))
+	for i, id := range pageIDs {
+		scoreByID[id] = pageScores[i]
+	}
+	posts, err := s.posts.ByIDs(ctx, pageIDs)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if hasMore && len(posts) > 0 {
+		last := posts[len(posts)-1]
+		next = encodeRelatedSimilarCursor(scoreByID[last.ID], last.CreatedAt, last.ID)
+	}
+	return posts, next, nil
+}
+
+func (s *Service) relatedSimilarFTS(ctx context.Context, seedID uuid.UUID, excludeQuery string, cursor *domain.SimilarCursor, limit int) ([]domain.Post, string, error) {
 	seedText, err := s.posts.SeedText(ctx, seedID)
 	if err != nil {
 		return nil, "", err

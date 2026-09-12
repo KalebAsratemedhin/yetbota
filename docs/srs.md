@@ -19,10 +19,10 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Frontend | Next.js | |
 | content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A** |
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
-| ai-service | Python | FastAPI; ingest embeddings + `similar` edges in Surreal |
+| ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` cosine edges. Local: Docker in `backend/docker-compose.yml` |
-| Messaging | RabbitMQ | `post.created` content → ai (`yetbota.events` / `ai.post.ingest`) |
+| Messaging | RabbitMQ | `*.created` (post/comment/question/answer) → `ai.content.ingest` |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
 | Migrations (Python) | Alembic | ai-service; version table `alembic_version_ai` |

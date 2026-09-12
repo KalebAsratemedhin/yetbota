@@ -1,26 +1,27 @@
 # YetBota AI Service
 
-Ingests posts on `post.created` (RabbitMQ): load from Postgres → embed → upsert
-Surreal `post_embedding`, then write outbound `similar` relation edges to nearest neighbors.
+Ingests content on RabbitMQ `*.created` events: load from Postgres → embed →
+upsert Surreal. Posts also maintain the Related-posts `similar` graph.
 
 ## Stack
 
 | Piece | Choice |
 | --- | --- |
 | HTTP | FastAPI + Uvicorn |
-| Postgres | Read posts (title, caption, hashtags) |
+| Postgres | Read posts, comments, questions, answers |
 | Embeddings | fastembed MiniLM (384-d) |
-| Vectors | Surreal `post_embedding` (+ HNSW index) |
-| Graph | Surreal `similar` relation (`post_embedding` → `post_embedding`, `score`) |
-| Messaging | RabbitMQ `post.created` → `ai.post.ingest` |
+| Chatbot index | Surreal `content_embedding` (`kind`, `entity_id`, `parent_id`, …) |
+| Related graph | Surreal `post_embedding` + `similar` (posts only) |
+| Messaging | `yetbota.events` → queue `ai.content.ingest` |
 
-## Flow
+## Events
 
-1. content-service creates a post → publishes `{ event, post_id, occurred_at }`
-2. ai-service embeds title + caption + hashtags
-3. Upserts `post_embedding:<post_id>`
-4. Cosine-ranks other embeddings (`SIMILARITY_TOP_K`, `SIMILARITY_MIN_SCORE`)
-5. Replaces `post_embedding:A->similar->…` edges with scores
+| Routing key | Payload IDs | Surreal writes |
+| --- | --- | --- |
+| `post.created` | `post_id` | `post_embedding` + `similar` **and** `content_embedding` (`kind=post`) |
+| `comment.created` | `comment_id`, `post_id` | `content_embedding` (`kind=comment`, parent=post) |
+| `question.created` | `question_id`, optional `post_id` | `content_embedding` (`kind=question`) |
+| `answer.created` | `answer_id`, `question_id` | `content_embedding` (`kind=answer`, text=`Q:`+`A:`) |
 
 ## Local setup
 

@@ -37,10 +37,14 @@ type ReputationNotifier interface {
 	SyncScore(ctx context.Context, userID uuid.UUID, score, postsCreated, likesReceived int64) error
 }
 
-// PostCreatedPublisher notifies downstream services (ai-service) that a post exists.
-type PostCreatedPublisher interface {
+// ContentEventPublisher notifies ai-service to embed content (thin ID events).
+type ContentEventPublisher interface {
 	PublishPostCreated(ctx context.Context, postID uuid.UUID) error
+	PublishCommentCreated(ctx context.Context, commentID, postID uuid.UUID) error
 }
+
+// PostCreatedPublisher is kept as an alias for older call sites / tests.
+type PostCreatedPublisher = ContentEventPublisher
 
 type FeedConfig struct {
 	Gravity          float64
@@ -68,7 +72,7 @@ type Service struct {
 	follows            FollowingStore
 	similar            SimilarNeighborStore
 	reputation         ReputationNotifier
-	postEvents         PostCreatedPublisher
+	postEvents         ContentEventPublisher
 	feed               FeedConfig
 	trending           TrendingConfig
 	repCfg             ReputationConfig
@@ -85,7 +89,7 @@ func NewService(
 	follows FollowingStore,
 	similar SimilarNeighborStore,
 	reputation ReputationNotifier,
-	postEvents PostCreatedPublisher,
+	postEvents ContentEventPublisher,
 	feed FeedConfig,
 	trending TrendingConfig,
 	repCfg ReputationConfig,
@@ -331,6 +335,11 @@ func (s *Service) AddComment(ctx context.Context, postID, authorID uuid.UUID, bo
 	post, err := s.posts.ByID(ctx, postID)
 	if err == nil && post.AuthorID != authorID {
 		s.syncAuthorReputation(ctx, post.AuthorID)
+	}
+	if s.postEvents != nil {
+		if err := s.postEvents.PublishCommentCreated(ctx, c.ID, postID); err != nil {
+			slog.Warn("comment_created_publish_failed", "comment_id", c.ID.String(), "err", err.Error())
+		}
 	}
 	return c, nil
 }

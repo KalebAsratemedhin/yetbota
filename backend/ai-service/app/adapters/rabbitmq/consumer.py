@@ -1,4 +1,4 @@
-"""RabbitMQ consumer for post.created → ingest."""
+"""RabbitMQ consumer for content *.created → typed ingest."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
-from uuid import UUID
 
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
@@ -17,44 +16,46 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 EXCHANGE_EVENTS = "yetbota.events"
-ROUTING_POST_CREATED = "post.created"
-QUEUE_POST_INGEST = "ai.post.ingest"
+QUEUE_CONTENT_INGEST = "ai.content.ingest"
 
-IngestHandler = Callable[[UUID], Awaitable[bool]]
+ROUTING_KEYS = (
+    "post.created",
+    "comment.created",
+    "question.created",
+    "answer.created",
+)
+
+EventHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]
 
 
 async def _on_message(
     message: AbstractIncomingMessage,
-    ingest: IngestHandler,
+    handle: EventHandler,
 ) -> None:
     async with message.process(requeue=True):
         try:
             payload = json.loads(message.body.decode("utf-8"))
         except json.JSONDecodeError:
-            logger.exception("invalid_post_created_payload")
+            logger.exception("invalid_content_event_payload")
             return
-        if payload.get("event") != ROUTING_POST_CREATED:
-            logger.warning("ignored_event type=%s", payload.get("event"))
-            return
-        raw_id = payload.get("post_id")
-        try:
-            post_id = UUID(str(raw_id))
-        except (TypeError, ValueError):
-            logger.error("invalid_post_id value=%s", raw_id)
+        event = str(payload.get("event") or "")
+        if event not in ROUTING_KEYS:
+            logger.warning("ignored_event type=%s", event)
             return
         try:
-            await ingest(post_id)
+            await handle(event, payload)
+        except (KeyError, TypeError, ValueError):
+            logger.exception("invalid_content_event event=%s payload=%s", event, payload)
+            return
         except Exception:
-            logger.exception("ingest_failed post_id=%s", post_id)
-            raise  # requeue via process(requeue=True) on exception? 
-            # aio_pika process() nacks/requeues if exception escapes before exit
-            # Actually `async with message.process(requeue=True)` requeues on exception.
+            logger.exception("ingest_failed event=%s", event)
+            raise
 
 
 async def run_consumer(
     settings: Settings,
     stop: asyncio.Event,
-    ingest: IngestHandler,
+    handle: EventHandler,
 ) -> None:
     """Declare topology and consume until stop is set."""
     connection = await aio_pika.connect_robust(settings.rabbitmq_url)
@@ -64,16 +65,17 @@ async def run_consumer(
         exchange = await channel.declare_exchange(
             EXCHANGE_EVENTS, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        queue = await channel.declare_queue(QUEUE_POST_INGEST, durable=True)
-        await queue.bind(exchange, routing_key=ROUTING_POST_CREATED)
+        queue = await channel.declare_queue(QUEUE_CONTENT_INGEST, durable=True)
+        for key in ROUTING_KEYS:
+            await queue.bind(exchange, routing_key=key)
         logger.info(
-            "rabbitmq_consumer_ready queue=%s routing_key=%s",
-            QUEUE_POST_INGEST,
-            ROUTING_POST_CREATED,
+            "rabbitmq_consumer_ready queue=%s routing_keys=%s",
+            QUEUE_CONTENT_INGEST,
+            ",".join(ROUTING_KEYS),
         )
 
         async def handler(message: AbstractIncomingMessage) -> None:
-            await _on_message(message, ingest)
+            await _on_message(message, handle)
 
         await queue.consume(handler)
         await stop.wait()

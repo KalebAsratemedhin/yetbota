@@ -9,7 +9,7 @@ import (
 )
 
 func TestCreateQuestion_RequiresBody(t *testing.T) {
-	s := NewService(nil, 20, 50)
+	s := NewService(nil, nil, 20, 50)
 	_, err := s.CreateQuestion(t.Context(), CreateQuestionInput{
 		AuthorID: uuid.New(), Body: "",
 	})
@@ -19,7 +19,7 @@ func TestCreateQuestion_RequiresBody(t *testing.T) {
 }
 
 func TestCreateQuestion_LatLngPair(t *testing.T) {
-	s := NewService(nil, 20, 50)
+	s := NewService(nil, nil, 20, 50)
 	lat := 9.0
 	_, err := s.CreateQuestion(t.Context(), CreateQuestionInput{
 		AuthorID: uuid.New(), Body: "Is this open late?", Lat: &lat,

@@ -11,16 +11,25 @@ import (
 )
 
 const (
-	ExchangeEvents   = "yetbota.events"
-	RoutingPostCreated = "post.created"
-	QueuePostIngest  = "ai.post.ingest"
+	ExchangeEvents = "yetbota.events"
+
+	RoutingPostCreated     = "post.created"
+	RoutingCommentCreated  = "comment.created"
+	RoutingQuestionCreated = "question.created"
+	RoutingAnswerCreated   = "answer.created"
+
+	// Legacy queue still bound for post.created; ai-service also uses ai.content.ingest.
+	QueuePostIngest    = "ai.post.ingest"
+	QueueContentIngest = "ai.content.ingest"
 )
 
-// PostCreatedEvent is published by content-service after a post is created.
-type PostCreatedEvent struct {
-	Event      string `json:"event"`
-	PostID     string `json:"post_id"`
-	OccurredAt string `json:"occurred_at"`
+type contentEvent struct {
+	Event      string  `json:"event"`
+	OccurredAt string  `json:"occurred_at"`
+	PostID     *string `json:"post_id,omitempty"`
+	CommentID  *string `json:"comment_id,omitempty"`
+	QuestionID *string `json:"question_id,omitempty"`
+	AnswerID   *string `json:"answer_id,omitempty"`
 }
 
 type Publisher struct {
@@ -66,18 +75,46 @@ func (p *Publisher) Close() error {
 }
 
 func (p *Publisher) PublishPostCreated(ctx context.Context, postID uuid.UUID) error {
+	id := postID.String()
+	return p.publish(ctx, RoutingPostCreated, contentEvent{
+		Event: RoutingPostCreated, PostID: &id,
+	})
+}
+
+func (p *Publisher) PublishCommentCreated(ctx context.Context, commentID, postID uuid.UUID) error {
+	cid, pid := commentID.String(), postID.String()
+	return p.publish(ctx, RoutingCommentCreated, contentEvent{
+		Event: RoutingCommentCreated, CommentID: &cid, PostID: &pid,
+	})
+}
+
+func (p *Publisher) PublishQuestionCreated(ctx context.Context, questionID uuid.UUID, postID *uuid.UUID) error {
+	qid := questionID.String()
+	ev := contentEvent{Event: RoutingQuestionCreated, QuestionID: &qid}
+	if postID != nil {
+		pid := postID.String()
+		ev.PostID = &pid
+	}
+	return p.publish(ctx, RoutingQuestionCreated, ev)
+}
+
+func (p *Publisher) PublishAnswerCreated(ctx context.Context, answerID, questionID uuid.UUID) error {
+	aid, qid := answerID.String(), questionID.String()
+	return p.publish(ctx, RoutingAnswerCreated, contentEvent{
+		Event: RoutingAnswerCreated, AnswerID: &aid, QuestionID: &qid,
+	})
+}
+
+func (p *Publisher) publish(ctx context.Context, routingKey string, ev contentEvent) error {
 	if p == nil || p.ch == nil {
 		return nil
 	}
-	body, err := json.Marshal(PostCreatedEvent{
-		Event:      RoutingPostCreated,
-		PostID:     postID.String(),
-		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-	})
+	ev.OccurredAt = time.Now().UTC().Format(time.RFC3339Nano)
+	body, err := json.Marshal(ev)
 	if err != nil {
 		return err
 	}
-	return p.ch.PublishWithContext(ctx, ExchangeEvents, RoutingPostCreated, false, false, amqp.Publishing{
+	return p.ch.PublishWithContext(ctx, ExchangeEvents, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Timestamp:    time.Now().UTC(),

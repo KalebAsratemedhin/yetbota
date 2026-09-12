@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -15,20 +16,27 @@ import (
 	domain "github.com/yetbota/content-service/internal/domain/qa"
 )
 
+// ContentEventPublisher notifies ai-service (thin ID events).
+type ContentEventPublisher interface {
+	PublishQuestionCreated(ctx context.Context, questionID uuid.UUID, postID *uuid.UUID) error
+	PublishAnswerCreated(ctx context.Context, answerID, questionID uuid.UUID) error
+}
+
 type Service struct {
 	repo            domain.Repository
+	events          ContentEventPublisher
 	defaultPageSize int
 	maxPageSize     int
 }
 
-func NewService(repo domain.Repository, defaultPageSize, maxPageSize int) *Service {
+func NewService(repo domain.Repository, events ContentEventPublisher, defaultPageSize, maxPageSize int) *Service {
 	if defaultPageSize <= 0 {
 		defaultPageSize = 20
 	}
 	if maxPageSize <= 0 {
 		maxPageSize = 50
 	}
-	return &Service{repo: repo, defaultPageSize: defaultPageSize, maxPageSize: maxPageSize}
+	return &Service{repo: repo, events: events, defaultPageSize: defaultPageSize, maxPageSize: maxPageSize}
 }
 
 type CreateQuestionInput struct {
@@ -85,10 +93,19 @@ func (s *Service) CreateQuestion(ctx context.Context, in CreateQuestionInput) (d
 			})
 		}
 	}
-	return s.repo.CreateQuestion(ctx, domain.CreateQuestionInput{
+	q, err := s.repo.CreateQuestion(ctx, domain.CreateQuestionInput{
 		AuthorID: in.AuthorID, Body: body,
 		PostID: in.PostID, Lat: in.Lat, Lng: in.Lng,
 	})
+	if err != nil {
+		return domain.Question{}, err
+	}
+	if s.events != nil {
+		if err := s.events.PublishQuestionCreated(ctx, q.ID, q.PostID); err != nil {
+			slog.Warn("question_created_publish_failed", "question_id", q.ID.String(), "err", err.Error())
+		}
+	}
+	return q, nil
 }
 
 func (s *Service) GetQuestion(ctx context.Context, id uuid.UUID) (domain.Question, error) {
@@ -156,9 +173,18 @@ func (s *Service) AddAnswer(ctx context.Context, questionID, authorID uuid.UUID,
 			Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters",
 		})
 	}
-	return s.repo.CreateAnswer(ctx, domain.CreateAnswerInput{
+	a, err := s.repo.CreateAnswer(ctx, domain.CreateAnswerInput{
 		QuestionID: questionID, AuthorID: authorID, Body: body,
 	})
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	if s.events != nil {
+		if err := s.events.PublishAnswerCreated(ctx, a.ID, questionID); err != nil {
+			slog.Warn("answer_created_publish_failed", "answer_id", a.ID.String(), "err", err.Error())
+		}
+	}
+	return a, nil
 }
 
 func (s *Service) ListAnswers(ctx context.Context, questionID uuid.UUID, in ListInput) (AnswerPageResult, error) {

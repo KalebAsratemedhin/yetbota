@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.adapters.embeddings.sentence_transformers import SentenceTransformerEmbedder
-from app.adapters.postgres.posts import PostgresPostReader
+from app.adapters.postgres.content import PostgresContentReader
 from app.adapters.postgres.session import create_engine, create_session_factory
 from app.adapters.rabbitmq.consumer import run_consumer
 from app.adapters.surreal.client import SurrealConfig
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     )
     await store.connect()
     ingest = IngestService(
-        PostgresPostReader(sessions),
+        PostgresContentReader(sessions),
         embedder,
         store,
         similarity_top_k=settings.similarity_top_k,
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
     stop = asyncio.Event()
     task = asyncio.create_task(
-        run_consumer(settings, stop, ingest.ingest_post),
+        run_consumer(settings, stop, ingest.handle_event),
         name="rabbitmq-consumer",
     )
     logger.info(
@@ -76,8 +76,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="YetBota AI Service",
         description=(
-            "Ingests posts from RabbitMQ post.created: embed title/caption/tags, "
-            "upsert Surreal post_embedding, and write similar relation edges."
+            "Ingests post/comment/question/answer *.created events: embeds text, "
+            "upserts Surreal content_embedding (chatbot index), and for posts also "
+            "maintains post_embedding + similar edges for Related."
         ),
         version="0.1.0",
         lifespan=lifespan,

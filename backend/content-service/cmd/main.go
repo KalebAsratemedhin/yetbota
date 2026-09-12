@@ -89,12 +89,12 @@ func main() {
 	idClient := identity.NewClient(cfg.Identity.BaseURL)
 	repClient := identity.NewReputationClient(cfg.Identity.BaseURL, cfg.Identity.ServiceToken)
 
-	var postEvents postuc.PostCreatedPublisher
-	pub, err := rabbitmq.ConnectPublisher(cfg.RabbitMQ.URL)
+	var pub *rabbitmq.Publisher
+	pub, err = rabbitmq.ConnectPublisher(cfg.RabbitMQ.URL)
 	if err != nil {
 		log.Warn("rabbitmq_unavailable", "err", err.Error())
+		pub = nil
 	} else {
-		postEvents = pub
 		defer func() { _ = pub.Close() }()
 		log.Info("rabbitmq_connected", "url_host", cfg.RabbitMQ.URL)
 	}
@@ -105,7 +105,7 @@ func main() {
 		follow.New(sdb),
 		similar.New(sdb),
 		repClient,
-		postEvents,
+		pub,
 		postuc.FeedConfig{
 			Gravity:          cfg.Feed.Gravity,
 			CommentWeight:    cfg.Feed.CommentWeight,
@@ -165,7 +165,7 @@ func main() {
 		TrendingCreators:   endpoint.MakeTrendingCreatorsEndpoint(svc),
 	}
 
-	qaSvc := qauc.NewService(qarepo.New(pool), cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
+	qaSvc := qauc.NewService(qarepo.New(pool), pub, cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
 	qaEps := qahttp.Endpoints{
 		CreateQuestion: endpoint.MakeCreateQuestionEndpoint(qaSvc),
 		GetQuestion:    endpoint.MakeGetQuestionEndpoint(qaSvc),

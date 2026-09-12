@@ -11,12 +11,14 @@ from uuid import UUID
 from surrealdb import AsyncSurreal, RecordID
 
 from app.adapters.surreal.client import SurrealConfig
+from app.domain.content_doc import ContentDocument
 from app.domain.post_doc import PostDocument
 from app.domain.similarity import SimilarHit
 
 logger = logging.getLogger(__name__)
 
 TABLE = "post_embedding"
+CONTENT_TABLE = "content_embedding"
 EDGE = "similar"
 
 
@@ -37,6 +39,22 @@ DEFINE INDEX IF NOT EXISTS {TABLE}_hnsw ON {TABLE}
 DEFINE TABLE IF NOT EXISTS {EDGE} TYPE RELATION IN {TABLE} OUT {TABLE} SCHEMALESS;
 DEFINE FIELD IF NOT EXISTS score ON {EDGE} TYPE float;
 DEFINE FIELD IF NOT EXISTS updated_at ON {EDGE} TYPE option<datetime>;
+
+DEFINE TABLE IF NOT EXISTS {CONTENT_TABLE} SCHEMALESS;
+DEFINE FIELD IF NOT EXISTS kind ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS entity_id ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS parent_id ON {CONTENT_TABLE} TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS post_id ON {CONTENT_TABLE} TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS author_id ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS title ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS text ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS lat ON {CONTENT_TABLE} TYPE option<float>;
+DEFINE FIELD IF NOT EXISTS lng ON {CONTENT_TABLE} TYPE option<float>;
+DEFINE FIELD IF NOT EXISTS embedding ON {CONTENT_TABLE} TYPE array<float>;
+DEFINE FIELD IF NOT EXISTS model ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD IF NOT EXISTS updated_at ON {CONTENT_TABLE} TYPE datetime;
+DEFINE INDEX IF NOT EXISTS {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
+    FIELDS embedding HNSW DIMENSION {dimensions} DIST COSINE TYPE F32;
 """
 
 
@@ -127,6 +145,21 @@ DEFINE INDEX {TABLE}_hnsw ON {TABLE}
 DEFINE TABLE {EDGE} TYPE RELATION IN {TABLE} OUT {TABLE} SCHEMALESS;
 DEFINE FIELD score ON {EDGE} TYPE float;
 DEFINE FIELD updated_at ON {EDGE} TYPE option<datetime>;
+DEFINE TABLE {CONTENT_TABLE} SCHEMALESS;
+DEFINE FIELD kind ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD entity_id ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD parent_id ON {CONTENT_TABLE} TYPE option<string>;
+DEFINE FIELD post_id ON {CONTENT_TABLE} TYPE option<string>;
+DEFINE FIELD author_id ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD title ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD text ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD lat ON {CONTENT_TABLE} TYPE option<float>;
+DEFINE FIELD lng ON {CONTENT_TABLE} TYPE option<float>;
+DEFINE FIELD embedding ON {CONTENT_TABLE} TYPE array<float>;
+DEFINE FIELD model ON {CONTENT_TABLE} TYPE string;
+DEFINE FIELD updated_at ON {CONTENT_TABLE} TYPE datetime;
+DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
+    FIELDS embedding HNSW DIMENSION {self._dimensions} DIST COSINE TYPE F32;
 """
             try:
                 await self._db.query(bare)
@@ -166,6 +199,42 @@ DEFINE FIELD updated_at ON {EDGE} TYPE option<datetime>;
         }
         await self._db.upsert(rid, payload)
         logger.info("post_embedding_upserted post_id=%s dim=%s", post.id, len(embedding))
+
+    async def upsert_content(
+        self,
+        doc: ContentDocument,
+        embedding: Sequence[float],
+        model: str,
+    ) -> None:
+        """Upsert typed chunk for chatbot / RAG (does not touch post similar graph)."""
+        if self._db is None:
+            raise RuntimeError("surreal not connected")
+        if len(embedding) != self._dimensions:
+            raise ValueError(
+                f"embedding length {len(embedding)} != schema dim {self._dimensions}"
+            )
+        rid = RecordID(CONTENT_TABLE, doc.record_key)
+        payload = {
+            "kind": doc.kind,
+            "entity_id": str(doc.entity_id),
+            "parent_id": str(doc.parent_id) if doc.parent_id else None,
+            "post_id": str(doc.post_id) if doc.post_id else None,
+            "author_id": str(doc.author_id),
+            "title": doc.title,
+            "text": doc.text,
+            "lat": doc.lat,
+            "lng": doc.lng,
+            "embedding": list(embedding),
+            "model": model,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await self._db.upsert(rid, payload)
+        logger.info(
+            "content_embedding_upserted kind=%s entity_id=%s dim=%s",
+            doc.kind,
+            doc.entity_id,
+            len(embedding),
+        )
 
     async def find_similar(
         self,

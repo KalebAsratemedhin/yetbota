@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import PostInlinePlayer, {
+  MediaTransportCue,
   type PostInlinePlayerHandle,
 } from "@/components/media/PostInlinePlayer";
 import type { Media } from "@/lib/content/types";
@@ -33,6 +34,10 @@ export default function PostMediaGallery({
   const compactVideoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<PostInlinePlayerHandle>(null);
   const [index, setIndex] = useState(0);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioFlash, setAudioFlash] = useState<"play" | "pause" | null>(null);
+  const [audioFlashKey, setAudioFlashKey] = useState(0);
+  const audioFlashTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const root = scrollerRef.current;
@@ -63,6 +68,27 @@ export default function PostMediaGallery({
     if (!active) el.pause();
     else void el.play().catch(() => undefined);
   }, [active]);
+
+  useEffect(() => {
+    if (!active) setAudioFlash(null);
+  }, [active]);
+
+  useEffect(() => {
+    return () => {
+      if (audioFlashTimer.current != null) {
+        window.clearTimeout(audioFlashTimer.current);
+      }
+    };
+  }, []);
+
+  function onAudioCue(cue: "play" | "pause") {
+    setAudioFlash(cue);
+    setAudioFlashKey((k) => k + 1);
+    if (audioFlashTimer.current != null) {
+      window.clearTimeout(audioFlashTimer.current);
+    }
+    audioFlashTimer.current = window.setTimeout(() => setAudioFlash(null), 520);
+  }
 
   function goTo(i: number) {
     const root = scrollerRef.current;
@@ -98,7 +124,7 @@ export default function PostMediaGallery({
           controlsList="nodownload"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          className="aspect-[4/5] max-h-[28rem] w-full object-cover"
+          className="aspect-[4/5] max-h-[28rem] w-full object-contain"
         />
       </div>
     );
@@ -143,8 +169,8 @@ export default function PostMediaGallery({
             key={img.id || `${img.url}-${i}`}
             data-slide
             className={cn(
-              "relative min-w-full shrink-0 snap-center snap-always",
-              fill ? "flex min-h-0 flex-1" : "h-full w-full"
+              "relative flex min-w-full shrink-0 snap-center snap-always items-center justify-center",
+              fill ? "min-h-0 flex-1" : "h-full w-full"
             )}
             onClick={(e) => {
               if (!interactiveAudio) return;
@@ -161,14 +187,22 @@ export default function PostMediaGallery({
               decoding="async"
               loading="eager"
               className={cn(
-                "w-full object-cover select-none",
-                fill ? "min-h-0 flex-1" : "h-full",
+                "h-full w-full max-h-full max-w-full object-contain select-none",
                 interactiveAudio ? "cursor-pointer" : null
               )}
             />
           </div>
         ))}
       </div>
+
+      {interactiveAudio ? (
+        <MediaTransportCue
+          playing={audioPlaying}
+          active={active}
+          flash={audioFlash}
+          flashKey={audioFlashKey}
+        />
+      ) : null}
 
       {hasAudio && (interactiveAudio || mode === "images_audio") ? (
         <div className="absolute inset-x-3 bottom-10 z-10 sm:bottom-12">
@@ -179,6 +213,8 @@ export default function PostMediaGallery({
               kind="audio"
               overlay
               active={active}
+              onPlayingChange={setAudioPlaying}
+              onTransportCue={onAudioCue}
             />
           ) : (
             <div className="h-1 overflow-hidden rounded-full bg-white/30" />

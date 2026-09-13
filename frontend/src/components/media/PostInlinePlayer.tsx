@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Volume2, VolumeX } from "lucide-react";
+import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { formatClipTime } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,50 @@ export type PostInlinePlayerHandle = {
   pause: () => void;
   play: () => void;
 };
+
+/** Center play/pause cue — brief flash on toggle, idle play while paused. */
+export function MediaTransportCue({
+  playing,
+  active,
+  flash,
+  flashKey = 0,
+  className,
+}: {
+  playing: boolean;
+  active: boolean;
+  flash: "play" | "pause" | null;
+  flashKey?: number;
+  className?: string;
+}) {
+  if (!active) return null;
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 z-20 flex items-center justify-center",
+        className
+      )}
+      aria-hidden
+    >
+      {flash ? (
+        <div
+          key={flashKey}
+          className="media-transport-flash flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full bg-black/55 text-white shadow-[0_8px_28px_-12px_rgba(0,0,0,0.65)] backdrop-blur-md"
+        >
+          {flash === "pause" ? (
+            <Pause className="h-8 w-8 fill-current" strokeWidth={1.75} />
+          ) : (
+            <Play className="ml-0.5 h-8 w-8 fill-current" strokeWidth={1.75} />
+          )}
+        </div>
+      ) : !playing ? (
+        <div className="media-transport-idle flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
+          <Play className="ml-0.5 h-7 w-7 fill-current" strokeWidth={1.75} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * Minimal looping player: seek + mute on hover, center tap pauses/resumes.
@@ -33,24 +77,73 @@ const PostInlinePlayer = forwardRef<
     active?: boolean;
     /** Fill parent instead of max-height contain. */
     fill?: boolean;
+    onPlayingChange?: (playing: boolean) => void;
+    onTransportCue?: (cue: "play" | "pause") => void;
   }
 >(function PostInlinePlayer(
-  { src, kind, className, overlay, active = true, fill },
+  {
+    src,
+    kind,
+    className,
+    overlay,
+    active = true,
+    fill,
+    onPlayingChange,
+    onTransportCue,
+  },
   ref
 ) {
   const elRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const mutedRef = useRef(false);
+  const flashTimer = useRef<number | null>(null);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(false);
+  const [flash, setFlash] = useState<"play" | "pause" | null>(null);
+  const [flashKey, setFlashKey] = useState(0);
   const hideTimer = useRef<number | null>(null);
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  const onTransportCueRef = useRef(onTransportCue);
+  onPlayingChangeRef.current = onPlayingChange;
+  onTransportCueRef.current = onTransportCue;
 
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    onPlayingChangeRef.current?.(playing);
+  }, [playing]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
+      if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  function bumpFlash(cue: "play" | "pause") {
+    setFlash(cue);
+    setFlashKey((k) => k + 1);
+    onTransportCueRef.current?.(cue);
+    if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 520);
+  }
+
+  function togglePlayback() {
+    const el = elRef.current;
+    if (!el || !active) return;
+    if (el.paused) {
+      void el.play().catch(() => undefined);
+      bumpFlash("play");
+    } else {
+      el.pause();
+      bumpFlash("pause");
+    }
+  }
 
   useEffect(() => {
     const el = elRef.current;
@@ -92,6 +185,7 @@ const PostInlinePlayer = forwardRef<
 
     if (!active) {
       el.pause();
+      setFlash(null);
       return () => {
         el.removeEventListener("loadedmetadata", onMeta);
         el.removeEventListener("timeupdate", onTime);
@@ -124,10 +218,7 @@ const PostInlinePlayer = forwardRef<
 
   useImperativeHandle(ref, () => ({
     toggle() {
-      const el = elRef.current;
-      if (!el || !active) return;
-      if (el.paused) void el.play().catch(() => undefined);
-      else el.pause();
+      togglePlayback();
     },
     pause() {
       elRef.current?.pause();
@@ -160,10 +251,7 @@ const PostInlinePlayer = forwardRef<
 
   function onSurfaceClick(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest("[data-player-chrome]")) return;
-    const el = elRef.current;
-    if (!el || !active) return;
-    if (el.paused) void el.play().catch(() => undefined);
-    else el.pause();
+    togglePlayback();
   }
 
   const bar = (
@@ -270,13 +358,12 @@ const PostInlinePlayer = forwardRef<
             : "max-h-[min(78vh,52rem)] w-full object-contain"
         }
       />
-      {!playing && active ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="rounded-full bg-black/45 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm">
-            Paused
-          </span>
-        </div>
-      ) : null}
+      <MediaTransportCue
+        playing={playing}
+        active={active}
+        flash={flash}
+        flashKey={flashKey}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent px-3 pt-10 pb-3">
         <div className="pointer-events-auto">{bar}</div>
       </div>

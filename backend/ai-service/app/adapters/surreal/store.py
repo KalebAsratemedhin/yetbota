@@ -95,6 +95,14 @@ def _unwrap_query_rows(result: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _require_upsert(result: Any, *, what: str) -> None:
+    """Surreal Python upsert often returns an error string instead of raising."""
+    if isinstance(result, str) and result.strip():
+        raise RuntimeError(f"{what} failed: {result}")
+    if isinstance(result, dict) and result.get("error"):
+        raise RuntimeError(f"{what} failed: {result['error']}")
+
+
 class SurrealPostEmbeddingStore:
     def __init__(self, config: SurrealConfig, embedding_dimensions: int) -> None:
         self._config = config
@@ -195,9 +203,10 @@ DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
             "lng": post.lng,
             "embedding": list(embedding),
             "model": model,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc),
         }
-        await self._db.upsert(rid, payload)
+        result = await self._db.upsert(rid, payload)
+        _require_upsert(result, what=f"upsert {TABLE}:{post.id}")
         logger.info("post_embedding_upserted post_id=%s dim=%s", post.id, len(embedding))
 
     async def upsert_content(
@@ -226,9 +235,10 @@ DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
             "lng": doc.lng,
             "embedding": list(embedding),
             "model": model,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc),
         }
-        await self._db.upsert(rid, payload)
+        result = await self._db.upsert(rid, payload)
+        _require_upsert(result, what=f"upsert {CONTENT_TABLE}:{doc.record_key}")
         logger.info(
             "content_embedding_upserted kind=%s entity_id=%s dim=%s",
             doc.kind,

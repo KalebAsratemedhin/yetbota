@@ -17,10 +17,6 @@ const (
 	RoutingCommentCreated  = "comment.created"
 	RoutingQuestionCreated = "question.created"
 	RoutingAnswerCreated   = "answer.created"
-
-	// Legacy queue still bound for post.created; ai-service also uses ai.content.ingest.
-	QueuePostIngest    = "ai.post.ingest"
-	QueueContentIngest = "ai.content.ingest"
 )
 
 type contentEvent struct {

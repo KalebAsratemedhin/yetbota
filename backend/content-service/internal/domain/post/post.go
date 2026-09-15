@@ -137,8 +137,22 @@ type CreateInput struct {
 	Hashtags  []string
 }
 
+// UpdateInput is a full write of editable fields (caller merges with current post).
+type UpdateInput struct {
+	PostID    uuid.UUID
+	Title     string
+	Caption   string
+	Lat       float64
+	Lng       float64
+	MediaMode MediaMode
+	Media     []CreateMediaInput // if non-nil, replaces all media
+	Hashtags  []string           // always replaces hashtag links
+	ReplaceMedia bool
+}
+
 type Repository interface {
 	Create(ctx context.Context, in CreateInput) (Post, error)
+	Update(ctx context.Context, in UpdateInput) (Post, error)
 	ByID(ctx context.Context, id uuid.UUID) (Post, error)
 	ListByAuthor(ctx context.Context, authorID uuid.UUID, p ListParams) (Page, error)
 	SetReaction(ctx context.Context, postID, userID uuid.UUID, reaction *Reaction) (Post, error)

@@ -109,6 +109,74 @@ func (r *Repo) Create(ctx context.Context, in domain.CreateInput) (domain.Post, 
 	return p, nil
 }
 
+func (r *Repo) Update(ctx context.Context, in domain.UpdateInput) (domain.Post, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "begin tx")
+	}
+	defer tx.Rollback(ctx)
+	q := r.q.WithTx(tx)
+
+	tagText := strings.Join(in.Hashtags, " ")
+	_, err = q.UpdatePost(ctx, db.UpdatePostParams{
+		ID:          pgUUID(in.PostID),
+		Title:       in.Title,
+		Caption:     in.Caption,
+		Lat:         in.Lat,
+		Lng:         in.Lng,
+		MediaMode:   string(in.MediaMode),
+		HashtagText: tagText,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Post{}, apperr.ErrNotFound
+		}
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "update post")
+	}
+
+	if err := q.DeletePostHashtags(ctx, pgUUID(in.PostID)); err != nil {
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "clear hashtags")
+	}
+	for _, tag := range in.Hashtags {
+		hid := uuid.New()
+		h, err := q.UpsertHashtag(ctx, db.UpsertHashtagParams{ID: pgUUID(hid), Tag: tag})
+		if err != nil {
+			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "upsert hashtag")
+		}
+		hidUUID, err := uuidFromPg(h.ID)
+		if err != nil {
+			return domain.Post{}, err
+		}
+		if err := q.LinkPostHashtag(ctx, db.LinkPostHashtagParams{
+			PostID: pgUUID(in.PostID), HashtagID: pgUUID(hidUUID),
+		}); err != nil {
+			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "link hashtag")
+		}
+	}
+
+	if in.ReplaceMedia {
+		if err := q.DeletePostMedia(ctx, pgUUID(in.PostID)); err != nil {
+			return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "clear media")
+		}
+		for _, m := range in.Media {
+			mid := uuid.New()
+			if _, err := q.InsertPostMedia(ctx, db.InsertPostMediaParams{
+				ID: pgUUID(mid), PostID: pgUUID(in.PostID),
+				Kind: string(m.Kind), CloudinaryPublicID: m.CloudinaryPublicID, Url: m.URL,
+				SortOrder: int32(m.SortOrder), DurationMs: int32(m.DurationMs),
+				Width: int32(m.Width), Height: int32(m.Height), Mime: m.Mime,
+			}); err != nil {
+				return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "insert media")
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Post{}, apperr.Wrap(err, apperr.CodeInternal, "commit update post")
+	}
+	return r.ByID(ctx, in.PostID)
+}
+
 func (r *Repo) ByID(ctx context.Context, id uuid.UUID) (domain.Post, error) {
 	row, err := r.q.GetPostByID(ctx, pgUUID(id))
 	if err != nil {

@@ -14,6 +14,7 @@ const (
 	ExchangeEvents = "yetbota.events"
 
 	RoutingPostCreated     = "post.created"
+	RoutingPostUpdated     = "post.updated"
 	RoutingCommentCreated  = "comment.created"
 	RoutingQuestionCreated = "question.created"
 	RoutingAnswerCreated   = "answer.created"
@@ -74,6 +75,13 @@ func (p *Publisher) PublishPostCreated(ctx context.Context, postID uuid.UUID) er
 	id := postID.String()
 	return p.publish(ctx, RoutingPostCreated, contentEvent{
 		Event: RoutingPostCreated, PostID: &id,
+	})
+}
+
+func (p *Publisher) PublishPostUpdated(ctx context.Context, postID uuid.UUID) error {
+	id := postID.String()
+	return p.publish(ctx, RoutingPostUpdated, contentEvent{
+		Event: RoutingPostUpdated, PostID: &id,
 	})
 }
 

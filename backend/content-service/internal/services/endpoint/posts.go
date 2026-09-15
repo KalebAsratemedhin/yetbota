@@ -18,6 +18,7 @@ import (
 type PostService interface {
 	SignMedia(ctx context.Context, in postuc.SignMediaInput) (postuc.SignMediaResult, error)
 	Create(ctx context.Context, in postuc.CreatePostInput) (domain.Post, error)
+	Update(ctx context.Context, in postuc.UpdatePostInput) (domain.Post, error)
 	Get(ctx context.Context, id uuid.UUID) (domain.Post, error)
 	ListByAuthor(ctx context.Context, authorID uuid.UUID, in postuc.ListInput) (postuc.PageResult, error)
 	SetReaction(ctx context.Context, postID, userID uuid.UUID, reaction *domain.Reaction) (domain.Post, error)
@@ -51,6 +52,18 @@ type CreatePostRequest struct {
 	MediaMode string            `json:"media_mode"`
 	Media     []CreateMediaJSON `json:"media"`
 	Hashtags  []string          `json:"hashtags"`
+}
+
+type UpdatePostRequest struct {
+	Principal auth.Principal
+	PostID    uuid.UUID
+	Title     *string            `json:"title"`
+	Caption   *string            `json:"caption"`
+	Lat       *float64           `json:"lat"`
+	Lng       *float64           `json:"lng"`
+	MediaMode *string            `json:"media_mode"`
+	Media     *[]CreateMediaJSON `json:"media"`
+	Hashtags  *[]string          `json:"hashtags"`
 }
 
 type CreateMediaJSON struct {
@@ -248,6 +261,39 @@ func MakeCreatePostEndpoint(svc PostService) endpoint.Endpoint {
 			AuthorID: authorID, Title: req.Title, Caption: req.Caption, Lat: *req.Lat, Lng: *req.Lng,
 			MediaMode: domain.MediaMode(req.MediaMode), Media: media, Hashtags: req.Hashtags,
 		})
+		if err != nil {
+			return nil, err
+		}
+		return toPostJSON(p), nil
+	}
+}
+
+func MakeUpdatePostEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(UpdatePostRequest)
+		actorID, err := ParseUserID(req.Principal.UserID)
+		if err != nil {
+			return nil, err
+		}
+		in := postuc.UpdatePostInput{
+			PostID: req.PostID, ActorID: actorID,
+			Title: req.Title, Caption: req.Caption, Lat: req.Lat, Lng: req.Lng, Hashtags: req.Hashtags,
+		}
+		if req.MediaMode != nil {
+			m := domain.MediaMode(*req.MediaMode)
+			in.MediaMode = &m
+		}
+		if req.Media != nil {
+			media := make([]domain.CreateMediaInput, 0, len(*req.Media))
+			for _, m := range *req.Media {
+				media = append(media, domain.CreateMediaInput{
+					Kind: domain.MediaKind(m.Kind), CloudinaryPublicID: m.CloudinaryPublicID, URL: m.URL,
+					SortOrder: m.SortOrder, DurationMs: m.DurationMs, Width: m.Width, Height: m.Height, Mime: m.Mime,
+				})
+			}
+			in.Media = &media
+		}
+		p, err := svc.Update(ctx, in)
 		if err != nil {
 			return nil, err
 		}

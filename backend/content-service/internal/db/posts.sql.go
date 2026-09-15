@@ -244,6 +244,24 @@ func (q *Queries) DeleteCommentReaction(ctx context.Context, arg DeleteCommentRe
 	return err
 }
 
+const deletePostHashtags = `-- name: DeletePostHashtags :exec
+DELETE FROM post_hashtags WHERE post_id = $1
+`
+
+func (q *Queries) DeletePostHashtags(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePostHashtags, postID)
+	return err
+}
+
+const deletePostMedia = `-- name: DeletePostMedia :exec
+DELETE FROM post_media WHERE post_id = $1
+`
+
+func (q *Queries) DeletePostMedia(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePostMedia, postID)
+	return err
+}
+
 const deleteReaction = `-- name: DeleteReaction :exec
 DELETE FROM post_reactions WHERE post_id = $1 AND user_id = $2
 `
@@ -1439,6 +1457,57 @@ func (q *Queries) SearchPostsExcluding(ctx context.Context, arg SearchPostsExclu
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePost = `-- name: UpdatePost :one
+UPDATE posts SET
+    title = $1,
+    caption = $2,
+    lat = $3,
+    lng = $4,
+    media_mode = $5,
+    search_vector = to_tsvector('english', coalesce($1, '') || ' ' || coalesce($2, '') || ' ' || coalesce($6::text, ''))
+WHERE id = $7
+RETURNING id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at
+`
+
+type UpdatePostParams struct {
+	Title       string      `json:"title"`
+	Caption     string      `json:"caption"`
+	Lat         float64     `json:"lat"`
+	Lng         float64     `json:"lng"`
+	MediaMode   string      `json:"media_mode"`
+	HashtagText string      `json:"hashtag_text"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error) {
+	row := q.db.QueryRow(ctx, updatePost,
+		arg.Title,
+		arg.Caption,
+		arg.Lat,
+		arg.Lng,
+		arg.MediaMode,
+		arg.HashtagText,
+		arg.ID,
+	)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.Title,
+		&i.Caption,
+		&i.Lat,
+		&i.Lng,
+		&i.MediaMode,
+		&i.LikeCount,
+		&i.DislikeCount,
+		&i.CommentCount,
+		&i.ShareCount,
+		&i.BookmarkCount,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updatePostSearchVector = `-- name: UpdatePostSearchVector :exec

@@ -20,6 +20,7 @@ QUEUE_CONTENT_INGEST = "ai.content.ingest"
 
 ROUTING_KEYS = (
     "post.created",
+    "post.updated",
     "comment.created",
     "question.created",
     "answer.created",

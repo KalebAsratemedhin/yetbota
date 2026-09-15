@@ -22,7 +22,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` cosine edges. Local: Docker in `backend/docker-compose.yml` |
-| Messaging | RabbitMQ | `*.created` (post/comment/question/answer) → `ai.content.ingest` |
+| Messaging | RabbitMQ | `*.created` + `post.updated` → `ai.content.ingest` |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
 | Migrations (Python) | Alembic | ai-service; version table `alembic_version_ai` |
@@ -63,6 +63,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-021 | Post media shall be one of: (1) 1–10 images; (2) 1–10 images + one audio; (3) exactly one video. | No text-only; no audio-only; no video combined with images or audio |
 | FR-022 | Max images per post shall be 10; max video and audio duration shall default to 10 seconds and be configurable. | Config/env on content-service |
 | FR-023 | An authenticated user shall be able to fetch a post by id. | Public post payload |
+| FR-023a | An authenticated post author shall be able to edit their post (title, caption, lat/lng, hashtags, media). | Partial PATCH; author-only |
 | FR-024 | An authenticated user shall be able to list another user’s (or own) posts. | Publicly visible posts; keyset pagination |
 | FR-025 | An authenticated user shall be able to like, dislike, or clear their reaction on a post. | At most one of like/dislike per user per post |
 | FR-026 | An authenticated user shall be able to add and list top-level comments on a post. | Keyset pagination; top-level only on list |

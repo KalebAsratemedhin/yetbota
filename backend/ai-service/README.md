@@ -19,6 +19,7 @@ upsert Surreal. Posts also maintain the Related-posts `similar` graph.
 | Routing key | Payload IDs | Surreal writes |
 | --- | --- | --- |
 | `post.created` | `post_id` | `post_embedding` + `similar` **and** `content_embedding` (`kind=post`) |
+| `post.updated` | `post_id` | Same as create (re-embed) |
 | `comment.created` | `comment_id`, `post_id` | `content_embedding` (`kind=comment`, parent=post) |
 | `question.created` | `question_id`, optional `post_id` | `content_embedding` (`kind=question`) |
 | `answer.created` | `answer_id`, `question_id` | `content_embedding` (`kind=answer`, text=`Q:`+`A:`) |

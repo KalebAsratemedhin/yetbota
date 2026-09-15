@@ -198,6 +198,34 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Posts]
+      summary: Edit a post
+      description: |
+        Author-only. Partial update: omit fields to leave unchanged.
+        Send `hashtags: []` to clear tags. To replace media, send both `media_mode` and `media`.
+      operationId: updatePost
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePostRequest"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /posts/{id}/related:
     get:
       tags: [Posts]
@@ -785,6 +813,30 @@ components:
         title:
           type: string
           description: Place name (required)
+          maxLength: 200
+        caption:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        media_mode:
+          type: string
+          enum: [images, images_audio, video]
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateMedia"
+        hashtags:
+          type: array
+          items:
+            type: string
+    UpdatePostRequest:
+      type: object
+      description: At least one field required. lat/lng both or neither. media_mode+media both or neither.
+      properties:
+        title:
+          type: string
           maxLength: 200
         caption:
           type: string

@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	SignMedia          endpoint.Endpoint
 	Create             endpoint.Endpoint
+	Update             endpoint.Endpoint
 	Get                endpoint.Endpoint
 	ListUser           endpoint.Endpoint
 	SetReaction        endpoint.Endpoint
@@ -47,6 +48,7 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 
 	mux.Handle("POST /media/sign", auth(eps.SignMedia, decodeSignMedia))
 	mux.Handle("POST /posts", auth(eps.Create, decodeCreate))
+	mux.Handle("PATCH /posts/{id}", auth(eps.Update, decodeUpdate))
 	mux.Handle("GET /posts/search", auth(eps.Search, decodeSearch))
 	mux.Handle("GET /posts/trending", auth(eps.TrendingPosts, decodeTrending))
 	mux.Handle("GET /posts/{id}", auth(eps.Get, decodePostID))
@@ -90,6 +92,24 @@ func decodeCreate(ctx context.Context, r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 	req.Principal = p
+	return req, nil
+}
+
+func decodeUpdate(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := svcendpoint.ParsePostID(r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	var req svcendpoint.UpdatePostRequest
+	if err := decodeJSON(r, &req); err != nil {
+		return nil, err
+	}
+	req.Principal = p
+	req.PostID = id
 	return req, nil
 }
 

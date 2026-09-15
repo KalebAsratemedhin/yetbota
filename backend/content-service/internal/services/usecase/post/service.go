@@ -40,6 +40,7 @@ type ReputationNotifier interface {
 // ContentEventPublisher notifies ai-service to embed content (thin ID events).
 type ContentEventPublisher interface {
 	PublishPostCreated(ctx context.Context, postID uuid.UUID) error
+	PublishPostUpdated(ctx context.Context, postID uuid.UUID) error
 	PublishCommentCreated(ctx context.Context, commentID, postID uuid.UUID) error
 }
 
@@ -176,6 +177,21 @@ type CreatePostInput struct {
 	Hashtags  []string
 }
 
+// UpdatePostInput is a PATCH: nil pointers mean leave unchanged.
+// Hashtags: nil = unchanged; non-nil (including empty) replaces all tags.
+// Media: if Media != nil, MediaMode must be set and media is fully replaced.
+type UpdatePostInput struct {
+	PostID    uuid.UUID
+	ActorID   uuid.UUID
+	Title     *string
+	Caption   *string
+	Lat       *float64
+	Lng       *float64
+	Hashtags  *[]string
+	MediaMode *domain.MediaMode
+	Media     *[]domain.CreateMediaInput
+}
+
 type ListInput struct {
 	Limit  int
 	Cursor string
@@ -280,6 +296,105 @@ func (s *Service) Create(ctx context.Context, in CreatePostInput) (domain.Post, 
 		}
 	}
 	return p, nil
+}
+
+func (s *Service) Update(ctx context.Context, in UpdatePostInput) (domain.Post, error) {
+	cur, err := s.posts.ByID(ctx, in.PostID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if cur.AuthorID != in.ActorID {
+		return domain.Post{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "FORBIDDEN", Message: "only the author can edit this post",
+		})
+	}
+
+	title := cur.Title
+	caption := cur.Caption
+	lat, lng := cur.Lat, cur.Lng
+	mode := cur.MediaMode
+	tags := append([]string(nil), cur.Hashtags...)
+	replaceMedia := false
+	var mediaItems []domain.CreateMediaInput
+
+	changed := false
+	if in.Title != nil {
+		changed = true
+		title = strings.TrimSpace(*in.Title)
+	}
+	if in.Caption != nil {
+		changed = true
+		caption = strings.TrimSpace(*in.Caption)
+	}
+	if (in.Lat == nil) != (in.Lng == nil) {
+		return domain.Post{}, apperr.Validation(apperr.Field{
+			Field: "lat/lng", Code: "INVALID", Message: "lat and lng must both be provided or both omitted",
+		})
+	}
+	if in.Lat != nil {
+		changed = true
+		lat, lng = *in.Lat, *in.Lng
+	}
+	if in.Hashtags != nil {
+		changed = true
+		tags = *in.Hashtags
+	}
+	if in.Media != nil || in.MediaMode != nil {
+		if in.Media == nil || in.MediaMode == nil {
+			return domain.Post{}, apperr.Validation(apperr.Field{
+				Field: "media", Code: "INVALID", Message: "media_mode and media must both be provided to replace media",
+			})
+		}
+		changed = true
+		replaceMedia = true
+		mode = *in.MediaMode
+		mediaItems = *in.Media
+	}
+	if !changed {
+		return domain.Post{}, apperr.Validation(apperr.Field{
+			Field: "body", Code: "REQUIRED", Message: "provide at least one field to update",
+		})
+	}
+
+	// Reuse create validators for the merged post shape.
+	mode, mediaItems, tags, err = s.validateCreate(CreatePostInput{
+		AuthorID: in.ActorID, Title: title, Caption: caption, Lat: lat, Lng: lng,
+		MediaMode: mode, Media: mediaForValidate(replaceMedia, mediaItems, cur), Hashtags: tags,
+	})
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if !replaceMedia {
+		mediaItems = nil
+	}
+
+	p, err := s.posts.Update(ctx, domain.UpdateInput{
+		PostID: in.PostID, Title: title, Caption: caption, Lat: lat, Lng: lng,
+		MediaMode: mode, Media: mediaItems, Hashtags: tags, ReplaceMedia: replaceMedia,
+	})
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if s.postEvents != nil {
+		if err := s.postEvents.PublishPostUpdated(ctx, p.ID); err != nil {
+			slog.Warn("post_updated_publish_failed", "post_id", p.ID.String(), "err", err.Error())
+		}
+	}
+	return p, nil
+}
+
+func mediaForValidate(replace bool, media []domain.CreateMediaInput, cur domain.Post) []domain.CreateMediaInput {
+	if replace {
+		return media
+	}
+	out := make([]domain.CreateMediaInput, 0, len(cur.Media))
+	for _, m := range cur.Media {
+		out = append(out, domain.CreateMediaInput{
+			Kind: m.Kind, CloudinaryPublicID: m.CloudinaryPublicID, URL: m.URL,
+			SortOrder: m.SortOrder, DurationMs: m.DurationMs, Width: m.Width, Height: m.Height, Mime: m.Mime,
+		})
+	}
+	return out
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (domain.Post, error) {

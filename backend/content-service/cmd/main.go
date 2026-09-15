@@ -146,6 +146,7 @@ func main() {
 	eps := postshttp.Endpoints{
 		SignMedia:          endpoint.MakeSignMediaEndpoint(svc),
 		Create:             endpoint.MakeCreatePostEndpoint(svc),
+		Update:             endpoint.MakeUpdatePostEndpoint(svc),
 		Get:                endpoint.MakeGetPostEndpoint(svc),
 		ListUser:           endpoint.MakeListUserPostsEndpoint(svc),
 		SetReaction:        endpoint.MakeSetReactionEndpoint(svc),

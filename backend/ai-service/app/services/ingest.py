@@ -31,6 +31,8 @@ class IngestService:
         """Dispatch thin domain events to the right ingest path."""
         if event == "post.created":
             return await self.ingest_post(UUID(str(payload["post_id"])))
+        if event == "post.updated":
+            return await self.ingest_post(UUID(str(payload["post_id"])))
         if event == "comment.created":
             return await self.ingest_comment(UUID(str(payload["comment_id"])))
         if event == "question.created":

@@ -7,6 +7,23 @@ INSERT INTO posts (
 )
 RETURNING *;
 
+-- name: UpdatePost :one
+UPDATE posts SET
+    title = sqlc.arg(title),
+    caption = sqlc.arg(caption),
+    lat = sqlc.arg(lat),
+    lng = sqlc.arg(lng),
+    media_mode = sqlc.arg(media_mode),
+    search_vector = to_tsvector('english', coalesce(sqlc.arg(title), '') || ' ' || coalesce(sqlc.arg(caption), '') || ' ' || coalesce(sqlc.arg(hashtag_text)::text, ''))
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: DeletePostMedia :exec
+DELETE FROM post_media WHERE post_id = $1;
+
+-- name: DeletePostHashtags :exec
+DELETE FROM post_hashtags WHERE post_id = $1;
+
 -- name: GetPostByID :one
 SELECT * FROM posts WHERE id = $1;
 

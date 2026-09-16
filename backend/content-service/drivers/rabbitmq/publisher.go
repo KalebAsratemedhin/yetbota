@@ -17,7 +17,9 @@ const (
 	RoutingPostUpdated     = "post.updated"
 	RoutingCommentCreated  = "comment.created"
 	RoutingQuestionCreated = "question.created"
+	RoutingQuestionUpdated = "question.updated"
 	RoutingAnswerCreated   = "answer.created"
+	RoutingAnswerUpdated   = "answer.updated"
 )
 
 type contentEvent struct {
@@ -102,10 +104,27 @@ func (p *Publisher) PublishQuestionCreated(ctx context.Context, questionID uuid.
 	return p.publish(ctx, RoutingQuestionCreated, ev)
 }
 
+func (p *Publisher) PublishQuestionUpdated(ctx context.Context, questionID uuid.UUID, postID *uuid.UUID) error {
+	qid := questionID.String()
+	ev := contentEvent{Event: RoutingQuestionUpdated, QuestionID: &qid}
+	if postID != nil {
+		pid := postID.String()
+		ev.PostID = &pid
+	}
+	return p.publish(ctx, RoutingQuestionUpdated, ev)
+}
+
 func (p *Publisher) PublishAnswerCreated(ctx context.Context, answerID, questionID uuid.UUID) error {
 	aid, qid := answerID.String(), questionID.String()
 	return p.publish(ctx, RoutingAnswerCreated, contentEvent{
 		Event: RoutingAnswerCreated, AnswerID: &aid, QuestionID: &qid,
+	})
+}
+
+func (p *Publisher) PublishAnswerUpdated(ctx context.Context, answerID, questionID uuid.UUID) error {
+	aid, qid := answerID.String(), questionID.String()
+	return p.publish(ctx, RoutingAnswerUpdated, contentEvent{
+		Event: RoutingAnswerUpdated, AnswerID: &aid, QuestionID: &qid,
 	})
 }
 

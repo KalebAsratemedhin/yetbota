@@ -585,6 +585,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Q&A]
+      summary: Edit a question
+      description: |
+        Author-only. Closed questions cannot be edited.
+        Omit fields to leave unchanged. `post_id: ""` clears the post link.
+        `clear_place: true` clears lat/lng. To set place, send both lat and lng.
+      operationId: updateQuestion
+      parameters:
+        - $ref: "#/components/parameters/QuestionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuestionRequest"
+      responses:
+        "200":
+          description: Updated question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /questions/{id}/close:
     post:
       tags: [Q&A]
@@ -680,6 +709,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnswersPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /answers/{id}:
+    patch:
+      tags: [Q&A]
+      summary: Edit an answer
+      description: Author-only. Updates the answer body.
+      operationId: updateAnswer
+      parameters:
+        - $ref: "#/components/parameters/AnswerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAnswerRequest"
+      responses:
+        "200":
+          description: Updated answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1057,6 +1113,31 @@ components:
           type: number
           nullable: true
           description: Place longitude when attaching a location (with lat)
+    UpdateQuestionRequest:
+      type: object
+      description: At least one field required. Author-only; closed questions rejected.
+      properties:
+        body:
+          type: string
+          maxLength: 10000
+        post_id:
+          type: string
+          nullable: true
+          description: UUID to link; empty string to clear; omit to leave unchanged
+        lat:
+          type: number
+        lng:
+          type: number
+        clear_place:
+          type: boolean
+          description: When true, clears lat/lng
+    UpdateAnswerRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          maxLength: 10000
     VoteRequest:
       type: object
       properties:

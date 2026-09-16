@@ -169,11 +169,13 @@ func main() {
 	qaSvc := qauc.NewService(qarepo.New(pool), pub, cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
 	qaEps := qahttp.Endpoints{
 		CreateQuestion: endpoint.MakeCreateQuestionEndpoint(qaSvc),
+		UpdateQuestion: endpoint.MakeUpdateQuestionEndpoint(qaSvc),
 		GetQuestion:    endpoint.MakeGetQuestionEndpoint(qaSvc),
 		ListQuestions:  endpoint.MakeListQuestionsEndpoint(qaSvc),
 		CloseQuestion:  endpoint.MakeCloseQuestionEndpoint(qaSvc),
 		QuestionVote:   endpoint.MakeQuestionVoteEndpoint(qaSvc),
 		AddAnswer:      endpoint.MakeAddAnswerEndpoint(qaSvc),
+		UpdateAnswer:   endpoint.MakeUpdateAnswerEndpoint(qaSvc),
 		ListAnswers:    endpoint.MakeListAnswersEndpoint(qaSvc),
 		AnswerVote:     endpoint.MakeAnswerVoteEndpoint(qaSvc),
 	}

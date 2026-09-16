@@ -29,6 +29,21 @@ WHERE id = sqlc.arg(id)
   AND closed_at IS NULL
 RETURNING *;
 
+-- name: UpdateQuestion :one
+UPDATE questions
+SET body = sqlc.arg(body),
+    post_id = sqlc.narg(post_id),
+    lat = sqlc.narg(lat),
+    lng = sqlc.narg(lng)
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: UpdateAnswer :one
+UPDATE answers
+SET body = sqlc.arg(body)
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
 -- name: GetQuestionVote :one
 SELECT * FROM question_votes
 WHERE question_id = $1 AND user_id = $2;

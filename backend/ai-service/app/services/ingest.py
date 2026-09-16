@@ -37,7 +37,11 @@ class IngestService:
             return await self.ingest_comment(UUID(str(payload["comment_id"])))
         if event == "question.created":
             return await self.ingest_question(UUID(str(payload["question_id"])))
+        if event == "question.updated":
+            return await self.ingest_question(UUID(str(payload["question_id"])))
         if event == "answer.created":
+            return await self.ingest_answer(UUID(str(payload["answer_id"])))
+        if event == "answer.updated":
             return await self.ingest_answer(UUID(str(payload["answer_id"])))
         logger.warning("ignored_event type=%s", event)
         return False

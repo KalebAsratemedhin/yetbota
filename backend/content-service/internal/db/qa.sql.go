@@ -499,6 +499,77 @@ func (q *Queries) ListQuestions(ctx context.Context, arg ListQuestionsParams) ([
 	return items, nil
 }
 
+const updateAnswer = `-- name: UpdateAnswer :one
+UPDATE answers
+SET body = $1
+WHERE id = $2
+RETURNING id, question_id, author_id, body, upvote_count, downvote_count, created_at
+`
+
+type UpdateAnswerParams struct {
+	Body string      `json:"body"`
+	ID   pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateAnswer(ctx context.Context, arg UpdateAnswerParams) (Answer, error) {
+	row := q.db.QueryRow(ctx, updateAnswer, arg.Body, arg.ID)
+	var i Answer
+	err := row.Scan(
+		&i.ID,
+		&i.QuestionID,
+		&i.AuthorID,
+		&i.Body,
+		&i.UpvoteCount,
+		&i.DownvoteCount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateQuestion = `-- name: UpdateQuestion :one
+UPDATE questions
+SET body = $1,
+    post_id = $2,
+    lat = $3,
+    lng = $4
+WHERE id = $5
+RETURNING id, author_id, body, post_id, lat, lng, upvote_count, downvote_count, answer_count, closed_at, closed_by, created_at
+`
+
+type UpdateQuestionParams struct {
+	Body   string        `json:"body"`
+	PostID pgtype.UUID   `json:"post_id"`
+	Lat    pgtype.Float8 `json:"lat"`
+	Lng    pgtype.Float8 `json:"lng"`
+	ID     pgtype.UUID   `json:"id"`
+}
+
+func (q *Queries) UpdateQuestion(ctx context.Context, arg UpdateQuestionParams) (Question, error) {
+	row := q.db.QueryRow(ctx, updateQuestion,
+		arg.Body,
+		arg.PostID,
+		arg.Lat,
+		arg.Lng,
+		arg.ID,
+	)
+	var i Question
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.Body,
+		&i.PostID,
+		&i.Lat,
+		&i.Lng,
+		&i.UpvoteCount,
+		&i.DownvoteCount,
+		&i.AnswerCount,
+		&i.ClosedAt,
+		&i.ClosedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const upsertAnswerVote = `-- name: UpsertAnswerVote :one
 INSERT INTO answer_votes (answer_id, user_id, vote)
 VALUES ($1, $2, $3)

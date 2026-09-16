@@ -19,7 +19,9 @@ import (
 // ContentEventPublisher notifies ai-service (thin ID events).
 type ContentEventPublisher interface {
 	PublishQuestionCreated(ctx context.Context, questionID uuid.UUID, postID *uuid.UUID) error
+	PublishQuestionUpdated(ctx context.Context, questionID uuid.UUID, postID *uuid.UUID) error
 	PublishAnswerCreated(ctx context.Context, answerID, questionID uuid.UUID) error
+	PublishAnswerUpdated(ctx context.Context, answerID, questionID uuid.UUID) error
 }
 
 type Service struct {
@@ -45,6 +47,25 @@ type CreateQuestionInput struct {
 	PostID   *uuid.UUID
 	Lat      *float64
 	Lng      *float64
+}
+
+// UpdateQuestionInput is a PATCH: nil pointers mean leave unchanged.
+// PostID: nil = unchanged; non-nil empty UUID clear via ClearPostID; use ClearPostID for unlink.
+type UpdateQuestionInput struct {
+	QuestionID  uuid.UUID
+	ActorID     uuid.UUID
+	Body        *string
+	PostID      *uuid.UUID // set when updating link; ignored if ClearPostID
+	ClearPostID bool
+	Lat         *float64
+	Lng         *float64
+	ClearPlace  bool // clears lat/lng
+}
+
+type UpdateAnswerInput struct {
+	AnswerID uuid.UUID
+	ActorID  uuid.UUID
+	Body     *string
 }
 
 type ListInput struct {
@@ -103,6 +124,93 @@ func (s *Service) CreateQuestion(ctx context.Context, in CreateQuestionInput) (d
 	if s.events != nil {
 		if err := s.events.PublishQuestionCreated(ctx, q.ID, q.PostID); err != nil {
 			slog.Warn("question_created_publish_failed", "question_id", q.ID.String(), "err", err.Error())
+		}
+	}
+	return q, nil
+}
+
+func (s *Service) UpdateQuestion(ctx context.Context, in UpdateQuestionInput) (domain.Question, error) {
+	cur, err := s.repo.GetQuestion(ctx, in.QuestionID)
+	if err != nil {
+		return domain.Question{}, err
+	}
+	if cur.AuthorID != in.ActorID {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "FORBIDDEN", Message: "only the author can edit this question",
+		})
+	}
+	if cur.Closed() {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "CLOSED", Message: "closed questions cannot be edited",
+		})
+	}
+
+	body := cur.Body
+	postID := cur.PostID
+	lat, lng := cur.Lat, cur.Lng
+	changed := false
+
+	if in.Body != nil {
+		changed = true
+		body = strings.TrimSpace(*in.Body)
+	}
+	if in.ClearPostID {
+		changed = true
+		postID = nil
+	} else if in.PostID != nil {
+		changed = true
+		postID = in.PostID
+	}
+	if in.ClearPlace {
+		changed = true
+		lat, lng = nil, nil
+	} else if (in.Lat == nil) != (in.Lng == nil) {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "lat/lng", Code: "INVALID", Message: "lat and lng must both be provided or both omitted",
+		})
+	} else if in.Lat != nil {
+		changed = true
+		lat, lng = in.Lat, in.Lng
+	}
+	if !changed {
+		return domain.Question{}, apperr.Validation(apperr.Field{
+			Field: "body", Code: "REQUIRED", Message: "provide at least one field to update",
+		})
+	}
+
+	var details []apperr.Field
+	if body == "" {
+		details = append(details, apperr.Required("body"))
+	} else if utf8.RuneCountInString(body) > 10000 {
+		details = append(details, apperr.Field{Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters"})
+	}
+	if lat != nil && (*lat < -90 || *lat > 90 || *lng < -180 || *lng > 180) {
+		details = append(details, apperr.Field{Field: "lat/lng", Code: "INVALID", Message: "lat/lng out of range"})
+	}
+	if len(details) > 0 {
+		return domain.Question{}, apperr.Validation(details...)
+	}
+	if postID != nil {
+		ok, err := s.repo.PostExists(ctx, *postID)
+		if err != nil {
+			return domain.Question{}, err
+		}
+		if !ok {
+			return domain.Question{}, apperr.Validation(apperr.Field{
+				Field: "post_id", Code: "NOT_FOUND", Message: "post not found",
+			})
+		}
+	}
+
+	q, err := s.repo.UpdateQuestion(ctx, domain.UpdateQuestionInput{
+		ID: in.QuestionID, Body: body, PostID: postID, Lat: lat, Lng: lng,
+	})
+	if err != nil {
+		return domain.Question{}, err
+	}
+	if s.events != nil {
+		if err := s.events.PublishQuestionUpdated(ctx, q.ID, q.PostID); err != nil {
+			slog.Warn("question_updated_publish_failed", "question_id", q.ID.String(), "err", err.Error())
 		}
 	}
 	return q, nil
@@ -182,6 +290,42 @@ func (s *Service) AddAnswer(ctx context.Context, questionID, authorID uuid.UUID,
 	if s.events != nil {
 		if err := s.events.PublishAnswerCreated(ctx, a.ID, questionID); err != nil {
 			slog.Warn("answer_created_publish_failed", "answer_id", a.ID.String(), "err", err.Error())
+		}
+	}
+	return a, nil
+}
+
+func (s *Service) UpdateAnswer(ctx context.Context, in UpdateAnswerInput) (domain.Answer, error) {
+	cur, err := s.repo.GetAnswer(ctx, in.AnswerID)
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	if cur.AuthorID != in.ActorID {
+		return domain.Answer{}, apperr.Validation(apperr.Field{
+			Field: "id", Code: "FORBIDDEN", Message: "only the author can edit this answer",
+		})
+	}
+	if in.Body == nil {
+		return domain.Answer{}, apperr.Validation(apperr.Field{
+			Field: "body", Code: "REQUIRED", Message: "provide body to update",
+		})
+	}
+	body := strings.TrimSpace(*in.Body)
+	if body == "" {
+		return domain.Answer{}, apperr.Validation(apperr.Required("body"))
+	}
+	if utf8.RuneCountInString(body) > 10000 {
+		return domain.Answer{}, apperr.Validation(apperr.Field{
+			Field: "body", Code: "TOO_LONG", Message: "body must be at most 10000 characters",
+		})
+	}
+	a, err := s.repo.UpdateAnswer(ctx, domain.UpdateAnswerInput{ID: in.AnswerID, Body: body})
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	if s.events != nil {
+		if err := s.events.PublishAnswerUpdated(ctx, a.ID, a.QuestionID); err != nil {
+			slog.Warn("answer_updated_publish_failed", "answer_id", a.ID.String(), "err", err.Error())
 		}
 	}
 	return a, nil

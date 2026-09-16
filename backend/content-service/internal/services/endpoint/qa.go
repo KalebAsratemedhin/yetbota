@@ -16,11 +16,13 @@ import (
 
 type QAService interface {
 	CreateQuestion(ctx context.Context, in qauc.CreateQuestionInput) (domain.Question, error)
+	UpdateQuestion(ctx context.Context, in qauc.UpdateQuestionInput) (domain.Question, error)
 	GetQuestion(ctx context.Context, id uuid.UUID) (domain.Question, error)
 	ListQuestions(ctx context.Context, in qauc.ListInput) (qauc.PageResult, error)
 	CloseQuestion(ctx context.Context, id, actorID uuid.UUID) (domain.Question, error)
 	SetQuestionVote(ctx context.Context, questionID, userID uuid.UUID, vote *domain.Vote) (domain.Question, error)
 	AddAnswer(ctx context.Context, questionID, authorID uuid.UUID, body string) (domain.Answer, error)
+	UpdateAnswer(ctx context.Context, in qauc.UpdateAnswerInput) (domain.Answer, error)
 	ListAnswers(ctx context.Context, questionID uuid.UUID, in qauc.ListInput) (qauc.AnswerPageResult, error)
 	SetAnswerVote(ctx context.Context, answerID, userID uuid.UUID, vote *domain.Vote) (domain.Answer, error)
 }
@@ -31,6 +33,22 @@ type CreateQuestionRequest struct {
 	PostID    *string  `json:"post_id"`
 	Lat       *float64 `json:"lat"`
 	Lng       *float64 `json:"lng"`
+}
+
+type UpdateQuestionRequest struct {
+	Principal   auth.Principal
+	QuestionID  uuid.UUID
+	Body        *string  `json:"body"`
+	PostID      *string  `json:"post_id"` // omit unchanged; "" clears; uuid sets
+	Lat         *float64 `json:"lat"`
+	Lng         *float64 `json:"lng"`
+	ClearPlace  bool     `json:"clear_place"`
+}
+
+type UpdateAnswerRequest struct {
+	Principal auth.Principal
+	AnswerID  uuid.UUID
+	Body      *string `json:"body"`
 }
 
 type QuestionIDRequest struct {
@@ -133,6 +151,39 @@ func MakeCreateQuestionEndpoint(svc QAService) endpoint.Endpoint {
 	}
 }
 
+func MakeUpdateQuestionEndpoint(svc QAService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(UpdateQuestionRequest)
+		actorID, err := ParseUserID(req.Principal.UserID)
+		if err != nil {
+			return nil, err
+		}
+		in := qauc.UpdateQuestionInput{
+			QuestionID: req.QuestionID, ActorID: actorID,
+			Body: req.Body, Lat: req.Lat, Lng: req.Lng, ClearPlace: req.ClearPlace,
+		}
+		if req.PostID != nil {
+			raw := strings.TrimSpace(*req.PostID)
+			if raw == "" {
+				in.ClearPostID = true
+			} else {
+				id, err := uuid.Parse(raw)
+				if err != nil {
+					return nil, apperr.Validation(apperr.Field{
+						Field: "post_id", Code: "INVALID", Message: "post_id must be a UUID",
+					})
+				}
+				in.PostID = &id
+			}
+		}
+		q, err := svc.UpdateQuestion(ctx, in)
+		if err != nil {
+			return nil, err
+		}
+		return toQuestionJSON(q), nil
+	}
+}
+
 func MakeGetQuestionEndpoint(svc QAService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(QuestionIDRequest)
@@ -203,6 +254,23 @@ func MakeAddAnswerEndpoint(svc QAService) endpoint.Endpoint {
 			return nil, err
 		}
 		a, err := svc.AddAnswer(ctx, req.QuestionID, authorID, req.Body)
+		if err != nil {
+			return nil, err
+		}
+		return toAnswerJSON(a), nil
+	}
+}
+
+func MakeUpdateAnswerEndpoint(svc QAService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(UpdateAnswerRequest)
+		actorID, err := ParseUserID(req.Principal.UserID)
+		if err != nil {
+			return nil, err
+		}
+		a, err := svc.UpdateAnswer(ctx, qauc.UpdateAnswerInput{
+			AnswerID: req.AnswerID, ActorID: actorID, Body: req.Body,
+		})
 		if err != nil {
 			return nil, err
 		}

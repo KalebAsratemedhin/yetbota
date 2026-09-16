@@ -55,6 +55,28 @@ func (r *Repo) CreateQuestion(ctx context.Context, in domain.CreateQuestionInput
 	return questionFromDB(row)
 }
 
+func (r *Repo) UpdateQuestion(ctx context.Context, in domain.UpdateQuestionInput) (domain.Question, error) {
+	params := db.UpdateQuestionParams{
+		ID:   pgUUID(in.ID),
+		Body: in.Body,
+	}
+	if in.PostID != nil {
+		params.PostID = pgUUID(*in.PostID)
+	}
+	if in.Lat != nil && in.Lng != nil {
+		params.Lat = pgtype.Float8{Float64: *in.Lat, Valid: true}
+		params.Lng = pgtype.Float8{Float64: *in.Lng, Valid: true}
+	}
+	row, err := r.q.UpdateQuestion(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Question{}, apperr.ErrNotFound
+		}
+		return domain.Question{}, apperr.Wrap(err, apperr.CodeInternal, "update question")
+	}
+	return questionFromDB(row)
+}
+
 func (r *Repo) GetQuestion(ctx context.Context, id uuid.UUID) (domain.Question, error) {
 	row, err := r.q.GetQuestionByID(ctx, pgUUID(id))
 	if err != nil {
@@ -227,6 +249,19 @@ func (r *Repo) CreateAnswer(ctx context.Context, in domain.CreateAnswerInput) (d
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Answer{}, apperr.Wrap(err, apperr.CodeInternal, "commit answer")
+	}
+	return answerFromDB(row)
+}
+
+func (r *Repo) UpdateAnswer(ctx context.Context, in domain.UpdateAnswerInput) (domain.Answer, error) {
+	row, err := r.q.UpdateAnswer(ctx, db.UpdateAnswerParams{
+		ID: pgUUID(in.ID), Body: in.Body,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Answer{}, apperr.ErrNotFound
+		}
+		return domain.Answer{}, apperr.Wrap(err, apperr.CodeInternal, "update answer")
 	}
 	return answerFromDB(row)
 }

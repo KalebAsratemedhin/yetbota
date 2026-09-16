@@ -22,7 +22,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` cosine edges. Local: Docker in `backend/docker-compose.yml` |
-| Messaging | RabbitMQ | `*.created` + `post.updated` → `ai.content.ingest` |
+| Messaging | RabbitMQ | `*.created` / `*.updated` (post/comment/question/answer) → `ai.content.ingest` |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
 | Migrations (Python) | Alembic | ai-service; version table `alembic_version_ai` |
@@ -88,7 +88,9 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-044 | An authenticated user shall be able to list and fetch questions (optionally filter by `post_id`). | Keyset pagination |
 | FR-045 | An authenticated user shall be able to upvote, downvote, or clear their vote on a question or answer. | At most one vote per user per item; authors cannot vote on their own question/answer |
 | FR-046 | The author of a question shall be able to mark it closed. | Closed questions reject new answers; votes still allowed |
+| FR-046a | The author of a question shall be able to edit it (body, post link, place). | Partial PATCH; closed questions cannot be edited |
 | FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
+| FR-047a | The author of an answer shall be able to edit its body. | Partial PATCH |
 
 ## Feed ranking (non-ML)
 
@@ -162,9 +164,11 @@ Config under content-service `trending.*` (`lookback_days`, `candidate_limit`, `
 | `POST /questions` | Create with `body`; optional `post_id`; optional place `lat`/`lng` (both or neither) |
 | `GET /questions` | List (optional `post_id` filter); keyset cursor |
 | `GET /questions/{id}` | Detail |
+| `PATCH /questions/{id}` | Author-only edit (body / post_id / place); closed questions rejected |
 | `POST /questions/{id}/vote` | `{ vote: "up"\|"down"\|null }` |
 | `POST /questions/{id}/close` | Author only; blocks new answers |
 | `POST/GET /questions/{id}/answers` | Create/list answers (create rejected if closed) |
+| `PATCH /answers/{id}` | Author-only edit body |
 | `POST /answers/{id}/vote` | Same vote shape |
 
 Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption + hashtags. Migration may wipe local post rows to apply NOT NULL.

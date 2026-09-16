@@ -23,7 +23,9 @@ ROUTING_KEYS = (
     "post.updated",
     "comment.created",
     "question.created",
+    "question.updated",
     "answer.created",
+    "answer.updated",
 )
 
 EventHandler = Callable[[str, dict[str, Any]], Awaitable[bool]]

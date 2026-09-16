@@ -18,11 +18,13 @@ import (
 
 type Endpoints struct {
 	CreateQuestion endpoint.Endpoint
+	UpdateQuestion endpoint.Endpoint
 	GetQuestion    endpoint.Endpoint
 	ListQuestions  endpoint.Endpoint
 	CloseQuestion  endpoint.Endpoint
 	QuestionVote   endpoint.Endpoint
 	AddAnswer      endpoint.Endpoint
+	UpdateAnswer   endpoint.Endpoint
 	ListAnswers    endpoint.Endpoint
 	AnswerVote     endpoint.Endpoint
 }
@@ -38,10 +40,12 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	mux.Handle("POST /questions", auth(eps.CreateQuestion, decodeCreateQuestion))
 	mux.Handle("GET /questions", auth(eps.ListQuestions, decodeListQuestions))
 	mux.Handle("GET /questions/{id}", auth(eps.GetQuestion, decodeQuestionID))
+	mux.Handle("PATCH /questions/{id}", auth(eps.UpdateQuestion, decodeUpdateQuestion))
 	mux.Handle("POST /questions/{id}/close", auth(eps.CloseQuestion, decodeQuestionID))
 	mux.Handle("POST /questions/{id}/vote", auth(eps.QuestionVote, decodeQuestionVote))
 	mux.Handle("POST /questions/{id}/answers", auth(eps.AddAnswer, decodeAddAnswer))
 	mux.Handle("GET /questions/{id}/answers", auth(eps.ListAnswers, decodeListAnswers))
+	mux.Handle("PATCH /answers/{id}", auth(eps.UpdateAnswer, decodeUpdateAnswer))
 	mux.Handle("POST /answers/{id}/vote", auth(eps.AnswerVote, decodeAnswerVote))
 }
 
@@ -92,6 +96,42 @@ func decodeQuestionID(ctx context.Context, r *http.Request) (interface{}, error)
 		return nil, err
 	}
 	return svcendpoint.QuestionIDRequest{Principal: p, QuestionID: id}, nil
+}
+
+func decodeUpdateQuestion(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseID(r.PathValue("id"), "id")
+	if err != nil {
+		return nil, err
+	}
+	var req svcendpoint.UpdateQuestionRequest
+	if err := decodeJSON(r, &req); err != nil {
+		return nil, err
+	}
+	req.Principal = p
+	req.QuestionID = id
+	return req, nil
+}
+
+func decodeUpdateAnswer(ctx context.Context, r *http.Request) (interface{}, error) {
+	p, err := shared.PrincipalFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseID(r.PathValue("id"), "id")
+	if err != nil {
+		return nil, err
+	}
+	var req svcendpoint.UpdateAnswerRequest
+	if err := decodeJSON(r, &req); err != nil {
+		return nil, err
+	}
+	req.Principal = p
+	req.AnswerID = id
+	return req, nil
 }
 
 func decodeQuestionVote(ctx context.Context, r *http.Request) (interface{}, error) {

@@ -22,7 +22,9 @@ upsert Surreal. Posts also maintain the Related-posts `similar` graph.
 | `post.updated` | `post_id` | Same as create (re-embed) |
 | `comment.created` | `comment_id`, `post_id` | `content_embedding` (`kind=comment`, parent=post) |
 | `question.created` | `question_id`, optional `post_id` | `content_embedding` (`kind=question`) |
+| `question.updated` | `question_id`, optional `post_id` | Same as create (re-embed) |
 | `answer.created` | `answer_id`, `question_id` | `content_embedding` (`kind=answer`, text=`Q:`+`A:`) |
+| `answer.updated` | `answer_id`, `question_id` | Same as create (re-embed) |
 
 ## Local setup
 

@@ -78,13 +78,28 @@ type CreateAnswerInput struct {
 	Body       string
 }
 
+type UpdateQuestionInput struct {
+	ID     uuid.UUID
+	Body   string
+	PostID *uuid.UUID
+	Lat    *float64
+	Lng    *float64
+}
+
+type UpdateAnswerInput struct {
+	ID   uuid.UUID
+	Body string
+}
+
 type Repository interface {
 	CreateQuestion(ctx context.Context, in CreateQuestionInput) (Question, error)
+	UpdateQuestion(ctx context.Context, in UpdateQuestionInput) (Question, error)
 	GetQuestion(ctx context.Context, id uuid.UUID) (Question, error)
 	ListQuestions(ctx context.Context, p ListParams) (QuestionPage, error)
 	CloseQuestion(ctx context.Context, id, closedBy uuid.UUID) (Question, error)
 	SetQuestionVote(ctx context.Context, questionID, userID uuid.UUID, vote *Vote) (Question, error)
 	CreateAnswer(ctx context.Context, in CreateAnswerInput) (Answer, error)
+	UpdateAnswer(ctx context.Context, in UpdateAnswerInput) (Answer, error)
 	GetAnswer(ctx context.Context, id uuid.UUID) (Answer, error)
 	ListAnswers(ctx context.Context, questionID uuid.UUID, p ListParams) (AnswerPage, error)
 	SetAnswerVote(ctx context.Context, answerID, userID uuid.UUID, vote *Vote) (Answer, error)

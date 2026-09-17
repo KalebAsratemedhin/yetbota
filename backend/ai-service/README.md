@@ -1,17 +1,19 @@
 # YetBota AI Service
 
-Ingests content on RabbitMQ `*.created` events: load from Postgres → embed →
-upsert Surreal. Posts also maintain the Related-posts `similar` graph.
+Ingests content on RabbitMQ `*.created` / `*.updated` events: load from Postgres →
+embed → upsert Surreal. Posts also maintain the Related-posts `similar` graph.
+Exposes **RAG chat** over the typed `content_embedding` index.
 
 ## Stack
 
 | Piece | Choice |
 | --- | --- |
-| HTTP | FastAPI + Uvicorn |
+| HTTP | FastAPI + Uvicorn (`:8083`) |
 | Postgres | Read posts, comments, questions, answers |
 | Embeddings | fastembed MiniLM (384-d) |
 | Chatbot index | Surreal `content_embedding` (`kind`, `entity_id`, `parent_id`, …) |
 | Related graph | Surreal `post_embedding` + `similar` (posts only) |
+| Chat LLM | OpenAI Chat Completions (`OPENAI_API_KEY`, default `gpt-4o-mini`) |
 | Messaging | `yetbota.events` → queue `ai.content.ingest` |
 
 ## Events
@@ -40,3 +42,19 @@ uvicorn app.main:app --reload --port 8083
 ```
 
 Health: `GET http://localhost:8083/healthz`
+
+Set `OPENAI_API_KEY` in `.env` before using chat.
+
+## Chat (RAG)
+
+```bash
+curl -s http://localhost:8083/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Where should I eat injera?"}'
+```
+
+Flow: embed message → cosine search on `content_embedding` → OpenAI with retrieved
+snippets → `{ reply, model, sources }`. Optional `history` (up to 20 user/assistant
+turns) is forwarded to the LLM. Auth is deferred for this slice.
+
+OpenAPI: `api/openapi.yaml` · Swagger: `http://localhost:8083/docs`

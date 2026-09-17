@@ -31,7 +31,13 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 384
     similarity_top_k: int = 10
     similarity_min_score: float = 0.55
+
+    # Chat / RAG
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
+    chat_top_k: int = 8
+    chat_min_score: float = 0.35
 
 
 @lru_cache

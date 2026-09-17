@@ -11,6 +11,7 @@ from uuid import UUID
 from surrealdb import AsyncSurreal, RecordID
 
 from app.adapters.surreal.client import SurrealConfig
+from app.domain.chat import ContentHit
 from app.domain.content_doc import ContentDocument
 from app.domain.post_doc import PostDocument
 from app.domain.similarity import SimilarHit
@@ -288,6 +289,57 @@ DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
         scored.sort(key=lambda h: (-h.score, str(h.post_id)))
         return scored[:top_k]
 
+    async def search_content(
+        self,
+        embedding: Sequence[float],
+        *,
+        top_k: int,
+        min_score: float,
+    ) -> list[ContentHit]:
+        """Rank content_embedding rows by cosine similarity (in-process)."""
+        if self._db is None:
+            raise RuntimeError("surreal not connected")
+        if top_k <= 0:
+            return []
+        raw = await self._db.query(
+            f"""
+            SELECT kind, entity_id, parent_id, post_id, title, text, embedding
+            FROM {CONTENT_TABLE};
+            """
+        )
+        rows = _unwrap_query_rows(raw)
+        scored: list[ContentHit] = []
+        for row in rows:
+            emb = row.get("embedding")
+            if not isinstance(emb, (list, tuple)):
+                continue
+            raw_id = row.get("entity_id")
+            if raw_id is None:
+                continue
+            try:
+                entity_id = UUID(str(raw_id))
+            except ValueError:
+                continue
+            score = _cosine(embedding, emb)
+            if score < min_score:
+                continue
+            kind = str(row.get("kind") or "")
+            parent_id = _optional_uuid(row.get("parent_id"))
+            post_id = _optional_uuid(row.get("post_id"))
+            scored.append(
+                ContentHit(
+                    kind=kind,
+                    entity_id=entity_id,
+                    score=score,
+                    text=str(row.get("text") or ""),
+                    title=str(row.get("title") or ""),
+                    parent_id=parent_id,
+                    post_id=post_id,
+                )
+            )
+        scored.sort(key=lambda h: (-h.score, str(h.entity_id)))
+        return scored[:top_k]
+
     async def replace_similar_edges(
         self,
         from_post_id: UUID,
@@ -317,3 +369,12 @@ DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
             from_post_id,
             len(hits),
         )
+
+
+def _optional_uuid(value: Any) -> UUID | None:
+    if value is None or value == "":
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None

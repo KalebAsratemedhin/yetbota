@@ -7,13 +7,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.adapters.embeddings.sentence_transformers import SentenceTransformerEmbedder
+from app.adapters.llm.openai_chat import OpenAIChatClient
 from app.adapters.postgres.content import PostgresContentReader
 from app.adapters.postgres.session import create_engine, create_session_factory
 from app.adapters.rabbitmq.consumer import run_consumer
 from app.adapters.surreal.client import SurrealConfig
 from app.adapters.surreal.store import SurrealPostEmbeddingStore
-from app.api.routes import health
+from app.api.routes import chat, health
 from app.config import get_settings
+from app.services.chat import ChatService
 from app.services.ingest import IngestService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -40,6 +42,18 @@ async def lifespan(app: FastAPI):
         similarity_top_k=settings.similarity_top_k,
         similarity_min_score=settings.similarity_min_score,
     )
+    llm = OpenAIChatClient(
+        settings.openai_api_key,
+        model=settings.openai_model,
+        base_url=settings.openai_base_url,
+    )
+    app.state.chat = ChatService(
+        embedder,
+        store,
+        llm,
+        top_k=settings.chat_top_k,
+        min_score=settings.chat_min_score,
+    )
 
     stop = asyncio.Event()
     task = asyncio.create_task(
@@ -47,12 +61,12 @@ async def lifespan(app: FastAPI):
         name="rabbitmq-consumer",
     )
     logger.info(
-        "ai_service_started rabbitmq=%s model=%s dim=%s top_k=%s min_score=%s",
+        "ai_service_started rabbitmq=%s model=%s dim=%s chat_llm=%s chat_configured=%s",
         settings.rabbitmq_url,
         settings.embedding_model,
         settings.embedding_dimensions,
-        settings.similarity_top_k,
-        settings.similarity_min_score,
+        settings.openai_model,
+        llm.configured,
     )
     try:
         yield
@@ -76,14 +90,14 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="YetBota AI Service",
         description=(
-            "Ingests post/comment/question/answer *.created events: embeds text, "
-            "upserts Surreal content_embedding (chatbot index), and for posts also "
-            "maintains post_embedding + similar edges for Related."
+            "Ingests content events into Surreal embeddings and exposes RAG chat "
+            "over posts, comments, questions, and answers."
         ),
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
     app.include_router(health.router)
+    app.include_router(chat.router)
     return app
 
 

@@ -19,9 +19,9 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Frontend | Next.js | |
 | content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A** |
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
-| ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges |
+| ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges + RAG `/chat` |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
-| Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` cosine edges. Local: Docker in `backend/docker-compose.yml` |
+| Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` + `content_embedding` (chat RAG). Local: Docker in `backend/docker-compose.yml` |
 | Messaging | RabbitMQ | `*.created` / `*.updated` (post/comment/question/answer) → `ai.content.ingest` |
 | Object / media | Cloudinary | Avatars (identity); post images/video/audio (content, signed upload) |
 | Migrations (Go) | goose-format SQL | Applied on startup |
@@ -91,6 +91,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-046a | The author of a question shall be able to edit it (body, post link, place). | Partial PATCH; closed questions cannot be edited |
 | FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
 | FR-047a | The author of an answer shall be able to edit its body. | Partial PATCH |
+| FR-048 | A client shall be able to ask the AI chatbot a question and receive an answer grounded in ingested posts, comments, questions, and answers. | `POST /chat` on ai-service; RAG over `content_embedding`; OpenAI; returns reply + sources; auth deferred |
 
 ## Feed ranking (non-ML)
 
@@ -395,3 +396,10 @@ Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption 
 - **Goal:** Stop new answers
 - **Main flow:** Author closes the question → further answers are rejected; existing content and votes remain.
 - **Related FRs:** FR-046
+
+### UC-033 — Ask the AI chatbot
+
+- **Actor:** Client (auth deferred)
+- **Goal:** Get a place-discovery answer grounded in YetBota content
+- **Main flow:** `POST /chat` with a message (optional history) → ai-service embeds the query, retrieves similar `content_embedding` chunks, calls OpenAI with that context → returns reply plus source snippets.
+- **Related FRs:** FR-048

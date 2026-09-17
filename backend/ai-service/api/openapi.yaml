@@ -1,0 +1,104 @@
+openapi: 3.0.3
+info:
+  title: YetBota AI Service
+  version: 0.2.0
+  description: |
+    Ingests post/comment/question/answer events into Surreal embeddings.
+    Exposes RAG chat over the typed `content_embedding` index.
+servers:
+  - url: http://localhost:8083
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness
+      operationId: healthz
+      responses:
+        "200":
+          description: OK
+  /chat:
+    post:
+      tags: [Chat]
+      summary: RAG chat
+      description: |
+        Embeds the user message, retrieves similar content chunks from Surreal
+        (`post` / `comment` / `question` / `answer`), then answers with OpenAI
+        using that context. Returns the reply plus source snippets.
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Upstream LLM failure
+        "503":
+          description: Chat not configured (missing OPENAI_API_KEY) or service warming up
+components:
+  schemas:
+    ChatTurn:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+        history:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ChatTurn"
+    ChatSource:
+      type: object
+      required: [kind, entity_id, score]
+      properties:
+        kind:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        score:
+          type: number
+        title:
+          type: string
+        text:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        post_id:
+          type: string
+          format: uuid
+          nullable: true
+    ChatResponse:
+      type: object
+      required: [reply, model, sources]
+      properties:
+        reply:
+          type: string
+        model:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatSource"

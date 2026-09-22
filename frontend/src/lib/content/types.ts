@@ -35,6 +35,17 @@ export type CreatePostRequest = {
   hashtags?: string[];
 };
 
+/** Partial PATCH — omit fields to leave unchanged. Send hashtags: [] to clear. */
+export type UpdatePostRequest = {
+  title?: string;
+  caption?: string;
+  lat?: number;
+  lng?: number;
+  media_mode?: MediaMode;
+  media?: CreateMedia[];
+  hashtags?: string[];
+};
+
 export type Media = {
   id: string;
   kind: string;
@@ -118,6 +129,19 @@ export type CreateQuestionRequest = {
   lat?: number | null;
   /** Place longitude when attaching a location (with lat). */
   lng?: number | null;
+};
+
+/** Partial PATCH — at least one field. `post_id: ""` clears link; `clear_place: true` clears lat/lng. */
+export type UpdateQuestionRequest = {
+  body?: string;
+  post_id?: string | null;
+  lat?: number;
+  lng?: number;
+  clear_place?: boolean;
+};
+
+export type UpdateAnswerRequest = {
+  body: string;
 };
 
 export type VoteRequest = {

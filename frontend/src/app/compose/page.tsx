@@ -1,22 +1,28 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AudioLines, Film, ImagePlus, Music2, Scissors, X } from "lucide-react";
 import { toast } from "sonner";
 import RequireAuth from "@/components/auth/RequireAuth";
 import LocationPicker from "@/components/compose/LocationPicker";
 import { Navbar } from "@/components/landing";
-import { useCreatePostMutation, useSignMediaMutation } from "@/lib/api/contentApi";
+import {
+  useCreatePostMutation,
+  useGetPostQuery,
+  useSignMediaMutation,
+  useUpdatePostMutation,
+} from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { parseHashtags, uploadToCloudinary } from "@/lib/content/helpers";
-import type { CreateMedia, MediaKind, MediaMode } from "@/lib/content/types";
+import type { CreateMedia, MediaKind, MediaMode, UpdatePostRequest } from "@/lib/content/types";
 import {
   DEFAULT_MAX_CLIP_SEC,
   type ClipKind,
   type ClipResult,
 } from "@/lib/media";
+import { useAppSelector } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 const MediaClipStudio = dynamic(() => import("@/components/media/MediaClipStudio"), {
@@ -24,6 +30,7 @@ const MediaClipStudio = dynamic(() => import("@/components/media/MediaClipStudio
 });
 
 const MAX_IMAGES = 10;
+const MEDIA_MODES: MediaMode[] = ["images", "images_audio", "video"];
 
 const MODES: {
   id: MediaMode;
@@ -37,11 +44,14 @@ const MODES: {
 ];
 
 type Preview = {
-  file: File;
+  /** Present for newly picked / clipped files. */
+  file?: File;
   kind: MediaKind;
   url: string;
   /** Original pick — re-open clip studio without losing source. */
   sourceFile?: File;
+  /** Existing Cloudinary asset kept without re-upload. */
+  existing?: CreateMedia;
 };
 
 type ClipSession = {
@@ -49,11 +59,28 @@ type ClipSession = {
   kind: ClipKind;
 };
 
+function isMediaMode(v: string): v is MediaMode {
+  return (MEDIA_MODES as string[]).includes(v);
+}
+
+function isMediaKind(v: string): v is MediaKind {
+  return v === "image" || v === "video" || v === "audio";
+}
+
 function ComposeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit")?.trim() || "";
+  const isEdit = Boolean(editId);
+  const viewerId = useAppSelector((s) => s.auth.userId);
+
+  const postQ = useGetPostQuery(editId, { skip: !editId });
+  const [hydratedEditId, setHydratedEditId] = useState<string | null>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<MediaMode>("images");
   const [previews, setPreviews] = useState<Preview[]>([]);
+  const [mediaDirty, setMediaDirty] = useState(false);
   const [caption, setCaption] = useState("");
   const [title, setTitle] = useState("");
   const [tagsRaw, setTagsRaw] = useState("");
@@ -64,6 +91,49 @@ function ComposeContent() {
   const [clipSession, setClipSession] = useState<ClipSession | null>(null);
   const [signMedia] = useSignMediaMutation();
   const [createPost] = useCreatePostMutation();
+  const [updatePost] = useUpdatePostMutation();
+
+  useEffect(() => {
+    if (!isEdit || !postQ.data || hydratedEditId === postQ.data.id) return;
+    const post = postQ.data;
+    if (viewerId && post.author_id !== viewerId) {
+      toast.error("You can only edit your own posts");
+      router.replace(`/posts/${post.id}`);
+      return;
+    }
+    const nextMode = isMediaMode(post.media_mode) ? post.media_mode : "images";
+    setMode(nextMode);
+    setTitle(post.title);
+    setCaption(post.caption);
+    setTagsRaw(post.hashtags.map((t) => `#${t}`).join(" "));
+    setLat(post.lat);
+    setLng(post.lng);
+    setPlaceLabel(post.title.trim() || null);
+    setMediaDirty(false);
+    setPreviews((prev) => {
+      prev.forEach((p) => {
+        if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
+      });
+      return [...post.media]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .filter((m) => isMediaKind(m.kind))
+        .map((m) => ({
+          kind: m.kind as MediaKind,
+          url: m.url,
+          existing: {
+            kind: m.kind as MediaKind,
+            cloudinary_public_id: m.cloudinary_public_id,
+            url: m.url,
+            sort_order: m.sort_order,
+            duration_ms: m.duration_ms || undefined,
+            width: m.width || undefined,
+            height: m.height || undefined,
+            mime: m.mime || undefined,
+          },
+        }));
+    });
+    setHydratedEditId(post.id);
+  }, [isEdit, postQ.data, hydratedEditId, viewerId, router]);
 
   const accept = useMemo(() => {
     if (mode === "video") return "video/*";
@@ -73,9 +143,12 @@ function ComposeContent() {
 
   function resetMedia() {
     setPreviews((prev) => {
-      prev.forEach((p) => URL.revokeObjectURL(p.url));
+      prev.forEach((p) => {
+        if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
+      });
       return [];
     });
+    setMediaDirty(true);
   }
 
   function switchMode(next: MediaMode) {
@@ -96,10 +169,13 @@ function ComposeContent() {
     const source = clipSession?.file;
     setClipSession(null);
     const url = URL.createObjectURL(result.file);
+    setMediaDirty(true);
 
     if (result.kind === "video") {
       setPreviews((prev) => {
-        prev.forEach((p) => URL.revokeObjectURL(p.url));
+        prev.forEach((p) => {
+          if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
+        });
         return [
           {
             file: result.file,
@@ -115,7 +191,7 @@ function ComposeContent() {
     setPreviews((prev) => {
       const imgs = prev.filter((p) => p.kind === "image");
       const old = prev.find((p) => p.kind === "audio");
-      if (old) URL.revokeObjectURL(old.url);
+      if (old && (old.file || old.sourceFile)) URL.revokeObjectURL(old.url);
       return [
         ...imgs,
         {
@@ -147,6 +223,7 @@ function ComposeContent() {
       const audios = incoming.filter((f) => f.type.startsWith("audio/"));
 
       if (images.length > 0) {
+        setMediaDirty(true);
         setPreviews((prev) => {
           const keptImages = prev.filter((p) => p.kind === "image");
           const keptAudio = prev.find((p) => p.kind === "audio");
@@ -176,9 +253,10 @@ function ComposeContent() {
   }
 
   function removePreview(url: string) {
+    setMediaDirty(true);
     setPreviews((prev) => {
       const hit = prev.find((p) => p.url === url);
-      if (hit) URL.revokeObjectURL(hit.url);
+      if (hit && (hit.file || hit.sourceFile)) URL.revokeObjectURL(hit.url);
       return prev.filter((p) => p.url !== url);
     });
   }
@@ -193,6 +271,58 @@ function ComposeContent() {
     }
   }
 
+  async function buildMediaPayload(): Promise<CreateMedia[]> {
+    const images = previews.filter((p) => p.kind === "image");
+    const video = previews.find((p) => p.kind === "video");
+    const audio = previews.find((p) => p.kind === "audio");
+    const queue: Preview[] =
+      mode === "video"
+        ? video
+          ? [video]
+          : []
+        : mode === "images_audio"
+          ? audio
+            ? [...images, audio]
+            : [...images]
+          : images;
+
+    const media: CreateMedia[] = [];
+    let order = 0;
+    for (const item of queue) {
+      if (item.existing && !item.file) {
+        media.push({ ...item.existing, sort_order: order++ });
+        continue;
+      }
+      if (!item.file) {
+        throw new Error("Missing media file");
+      }
+      const sign = await signMedia({ kind: item.kind }).unwrap();
+      const uploaded = await uploadToCloudinary(item.file, sign, item.kind);
+      media.push({
+        kind: item.kind,
+        cloudinary_public_id: uploaded.public_id || sign.public_id,
+        url: uploaded.secure_url,
+        sort_order: order++,
+        duration_ms: uploaded.duration
+          ? Math.round(uploaded.duration * 1000)
+          : undefined,
+        width: uploaded.width,
+        height: uploaded.height,
+        mime: item.file.type,
+      });
+    }
+    return media;
+  }
+
+  function mediaReady(): boolean {
+    const images = previews.filter((p) => p.kind === "image");
+    const video = previews.find((p) => p.kind === "video");
+    const audio = previews.find((p) => p.kind === "audio");
+    if (mode === "images") return images.length >= 1;
+    if (mode === "images_audio") return images.length >= 1 && Boolean(audio);
+    return Boolean(video);
+  }
+
   async function onPublish(e: React.FormEvent) {
     e.preventDefault();
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -205,51 +335,42 @@ function ComposeContent() {
       return;
     }
 
-    const images = previews.filter((p) => p.kind === "image");
-    const video = previews.find((p) => p.kind === "video");
-    const audio = previews.find((p) => p.kind === "audio");
-
-    if (mode === "images" && images.length < 1) {
-      toast.error("Add at least one photo");
-      return;
-    }
-    if (mode === "images_audio" && (images.length < 1 || !audio)) {
-      toast.error("Add photos and one audio clip");
-      return;
-    }
-    if (mode === "video" && !video) {
-      toast.error("Add a video");
-      return;
+    if (!isEdit || mediaDirty) {
+      if (mode === "images" && !mediaReady()) {
+        toast.error("Add at least one photo");
+        return;
+      }
+      if (mode === "images_audio" && !mediaReady()) {
+        toast.error("Add photos and one audio clip");
+        return;
+      }
+      if (mode === "video" && !mediaReady()) {
+        toast.error("Add a video");
+        return;
+      }
     }
 
     setBusy(true);
     try {
-      const media: CreateMedia[] = [];
-      let order = 0;
-      const queue: Preview[] =
-        mode === "video"
-          ? [video!]
-          : mode === "images_audio"
-            ? [...images, audio!]
-            : images;
-
-      for (const item of queue) {
-        const sign = await signMedia({ kind: item.kind }).unwrap();
-        const uploaded = await uploadToCloudinary(item.file, sign, item.kind);
-        media.push({
-          kind: item.kind,
-          cloudinary_public_id: uploaded.public_id || sign.public_id,
-          url: uploaded.secure_url,
-          sort_order: order++,
-          duration_ms: uploaded.duration
-            ? Math.round(uploaded.duration * 1000)
-            : undefined,
-          width: uploaded.width,
-          height: uploaded.height,
-          mime: item.file.type,
-        });
+      if (isEdit) {
+        const body: UpdatePostRequest = {
+          title: placeName,
+          caption: caption.trim(),
+          lat,
+          lng,
+          hashtags: parseHashtags(tagsRaw),
+        };
+        if (mediaDirty) {
+          body.media_mode = mode;
+          body.media = await buildMediaPayload();
+        }
+        const post = await updatePost({ id: editId, body }).unwrap();
+        toast.success("Post updated");
+        router.push(`/posts/${post.id}`);
+        return;
       }
 
+      const media = await buildMediaPayload();
       const post = await createPost({
         title: placeName,
         caption: caption.trim(),
@@ -263,7 +384,7 @@ function ComposeContent() {
       toast.success("Published");
       router.push(`/posts/${post.id}`);
     } catch (err) {
-      toast.error("Could not publish", {
+      toast.error(isEdit ? "Could not update post" : "Could not publish", {
         description: getApiErrorMessage(err, "Check content-service and Cloudinary config."),
       });
     } finally {
@@ -279,11 +400,23 @@ function ComposeContent() {
     lng != null &&
     Number.isFinite(lat) &&
     Number.isFinite(lng) &&
-    (mode === "video"
-      ? Boolean(previews.find((p) => p.kind === "video"))
-      : mode === "images_audio"
-        ? imageCount > 0 && hasAudio
-        : imageCount > 0);
+    (isEdit && !mediaDirty ? true : mediaReady());
+
+  if (isEdit && postQ.isLoading) {
+    return (
+      <p className="py-20 text-center text-sm text-fg-faint">Loading post…</p>
+    );
+  }
+
+  if (isEdit && (postQ.isError || !postQ.data)) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-20 text-center">
+        <p className="text-sm text-fg-muted">
+          {getApiErrorMessage(postQ.error) || "Post not found."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -297,9 +430,13 @@ function ComposeContent() {
 
         <aside className="relative z-10 flex flex-col bg-bg lg:order-1">
           <div className="border-b border-border-subtle px-5 py-5 sm:px-6">
-            <h1 className="text-xl font-bold tracking-tight text-fg">New post</h1>
+            <h1 className="text-xl font-bold tracking-tight text-fg">
+              {isEdit ? "Edit post" : "New post"}
+            </h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Name the place, add media, write a caption, and pin it on the map.
+              {isEdit
+                ? "Update the place, caption, tags, or media. Existing media is kept unless you change it."
+                : "Name the place, add media, write a caption, and pin it on the map."}
             </p>
           </div>
 
@@ -384,11 +521,15 @@ function ComposeContent() {
                           <span className="text-[10px]">Audio</span>
                         </div>
                       )}
-                      {p.kind === "video" || p.kind === "audio" ? (
+                      {(p.kind === "video" || p.kind === "audio") &&
+                      (p.sourceFile || p.file) ? (
                         <button
                           type="button"
                           onClick={() =>
-                            openClipStudio(p.sourceFile ?? p.file, p.kind as ClipKind)
+                            openClipStudio(
+                              (p.sourceFile ?? p.file) as File,
+                              p.kind as ClipKind
+                            )
                           }
                           className="absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white"
                           aria-label="Edit clip"
@@ -467,7 +608,13 @@ function ComposeContent() {
               disabled={busy || !canPublish}
               className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand text-sm font-semibold text-black transition-colors hover:bg-brand-dark disabled:opacity-40"
             >
-              {busy ? "Publishing…" : "Publish"}
+              {busy
+                ? isEdit
+                  ? "Saving…"
+                  : "Publishing…"
+                : isEdit
+                  ? "Save changes"
+                  : "Publish"}
             </button>
           </div>
         </aside>
@@ -491,7 +638,13 @@ export default function ComposePage() {
       <main className="min-h-screen overflow-x-clip bg-bg text-fg">
         <Navbar />
         <div className="pt-20">
-          <ComposeContent />
+          <Suspense
+            fallback={
+              <p className="py-20 text-center text-sm text-fg-faint">Loading…</p>
+            }
+          >
+            <ComposeContent />
+          </Suspense>
         </div>
       </main>
     </RequireAuth>

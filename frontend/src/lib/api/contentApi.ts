@@ -18,6 +18,9 @@ import type {
   ShareResponse,
   SignMediaResponse,
   TrendingCreatorsPage,
+  UpdateAnswerRequest,
+  UpdatePostRequest,
+  UpdateQuestionRequest,
   VoteRequest,
 } from "@/lib/content/types";
 
@@ -75,6 +78,27 @@ export const contentApi = createApi({
               { type: "UserPosts", id: result.author_id },
               { type: "SearchPosts" },
               { type: "HashtagPosts" },
+              "Feed",
+              "RelatedPosts",
+              "TrendingPosts",
+              "TrendingCreators",
+            ]
+          : ["Feed", "RelatedPosts", "TrendingPosts", "TrendingCreators"],
+    }),
+    updatePost: build.mutation<Post, { id: string; body: UpdatePostRequest }>({
+      query: ({ id, body }) => ({
+        url: `/posts/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (result) =>
+        result
+          ? [
+              { type: "Post", id: result.id },
+              { type: "UserPosts", id: result.author_id },
+              { type: "SearchPosts" },
+              { type: "HashtagPosts" },
+              "Bookmarks",
               "Feed",
               "RelatedPosts",
               "TrendingPosts",
@@ -295,6 +319,26 @@ export const contentApi = createApi({
             ]
           : ["Questions"],
     }),
+    updateQuestion: build.mutation<
+      Question,
+      { id: string; body: UpdateQuestionRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `/questions/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (result) =>
+        result
+          ? [
+              "Questions",
+              { type: "Question", id: result.id },
+              ...(result.post_id
+                ? [{ type: "Questions" as const, id: result.post_id }]
+                : []),
+            ]
+          : ["Questions"],
+    }),
     closeQuestion: build.mutation<Question, string>({
       query: (id) => ({
         url: `/questions/${id}/close`,
@@ -332,6 +376,20 @@ export const contentApi = createApi({
         ...(result ? [] : []),
       ],
     }),
+    updateAnswer: build.mutation<
+      Answer,
+      { id: string; questionId: string; body: UpdateAnswerRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `/answers/${id}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_r, _e, { questionId }) => [
+        { type: "Answers", id: questionId },
+        { type: "Question", id: questionId },
+      ],
+    }),
     voteAnswer: build.mutation<
       Answer,
       { id: string; questionId: string; vote: QaVote | null }
@@ -352,6 +410,7 @@ export const contentApi = createApi({
 export const {
   useSignMediaMutation,
   useCreatePostMutation,
+  useUpdatePostMutation,
   useGetPostQuery,
   useListRelatedPostsQuery,
   useLazyListRelatedPostsQuery,
@@ -382,10 +441,12 @@ export const {
   useLazyListQuestionsQuery,
   useGetQuestionQuery,
   useCreateQuestionMutation,
+  useUpdateQuestionMutation,
   useCloseQuestionMutation,
   useVoteQuestionMutation,
   useListAnswersQuery,
   useLazyListAnswersQuery,
   useCreateAnswerMutation,
+  useUpdateAnswerMutation,
   useVoteAnswerMutation,
 } = contentApi;

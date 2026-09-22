@@ -12,10 +12,13 @@ import PostSearchPicker from "@/components/qa/PostSearchPicker";
 import {
   useCreateQuestionMutation,
   useGetPostQuery,
+  useGetQuestionQuery,
+  useUpdateQuestionMutation,
 } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { coverUrl, placeTitle } from "@/lib/content/helpers";
-import type { Post } from "@/lib/content/types";
+import type { Post, UpdateQuestionRequest } from "@/lib/content/types";
+import { useAppSelector } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 type AttachMode = "map" | "post";
@@ -24,7 +27,17 @@ function AskForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialPostId = searchParams.get("post_id")?.trim() || "";
-  const [createQuestion, { isLoading }] = useCreateQuestionMutation();
+  const editId = searchParams.get("edit")?.trim() || "";
+  const isEdit = Boolean(editId);
+  const viewerId = useAppSelector((s) => s.auth.userId);
+
+  const questionQ = useGetQuestionQuery(editId, { skip: !editId });
+  const [hydratedEditId, setHydratedEditId] = useState<string | null>(null);
+
+  const [createQuestion, { isLoading: creating }] = useCreateQuestionMutation();
+  const [updateQuestion, { isLoading: updating }] = useUpdateQuestionMutation();
+  const isLoading = creating || updating;
+
   const [body, setBody] = useState("");
   const [mode, setMode] = useState<AttachMode>(initialPostId ? "post" : "map");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(
@@ -39,10 +52,38 @@ function AskForm() {
   });
 
   useEffect(() => {
+    if (isEdit) return;
     if (!initialPostId) return;
     setMode("post");
     setSelectedPostId(initialPostId);
-  }, [initialPostId]);
+  }, [initialPostId, isEdit]);
+
+  useEffect(() => {
+    if (!isEdit || !questionQ.data || hydratedEditId === questionQ.data.id) return;
+    const q = questionQ.data;
+    if (viewerId && q.author_id !== viewerId) {
+      toast.error("You can only edit your own questions");
+      router.replace(`/qa/${q.id}`);
+      return;
+    }
+    if (q.closed_at) {
+      toast.error("Closed questions cannot be edited");
+      router.replace(`/qa/${q.id}`);
+      return;
+    }
+    setBody(q.body);
+    if (q.post_id) {
+      setMode("post");
+      setSelectedPostId(q.post_id);
+    } else {
+      setMode("map");
+      setSelectedPostId(null);
+    }
+    setLat(q.lat ?? null);
+    setLng(q.lng ?? null);
+    setPlaceLabel(null);
+    setHydratedEditId(q.id);
+  }, [isEdit, questionQ.data, hydratedEditId, viewerId, router]);
 
   useEffect(() => {
     if (mode !== "post" || !linkedPostQ.data) return;
@@ -102,6 +143,29 @@ function AskForm() {
     }
 
     try {
+      if (isEdit) {
+        const patch: UpdateQuestionRequest = {
+          body: b.slice(0, 10_000),
+        };
+        if (mode === "post" && selectedPostId) {
+          patch.post_id = selectedPostId;
+          if (lat != null && lng != null) {
+            patch.lat = lat;
+            patch.lng = lng;
+          }
+        } else {
+          patch.post_id = "";
+          if (lat != null && lng != null) {
+            patch.lat = lat;
+            patch.lng = lng;
+          }
+        }
+        const q = await updateQuestion({ id: editId, body: patch }).unwrap();
+        toast.success("Question updated");
+        router.replace(`/qa/${q.id}`);
+        return;
+      }
+
       const q = await createQuestion({
         body: b.slice(0, 10_000),
         ...(mode === "post" && selectedPostId
@@ -112,7 +176,7 @@ function AskForm() {
       toast.success("Question posted");
       router.replace(`/qa/${q.id}`);
     } catch (err) {
-      toast.error("Could not post question", {
+      toast.error(isEdit ? "Could not update question" : "Could not post question", {
         description: getApiErrorMessage(err),
       });
     }
@@ -128,6 +192,28 @@ function AskForm() {
         lng != null &&
         Number.isFinite(lat) &&
         Number.isFinite(lng));
+
+  if (isEdit && questionQ.isLoading) {
+    return (
+      <p className="py-20 text-center text-sm text-fg-faint">Loading question…</p>
+    );
+  }
+
+  if (isEdit && (questionQ.isError || !questionQ.data)) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-20 text-center">
+        <p className="text-sm text-fg-muted">
+          {getApiErrorMessage(questionQ.error) || "Question not found."}
+        </p>
+        <Link
+          href="/qa"
+          className="mt-3 inline-block text-sm font-semibold text-brand hover:underline"
+        >
+          Back to Q&A
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <form
@@ -149,17 +235,19 @@ function AskForm() {
       <aside className="relative z-10 flex flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface lg:order-1">
         <div className="border-b border-border-subtle px-5 py-5 sm:px-6">
           <Link
-            href="/qa"
+            href={isEdit ? `/qa/${editId}` : "/qa"}
             className="mb-3 inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Q&A
+            {isEdit ? "Back to question" : "Back to Q&A"}
           </Link>
           <h1 className="text-xl font-bold tracking-tight text-fg">
-            Ask a question
+            {isEdit ? "Edit question" : "Ask a question"}
           </h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Write your question, then pin a map location or link a place post.
+            {isEdit
+              ? "Update your question text and where it’s attached."
+              : "Write your question, then pin a map location or link a place post."}
           </p>
         </div>
 
@@ -293,7 +381,13 @@ function AskForm() {
             disabled={isLoading || !canPost}
             className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand text-sm font-semibold text-black transition-colors hover:bg-brand-dark disabled:opacity-40"
           >
-            {isLoading ? "Posting…" : "Post question"}
+            {isLoading
+              ? isEdit
+                ? "Saving…"
+                : "Posting…"
+              : isEdit
+                ? "Save changes"
+                : "Post question"}
           </button>
         </div>
       </aside>

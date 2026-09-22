@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
-import { MapPin, Plus, UserCheck } from "lucide-react";
+import { MapPin, Pencil, Plus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import PostActions from "@/components/posts/PostActions";
 import PostMediaGallery from "@/components/posts/PostMediaGallery";
@@ -227,6 +227,8 @@ export default function PostDetailCard({
   /** `snap` = full-height slide for vertical social feed. */
   layout?: "default" | "snap";
 }) {
+  const viewerId = useAppSelector((s) => s.auth.userId);
+  const isOwn = Boolean(viewerId && viewerId === post.author_id);
   const caption = post.caption.trim();
   const title = placeTitle(post);
   const commentsHref = fromUser
@@ -277,7 +279,18 @@ export default function PostDetailCard({
           onQaClick={onOpenQa}
         />
 
-        <p className="text-sm font-semibold text-fg">{title}</p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-semibold text-fg">{title}</p>
+          {isOwn ? (
+            <Link
+              href={`/compose?edit=${post.id}`}
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-fg-muted hover:text-fg"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Link>
+          ) : null}
+        </div>
 
         {caption ? (
           <PostCaption

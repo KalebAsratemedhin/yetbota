@@ -14,6 +14,7 @@ import {
   useGetPostQuery,
   useLazyListAnswersQuery,
   useListAnswersQuery,
+  useUpdateAnswerMutation,
   useVoteAnswerMutation,
   useVoteQuestionMutation,
 } from "@/lib/api/contentApi";
@@ -173,14 +174,22 @@ function QuestionBlock({ question }: { question: Question }) {
             ) : null}
           </div>
           {isAuthor && !closed ? (
-            <button
-              type="button"
-              disabled={closing}
-              onClick={() => void onClose()}
-              className="mt-4 text-xs font-semibold text-fg-muted hover:text-fg disabled:opacity-50"
-            >
-              Close question
-            </button>
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <Link
+                href={`/qa/ask?edit=${question.id}`}
+                className="text-xs font-semibold text-fg-muted hover:text-fg"
+              >
+                Edit
+              </Link>
+              <button
+                type="button"
+                disabled={closing}
+                onClick={() => void onClose()}
+                className="text-xs font-semibold text-fg-muted hover:text-fg disabled:opacity-50"
+              >
+                Close question
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -198,7 +207,10 @@ function AnswerRow({
   const viewerId = useAppSelector((s) => s.auth.userId);
   const isAuthor = Boolean(viewerId && viewerId === answer.author_id);
   const [voteAnswer] = useVoteAnswerMutation();
+  const [updateAnswer, { isLoading: saving }] = useUpdateAnswerMutation();
   const { myVote, setMyVote, nextVote } = useLocalVote();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(answer.body);
 
   async function vote(clicked: QaVote) {
     if (isAuthor) return;
@@ -213,6 +225,37 @@ function AnswerRow({
     }
   }
 
+  function startEdit() {
+    setDraft(answer.body);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setDraft(answer.body);
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    const text = draft.trim();
+    if (!text) {
+      toast.error("Answer can’t be empty");
+      return;
+    }
+    try {
+      await updateAnswer({
+        id: answer.id,
+        questionId,
+        body: { body: text.slice(0, 10_000) },
+      }).unwrap();
+      setEditing(false);
+      toast.success("Answer updated");
+    } catch (err) {
+      toast.error("Could not update answer", {
+        description: getApiErrorMessage(err),
+      });
+    }
+  }
+
   return (
     <li className="flex gap-4 rounded-2xl border border-border-subtle bg-surface px-4 py-4 sm:px-5">
       <VoteColumn
@@ -224,12 +267,50 @@ function AnswerRow({
         onDown={() => void vote("down")}
       />
       <div className="min-w-0 flex-1">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
-          {answer.body}
-        </p>
+        {editing ? (
+          <div className="space-y-3">
+            <textarea
+              rows={4}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, 10_000))}
+              className="yb-scrollbar w-full resize-y rounded-xl border border-border-subtle bg-bg px-3 py-2.5 text-sm text-fg outline-none focus:border-brand/50"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving || !draft.trim()}
+                onClick={() => void saveEdit()}
+                className="inline-flex h-9 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-black hover:bg-brand-dark disabled:opacity-40"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={cancelEdit}
+                className="inline-flex h-9 items-center rounded-xl border border-border-subtle px-4 text-sm font-semibold text-fg-muted hover:text-fg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">
+            {answer.body}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-fg-faint">
           <AuthorLine userId={answer.author_id} />
           <span>{relativeTime(answer.created_at)}</span>
+          {isAuthor && !editing ? (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="font-semibold text-fg-muted hover:text-fg"
+            >
+              Edit
+            </button>
+          ) : null}
         </div>
       </div>
     </li>

@@ -25,10 +25,11 @@ export async function uploadToCloudinary(
   return (await res.json()) as CloudinaryUploadResult;
 }
 
+/** Split on spaces, commas, or `#` so `#a#b` and `#a #b` both work. */
 export function parseHashtags(raw: string): string[] {
   const parts = raw
-    .split(/[\s,]+/)
-    .map((t) => t.replace(/^#/, "").trim().toLowerCase())
+    .split(/[\s,#]+/)
+    .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
   return [...new Set(parts)];
 }

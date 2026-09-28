@@ -72,7 +72,7 @@
     "placeholder": "Ask about a place...",
     "exampleQuery": "Where can I find the best Macchiato near Piazza right now?",
     "exampleResponse": "Based on recent community reviews, **Tomoca Coffee** on Churchill Ave is currently the top-rated spot. It's only 450m away and usually less crowded at this hour!",
-    "label": "Gemini Assistant"
+    "label": "Yet Bota Assistant"
   },
   "community": {
     "helpTitle": "Help the Community",

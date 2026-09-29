@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     similarity_top_k: int = 10
     similarity_min_score: float = 0.55
 
-    # Chat / RAG
+    # Chat / RAG — switch with CHAT_LLM_PROVIDER=gemini|openai
+    chat_llm_provider: str = "gemini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = "https://api.openai.com/v1"

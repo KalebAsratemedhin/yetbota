@@ -22,8 +22,10 @@ paths:
       summary: RAG chat
       description: |
         Embeds the user message, retrieves similar content chunks from Surreal
-        (`post` / `comment` / `question` / `answer`), then answers with OpenAI
-        using that context. Returns the reply plus source snippets.
+        (`post` / `comment` / `question` / `answer`), then answers with the
+        configured chat LLM (default Gemini 2.5 Flash; switch via
+        `CHAT_LLM_PROVIDER`) using that context. Returns the reply plus source
+        snippets.
       operationId: chat
       requestBody:
         required: true
@@ -43,7 +45,7 @@ paths:
         "502":
           description: Upstream LLM failure
         "503":
-          description: Chat not configured (missing OPENAI_API_KEY) or service warming up
+          description: Chat not configured (missing GEMINI_API_KEY / OPENAI_API_KEY) or service warming up
 components:
   schemas:
     ChatTurn:

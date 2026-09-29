@@ -13,7 +13,7 @@ Exposes **RAG chat** over the typed `content_embedding` index.
 | Embeddings | fastembed MiniLM (384-d) |
 | Chatbot index | Surreal `content_embedding` (`kind`, `entity_id`, `parent_id`, …) |
 | Related graph | Surreal `post_embedding` + `similar` (posts only) |
-| Chat LLM | OpenAI Chat Completions (`OPENAI_API_KEY`, default `gpt-4o-mini`) |
+| Chat LLM | Pluggable (`CHAT_LLM_PROVIDER`): default **Gemini 2.5 Flash**; OpenAI kept as alternate |
 | Messaging | `yetbota.events` → queue `ai.content.ingest` |
 
 ## Events
@@ -43,7 +43,8 @@ uvicorn app.main:app --reload --port 8083
 
 Health: `GET http://localhost:8083/healthz`
 
-Set `OPENAI_API_KEY` in `.env` before using chat.
+Set `GEMINI_API_KEY` in `.env` before using chat (default provider). To use OpenAI
+instead: `CHAT_LLM_PROVIDER=openai` and `OPENAI_API_KEY`.
 
 ## Chat (RAG)
 
@@ -53,8 +54,9 @@ curl -s http://localhost:8083/chat \
   -d '{"message":"Where should I eat injera?"}'
 ```
 
-Flow: embed message → cosine search on `content_embedding` → OpenAI with retrieved
-snippets → `{ reply, model, sources }`. Optional `history` (up to 20 user/assistant
-turns) is forwarded to the LLM. Auth is deferred for this slice.
+Flow: embed message → cosine search on `content_embedding` → LLM (Gemini by
+default) with retrieved snippets → `{ reply, model, sources }`. Optional `history`
+(up to 20 user/assistant turns) is forwarded to the LLM. Auth is deferred for this
+slice.
 
 OpenAPI: `api/openapi.yaml` · Swagger: `http://localhost:8083/docs`

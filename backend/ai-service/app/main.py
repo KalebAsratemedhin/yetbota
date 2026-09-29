@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.adapters.embeddings.sentence_transformers import SentenceTransformerEmbedder
-from app.adapters.llm.openai_chat import OpenAIChatClient
+from app.adapters.llm.factory import build_chat_llm
 from app.adapters.postgres.content import PostgresContentReader
 from app.adapters.postgres.session import create_engine, create_session_factory
 from app.adapters.rabbitmq.consumer import run_consumer
@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
     embedder = SentenceTransformerEmbedder(
         settings.embedding_model, dimensions=settings.embedding_dimensions
     )
+    await embedder.warmup()
     store = SurrealPostEmbeddingStore(
         SurrealConfig.from_settings(settings),
         embedding_dimensions=settings.embedding_dimensions,
@@ -42,11 +43,7 @@ async def lifespan(app: FastAPI):
         similarity_top_k=settings.similarity_top_k,
         similarity_min_score=settings.similarity_min_score,
     )
-    llm = OpenAIChatClient(
-        settings.openai_api_key,
-        model=settings.openai_model,
-        base_url=settings.openai_base_url,
-    )
+    llm = build_chat_llm(settings)
     app.state.chat = ChatService(
         embedder,
         store,
@@ -61,11 +58,12 @@ async def lifespan(app: FastAPI):
         name="rabbitmq-consumer",
     )
     logger.info(
-        "ai_service_started rabbitmq=%s model=%s dim=%s chat_llm=%s chat_configured=%s",
+        "ai_service_started rabbitmq=%s model=%s dim=%s chat_provider=%s chat_llm=%s chat_configured=%s",
         settings.rabbitmq_url,
         settings.embedding_model,
         settings.embedding_dimensions,
-        settings.openai_model,
+        settings.chat_llm_provider,
+        llm.model_name,
         llm.configured,
     )
     try:

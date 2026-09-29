@@ -64,7 +64,9 @@ class ChatService:
         if not text:
             raise ValueError("message is required")
         if not self._llm.configured:
-            raise RuntimeError("chat LLM is not configured (set OPENAI_API_KEY)")
+            raise RuntimeError(
+                "chat LLM is not configured (set GEMINI_API_KEY or OPENAI_API_KEY)"
+            )
 
         embedding = await self._embedder.embed(text)
         hits = await self._searcher.search_content(

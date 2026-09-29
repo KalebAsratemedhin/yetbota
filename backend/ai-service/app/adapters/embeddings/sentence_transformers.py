@@ -36,6 +36,15 @@ class SentenceTransformerEmbedder:
         self._model = TextEmbedding(model_name=self._model_name)
         return self._model
 
+    async def warmup(self) -> None:
+        """Download/load the ONNX model at process start (not on first request)."""
+        await asyncio.to_thread(self._load)
+        logger.info(
+            "embedding_model_ready model=%s dim=%s",
+            self._model_name,
+            self._dimensions,
+        )
+
     async def embed(self, text: str) -> list[float]:
         text = (text or "").strip() or " "
         model = await asyncio.to_thread(self._load)

@@ -55,7 +55,7 @@ async def chat(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
         msg = str(e)
-        if "OPENAI_API_KEY" in msg or "not configured" in msg:
+        if "not configured" in msg or "API_KEY" in msg:
             raise HTTPException(status_code=503, detail=msg) from e
         raise HTTPException(status_code=502, detail=msg) from e
     except Exception as e:

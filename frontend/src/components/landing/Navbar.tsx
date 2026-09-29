@@ -12,6 +12,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { APP_SHELL_CLASS } from "@/lib/layout";
+import { usePathname } from "next/dist/client/components/navigation";
 
 export default function Navbar() {
   const t = useContent();
@@ -22,10 +23,9 @@ export default function Navbar() {
   const isSignedIn = hydrated && Boolean(accessToken);
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { data: me } = useMeQuery(undefined, { skip: !isSignedIn });
+  const pathname = usePathname();
 
   const navLinks = [
-    { id: "explore", label: t.nav.explore, href: "/discovery" },
-    { id: "map", label: t.nav.map, href: "/map" },
     { id: "assistant", label: t.nav.aiAssistant, href: "/assistant" },
     { id: "community", label: t.nav.community, href: "/qa" },
   ];
@@ -65,7 +65,7 @@ export default function Navbar() {
 
           <nav className="hidden items-center gap-6 lg:flex xl:gap-8">
             {navLinks.map((link) => (
-              <HeaderNavLink key={link.id} href={link.href}>
+              <HeaderNavLink active={link.href === pathname} key={link.id} href={link.href}>
                 {link.label}
               </HeaderNavLink>
             ))}

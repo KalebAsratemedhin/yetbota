@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
         llm,
         top_k=settings.chat_top_k,
         min_score=settings.chat_min_score,
+        soft_min_score=settings.chat_soft_min_score,
     )
 
     stop = asyncio.Event()

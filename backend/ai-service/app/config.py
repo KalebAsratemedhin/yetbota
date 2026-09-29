@@ -41,7 +41,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = "https://api.openai.com/v1"
     chat_top_k: int = 8
-    chat_min_score: float = 0.35
+    chat_min_score: float = 0.22
+    chat_soft_min_score: float = 0.12
 
 
 @lru_cache

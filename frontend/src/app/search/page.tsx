@@ -3,14 +3,16 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Hash, Search, Users } from "lucide-react";
+import { Hash, MapPin, Search, Users } from "lucide-react";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
+import PlaceCard from "@/components/places/PlaceCard";
 import PostsGrid from "@/components/posts/PostsGrid";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   useLazySearchPostsQuery,
+  useListPlacesQuery,
   useSearchPostsQuery,
 } from "@/lib/api/contentApi";
 import { useSearchUsersQuery } from "@/lib/api/socialApi";
@@ -19,13 +21,19 @@ import { cn } from "@/lib/utils";
 
 const MIN_QUERY = 2;
 
-type Tab = "people" | "posts";
+type Tab = "people" | "directory" | "posts";
+
+function parseTab(raw: string | null): Tab {
+  if (raw === "posts") return "posts";
+  if (raw === "places" || raw === "directory") return "directory";
+  return "people";
+}
 
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQ = searchParams.get("q") ?? "";
-  const initialTab = searchParams.get("tab") === "posts" ? "posts" : "people";
+  const initialTab = parseTab(searchParams.get("tab"));
   const [query, setQuery] = useState(initialQ);
   const [tab, setTab] = useState<Tab>(initialTab);
   const debounced = useDebouncedValue(query.trim(), 300);
@@ -38,28 +46,33 @@ function SearchContent() {
     { q: debounced, limit: 20 },
     { skip: !canSearch || tab !== "posts" }
   );
+  const placesQ = useListPlacesQuery(
+    { q: debounced, limit: 20 },
+    { skip: !canSearch || tab !== "directory" }
+  );
   const [fetchMorePosts] = useLazySearchPostsQuery();
 
   useEffect(() => {
     const nextQ = query.trim();
     const currentQ = searchParams.get("q") ?? "";
-    const currentTab = searchParams.get("tab") === "posts" ? "posts" : "people";
+    const currentTab = parseTab(searchParams.get("tab"));
     if (nextQ === currentQ && tab === currentTab) return;
     const params = new URLSearchParams();
     if (nextQ) params.set("q", nextQ);
-    if (tab === "posts") params.set("tab", "posts");
+    if (tab !== "people") params.set("tab", tab);
     const qs = params.toString();
     router.replace(qs ? `/search?${qs}` : "/search", { scroll: false });
   }, [query, tab, router, searchParams]);
 
   const users = usersQ.data?.users ?? [];
+  const places = placesQ.data?.places ?? [];
   const maybeTag = debounced.replace(/^#/, "");
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-12 sm:px-6 sm:pt-8">
       <h1 className="mb-1 text-2xl font-bold text-fg">Search</h1>
       <p className="mb-6 text-sm text-fg-muted">
-        Find people or place drops by text and hashtags.
+        Find people, directory places, or post drops by text and hashtags.
       </p>
 
       <label className="relative block">
@@ -76,11 +89,12 @@ function SearchContent() {
         />
       </label>
 
-      <div className="mt-4 mb-6 inline-flex rounded-xl bg-overlay p-1">
+      <div className="mt-4 mb-6 inline-flex flex-wrap rounded-xl bg-overlay p-1">
         {(
           [
             { id: "people" as const, label: "People", icon: Users },
-            { id: "posts" as const, label: "Places", icon: Hash },
+            { id: "directory" as const, label: "Directory", icon: MapPin },
+            { id: "posts" as const, label: "Posts", icon: Hash },
           ] as const
         ).map((t) => {
           const Icon = t.icon;
@@ -154,6 +168,24 @@ function SearchContent() {
               ))}
             </ul>
           )
+        ) : tab === "directory" ? (
+          placesQ.isFetching && !placesQ.data ? (
+            <p className="text-center text-sm text-fg-faint">Searching places…</p>
+          ) : placesQ.isError ? (
+            <p className="text-center text-sm text-fg-muted">
+              {getApiErrorMessage(placesQ.error)}
+            </p>
+          ) : places.length === 0 ? (
+            <p className="text-center text-sm text-fg-faint">
+              No directory places match “{debounced}”.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {places.map((p) => (
+                <PlaceCard key={p.id} place={p} />
+              ))}
+            </ul>
+          )
         ) : postsQ.isError ? (
           <p className="text-center text-sm text-fg-muted">
             {getApiErrorMessage(postsQ.error)}
@@ -161,7 +193,7 @@ function SearchContent() {
         ) : (
           <PostsGrid
             initial={postsQ.data}
-            emptyTitle="No matching places"
+            emptyTitle="No matching posts"
             emptyBody="Try another phrase or open the hashtag shortcut above."
             searchQuery={debounced}
             onLoadMore={async (cursor) =>

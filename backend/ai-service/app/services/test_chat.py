@@ -30,7 +30,7 @@ class FakeLLM:
     last_system: str | None = None
     last_messages: list[dict[str, str]] | None = None
 
-    async def complete(self, *, system: str, messages: list[dict[str, str]]) -> str:
+    async def complete(self, *, system: str, messages: list[dict[str, str]], json_mode: bool = False) -> str:
         self.last_system = system
         self.last_messages = messages
         assert system

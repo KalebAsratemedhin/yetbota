@@ -146,7 +146,7 @@ export default function DiscoverySection() {
 
         <Reveal direction="scale" className="mt-8 flex justify-center">
           <Link
-            href="/discovery"
+            href="/places"
             className="inline-flex rounded-full bg-brand px-8 py-2.5 text-sm font-semibold text-black transition-transform hover:scale-105 hover:bg-brand-dark"
           >
             {t.discovery.viewFeed} →

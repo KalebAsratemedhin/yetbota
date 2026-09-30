@@ -124,3 +124,39 @@ CREATE TABLE answer_votes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (answer_id, user_id)
 );
+
+CREATE TABLE places (
+    id UUID PRIMARY KEY,
+    name TEXT NOT NULL,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    summary_model TEXT NOT NULL DEFAULT '',
+    summary_updated_at TIMESTAMPTZ,
+    post_count BIGINT NOT NULL DEFAULT 0,
+    embedding DOUBLE PRECISION[],
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE place_posts (
+    place_id UUID NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    attach_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+    attach_method TEXT NOT NULL DEFAULT '',
+    attached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (place_id, post_id),
+    UNIQUE (post_id)
+);
+
+CREATE TABLE place_entries (
+    id UUID PRIMARY KEY,
+    place_id UUID NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    body TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_post_id UUID REFERENCES posts(id) ON DELETE SET NULL,
+    author_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

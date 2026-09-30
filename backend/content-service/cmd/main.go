@@ -20,11 +20,15 @@ import (
 	"github.com/yetbota/content-service/drivers/similar"
 	"github.com/yetbota/content-service/drivers/surreal"
 	"github.com/yetbota/content-service/internal/services/endpoint"
+	placerepo "github.com/yetbota/content-service/internal/services/repository/place"
 	postrepo "github.com/yetbota/content-service/internal/services/repository/post"
 	qarepo "github.com/yetbota/content-service/internal/services/repository/qa"
+	placeuc "github.com/yetbota/content-service/internal/services/usecase/place"
 	postuc "github.com/yetbota/content-service/internal/services/usecase/post"
 	qauc "github.com/yetbota/content-service/internal/services/usecase/qa"
 	httptransport "github.com/yetbota/content-service/internal/transport/http"
+	internalapi "github.com/yetbota/content-service/internal/transport/http/internalapi"
+	placeshttp "github.com/yetbota/content-service/internal/transport/http/places"
 	postshttp "github.com/yetbota/content-service/internal/transport/http/posts"
 	qahttp "github.com/yetbota/content-service/internal/transport/http/qa"
 	"github.com/yetbota/content-service/internal/transport/http/shared"
@@ -99,8 +103,9 @@ func main() {
 		log.Info("rabbitmq_connected", "url_host", cfg.RabbitMQ.URL)
 	}
 
+	postStore := postrepo.New(pool)
 	svc := postuc.NewService(
-		postrepo.New(pool),
+		postStore,
 		signer,
 		follow.New(sdb),
 		similar.New(sdb),
@@ -180,7 +185,23 @@ func main() {
 		AnswerVote:     endpoint.MakeAnswerVoteEndpoint(qaSvc),
 	}
 
-	router := httptransport.NewRouter(eps, qaEps, idClient)
+	placeStore := placerepo.New(pool)
+	placeSvc := placeuc.NewService(placeStore, postStore, cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
+	placesEps := placeshttp.Endpoints{
+		List:    endpoint.MakeListPlacesEndpoint(placeSvc),
+		Get:     endpoint.MakeGetPlaceEndpoint(placeSvc),
+		Posts:   endpoint.MakeListPlacePostsEndpoint(placeSvc),
+		Entries: endpoint.MakeListPlaceEntriesEndpoint(placeSvc),
+	}
+	internalEps := internalapi.Endpoints{
+		Nearby:    endpoint.MakeInternalNearbyEndpoint(placeSvc),
+		Attach:    endpoint.MakeInternalAttachEndpoint(placeSvc),
+		Summary:   endpoint.MakeInternalSummaryEndpoint(placeSvc),
+		Entries:   endpoint.MakeInternalEntriesEndpoint(placeSvc),
+		GetByPost: endpoint.MakeInternalGetByPostEndpoint(placeSvc),
+	}
+
+	router := httptransport.NewRouter(eps, qaEps, placesEps, internalEps, idClient, cfg.Identity.ServiceToken)
 	handler := shared.AccessLog(shared.CORS(cfg.CORS.AllowedOrigins, router))
 
 	log.Info("listening", "addr", cfg.HTTP.Addr)

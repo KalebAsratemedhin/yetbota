@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { LogOut, Menu, Plus, Search, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
@@ -12,10 +13,16 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { useAppSelector } from "@/lib/hooks";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { APP_SHELL_CLASS } from "@/lib/layout";
-import { usePathname } from "next/dist/client/components/navigation";
+import { cn } from "@/lib/utils";
+
+function navLinkActive(pathname: string, href: string): boolean {
+  if (pathname === href) return true;
+  return pathname.startsWith(`${href}/`);
+}
 
 export default function Navbar() {
   const t = useContent();
+  const pathname = usePathname() ?? "";
   const [mobileOpen, setMobileOpen] = useState(false);
   const hydrated = useHydrated();
   const accessToken = useAppSelector((s) => s.auth.accessToken);
@@ -23,9 +30,9 @@ export default function Navbar() {
   const isSignedIn = hydrated && Boolean(accessToken);
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { data: me } = useMeQuery(undefined, { skip: !isSignedIn });
-  const pathname = usePathname();
 
   const navLinks = [
+    { id: "explore", label: t.nav.explore, href: "/places" },
     { id: "assistant", label: t.nav.aiAssistant, href: "/assistant" },
     { id: "community", label: t.nav.community, href: "/qa" },
   ];
@@ -65,7 +72,11 @@ export default function Navbar() {
 
           <nav className="hidden items-center gap-6 lg:flex xl:gap-8">
             {navLinks.map((link) => (
-              <HeaderNavLink active={link.href === pathname} key={link.id} href={link.href}>
+              <HeaderNavLink
+                key={link.id}
+                href={link.href}
+                active={navLinkActive(pathname, link.href)}
+              >
                 {link.label}
               </HeaderNavLink>
             ))}
@@ -159,16 +170,24 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="border-t border-border-subtle bg-surface px-4 pt-3 pb-5 lg:hidden">
           <nav className="mb-3 flex flex-col gap-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.id}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-overlay hover:text-fg"
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) => {
+              const active = navLinkActive(pathname, link.href);
+              return (
+                <Link
+                  key={link.id}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "rounded-lg px-3 py-2.5 text-sm transition-colors",
+                    active
+                      ? "bg-brand/10 font-semibold text-fg"
+                      : "text-fg-muted hover:bg-overlay hover:text-fg"
+                  )}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </nav>
           {isSignedIn ? (
             <div className="flex flex-col gap-1 border-t border-border-subtle pt-3">

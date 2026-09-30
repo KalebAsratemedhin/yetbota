@@ -38,7 +38,13 @@ class ChatLLM(Protocol):
     @property
     def model_name(self) -> str: ...
 
-    async def complete(self, *, system: str, messages: list[dict[str, str]]) -> str: ...
+    async def complete(
+        self,
+        *,
+        system: str,
+        messages: list[dict[str, str]],
+        json_mode: bool = False,
+    ) -> str: ...
 
 
 class ChatService:

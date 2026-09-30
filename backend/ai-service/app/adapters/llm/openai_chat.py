@@ -37,6 +37,7 @@ class OpenAIChatClient:
         *,
         system: str,
         messages: list[dict[str, str]],
+        json_mode: bool = False,
     ) -> str:
         if not self._api_key:
             raise RuntimeError("OPENAI_API_KEY is not configured")
@@ -45,6 +46,8 @@ class OpenAIChatClient:
             "messages": [{"role": "system", "content": system}, *messages],
             "temperature": 0.4,
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(
                 f"{self._base_url}/chat/completions",

@@ -12,6 +12,7 @@ export default function HeaderNavLink({ active = false, className, children, ...
   return (
     <Link
       {...rest}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "relative inline-flex items-center text-sm font-medium transition-colors",
         "after:absolute after:left-1/2 after:-bottom-1.5 after:h-0.5 after:bg-brand after:content-[''] after:transition-all after:duration-300 after:-translate-x-1/2",

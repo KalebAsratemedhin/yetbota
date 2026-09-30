@@ -8,6 +8,10 @@ import type {
   CreatePostRequest,
   CreateQuestionRequest,
   MediaKind,
+  Place,
+  PlaceEntriesPage,
+  PlaceEntryCategory,
+  PlacesPage,
   Post,
   PostsPage,
   QaVote,
@@ -38,6 +42,17 @@ export type CommentRepliesArgs = PageArgs & { commentId: string };
 export type FeedArgs = PageArgs & { lat?: number; lng?: number };
 export type ListQuestionsArgs = PageArgs & { post_id?: string };
 export type ListAnswersArgs = PageArgs & { questionId: string };
+export type ListPlacesArgs = PageArgs & {
+  q?: string;
+  lat?: number;
+  lng?: number;
+  radius_m?: number;
+};
+export type PlacePostsArgs = PageArgs & { placeId: string };
+export type PlaceEntriesArgs = PageArgs & {
+  placeId: string;
+  category?: PlaceEntryCategory;
+};
 
 export const contentApi = createApi({
   reducerPath: "contentApi",
@@ -57,6 +72,10 @@ export const contentApi = createApi({
     "Questions",
     "Question",
     "Answers",
+    "Places",
+    "Place",
+    "PlacePosts",
+    "PlaceEntries",
   ],
   endpoints: (build) => ({
     signMedia: build.mutation<SignMediaResponse, { kind: MediaKind }>({
@@ -404,6 +423,66 @@ export const contentApi = createApi({
         { type: "Question", id: questionId },
       ],
     }),
+    listPlaces: build.query<PlacesPage, ListPlacesArgs | void>({
+      query: (args) => {
+        const lat = args?.lat;
+        const lng = args?.lng;
+        const hasLoc =
+          lat != null &&
+          lng != null &&
+          Number.isFinite(lat) &&
+          Number.isFinite(lng);
+        return {
+          url: "/places",
+          params: {
+            limit: args?.limit ?? 20,
+            ...(args?.q?.trim() ? { q: args.q.trim() } : {}),
+            ...(args?.cursor ? { cursor: args.cursor } : {}),
+            ...(hasLoc
+              ? {
+                  lat,
+                  lng,
+                  ...(args?.radius_m != null && args.radius_m > 0
+                    ? { radius_m: args.radius_m }
+                    : {}),
+                }
+              : {}),
+          },
+        };
+      },
+      providesTags: (result) => [
+        "Places",
+        ...(result?.places.map((p) => ({ type: "Place" as const, id: p.id })) ??
+          []),
+      ],
+    }),
+    getPlace: build.query<Place, string>({
+      query: (id) => `/places/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "Place", id }],
+    }),
+    listPlacePosts: build.query<PostsPage, PlacePostsArgs>({
+      query: ({ placeId, limit = 20, cursor }) => ({
+        url: `/places/${placeId}/posts`,
+        params: { limit, ...(cursor ? { cursor } : {}) },
+      }),
+      providesTags: (_r, _e, { placeId }) => [{ type: "PlacePosts", id: placeId }],
+    }),
+    listPlaceEntries: build.query<PlaceEntriesPage, PlaceEntriesArgs>({
+      query: ({ placeId, category, limit = 20, cursor }) => ({
+        url: `/places/${placeId}/entries`,
+        params: {
+          limit,
+          ...(category ? { category } : {}),
+          ...(cursor ? { cursor } : {}),
+        },
+      }),
+      providesTags: (_r, _e, { placeId, category }) => [
+        {
+          type: "PlaceEntries",
+          id: category ? `${placeId}:${category}` : placeId,
+        },
+      ],
+    }),
   }),
 });
 
@@ -449,4 +528,11 @@ export const {
   useCreateAnswerMutation,
   useUpdateAnswerMutation,
   useVoteAnswerMutation,
+  useListPlacesQuery,
+  useLazyListPlacesQuery,
+  useGetPlaceQuery,
+  useListPlacePostsQuery,
+  useLazyListPlacePostsQuery,
+  useListPlaceEntriesQuery,
+  useLazyListPlaceEntriesQuery,
 } = contentApi;

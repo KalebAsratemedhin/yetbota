@@ -17,9 +17,9 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | Layer | Choice | Notes |
 | --- | --- | --- |
 | Frontend | Next.js | |
-| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A** |
+| content-service | Go | Owns posts, media metadata, reactions, comments, bookmarks, share, post search, home feed, trending, **Q&A**, **place directory** |
 | identity-service | Go | Owns auth + profile + follow writes + **reputation ledger, levels, badges** |
-| ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges + RAG `/chat` |
+| ai-service | Python | FastAPI; typed `content_embedding` ingest + post `similar` edges + RAG `/chat` + **place attach / classify / summary** |
 | Database | PostgreSQL | Shared; users/auth + posts/content tables (service-owned) |
 | Graph DB | SurrealDB | Shared; follows + `post_embedding` / `similar` + `content_embedding` (chat RAG). Local: Docker in `backend/docker-compose.yml` |
 | Messaging | RabbitMQ | `*.created` / `*.updated` (post/comment/question/answer) → `ai.content.ingest` |
@@ -91,7 +91,18 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-046a | The author of a question shall be able to edit it (body, post link, place). | Partial PATCH; closed questions cannot be edited |
 | FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
 | FR-047a | The author of an answer shall be able to edit its body. | Partial PATCH |
-| FR-048 | A client shall be able to ask the AI chatbot a question and receive an answer grounded in ingested posts, comments, questions, and answers. | `POST /chat` on ai-service; RAG over `content_embedding`; OpenAI; returns reply + sources; auth deferred |
+| FR-048 | A client shall be able to ask the AI chatbot a question and receive an answer grounded in ingested posts, comments, questions, and answers. | `POST /chat` on ai-service; RAG over `content_embedding`; Gemini by default; returns reply + sources; auth deferred |
+| FR-049 | The system shall maintain a **place directory**: one Place per real-world location, distinct from Related-posts similarity. | Owned by content-service (Postgres); AI attach/summary on ingest |
+| FR-050 | After a post is ingested, ai-service shall attach it to an existing Place or create a new Place when no same-place match passes the cutoff. | Hybrid geo + name + embedding; hard cutoff; ambiguous → do not merge (create or skip merge) |
+| FR-051 | A post shall belong to at most one Place (v1). | `place_posts` unique on `post_id` |
+| FR-052 | Place matching shall not use the Surreal `similar` edge graph; Related posts remain a separate feature. | Same-place identity vs soft content similarity |
+| FR-053 | An authenticated user shall be able to list and search Places (text and/or nearby lat/lng). | Keyset pagination |
+| FR-054 | An authenticated user shall be able to fetch a Place (name, location, AI summary, counts). | |
+| FR-055 | An authenticated user shall be able to list posts attached to a Place. | Keyset pagination |
+| FR-056 | Each Place shall expose directory entries classified as `tip`, `change`, or `important`. | AI-extracted from posts in v1; schema allows future `source=user` |
+| FR-057 | An authenticated user shall be able to list Place entries, optionally filtered by category. | Keyset pagination |
+| FR-058 | When a post is attached (or Place membership/entries change), ai-service shall refresh the Place AI summary asynchronously (debounced). | Grounded in member posts + entries; no internal IDs in prose |
+| FR-059 | User-authored Place entries (`tip` / `change` / `important`) are deferred; the data model shall allow `source=user` later without a redesign. | No public write API in this slice |
 
 ## Feed ranking (non-ML)
 
@@ -173,6 +184,26 @@ Config under content-service `trending.*` (`lookback_days`, `candidate_limit`, `
 | `POST /answers/{id}/vote` | Same vote shape |
 
 Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption + hashtags. Migration may wipe local post rows to apply NOT NULL.
+
+## Place directory
+
+One **Place** = one real-world location. Membership is **same-place** (geo + name + embed cutoff), not Related/`similar`. content-service stores Places; ai-service attaches on `post.created` / `post.updated` (after existing embed ingest) and writes summary + AI entries.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /places` | List/search; optional `q`, optional `lat`/`lng` nearby; keyset cursor |
+| `GET /places/{id}` | Detail: name, lat/lng, summary, post_count |
+| `GET /places/{id}/posts` | Attached posts; keyset |
+| `GET /places/{id}/entries` | Directory entries; optional `category=tip\|change\|important`; keyset |
+| Internal attach / entries / summary | Service-token APIs for ai-service (not public) |
+
+| Category | Meaning |
+| --- | --- |
+| `tip` | How to visit / what to try / practical advice |
+| `change` | Something that changed (hours, closed, moved, menu) |
+| `important` | Safety, access, must-know constraints |
+
+Matching defaults (configurable): nearby radius ~100–150 m; embed min after geo gate; name overlap; ambiguity margin → no merge. Summary refresh debounced per place.
 
 ## Use cases
 
@@ -401,5 +432,26 @@ Posts require a place-name **`title`** (NOT NULL). FTS includes title + caption 
 
 - **Actor:** Client (auth deferred)
 - **Goal:** Get a place-discovery answer grounded in YetBota content
-- **Main flow:** `POST /chat` with a message (optional history) → ai-service embeds the query, retrieves similar `content_embedding` chunks, calls OpenAI with that context → returns reply plus source snippets.
+- **Main flow:** `POST /chat` with a message (optional history) → ai-service embeds the query, retrieves similar `content_embedding` chunks, calls the chat LLM with that context → returns reply plus source snippets.
 - **Related FRs:** FR-048
+
+### UC-034 — Browse place directory
+
+- **Actor:** User
+- **Goal:** Find Places by search or nearby
+- **Main flow:** `GET /places` with optional `q` and/or `lat`/`lng` → paginated Places (name, summary snippet, location, counts).
+- **Related FRs:** FR-053
+
+### UC-035 — Open a Place
+
+- **Actor:** User
+- **Goal:** Read AI summary, tips/changes/important, and posts for one location
+- **Main flow:** `GET /places/{id}` → optionally list posts and entries by category.
+- **Related FRs:** FR-054, FR-055, FR-056, FR-057
+
+### UC-036 — System attaches post to Place (ingest)
+
+- **Actor:** System (ai-service)
+- **Goal:** Keep directory membership and AI content up to date
+- **Main flow:** On post ingest → hybrid same-place match with cutoff → create or link Place → extract tip/change/important entries → debounced summary refresh. Does not write Related/`similar` edges for this purpose.
+- **Related FRs:** FR-049, FR-050, FR-051, FR-052, FR-058

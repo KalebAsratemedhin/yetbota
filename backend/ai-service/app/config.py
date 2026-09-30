@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     chat_min_score: float = 0.22
     chat_soft_min_score: float = 0.12
 
+    # Place directory (content-service internal APIs)
+    content_base_url: str = "http://localhost:8082"
+    internal_service_token: str = "dev-internal-token"
+    place_match_radius_m: float = 150.0
+    place_embed_min: float = 0.78
+    place_name_min: float = 0.55
+    place_ambiguity_margin: float = 0.05
+    place_summary_debounce_sec: float = 10.0
+
 
 @lru_cache
 def get_settings() -> Settings:

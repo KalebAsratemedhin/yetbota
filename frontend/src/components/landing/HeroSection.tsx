@@ -35,7 +35,7 @@ export default function HeroSection() {
           className="flex flex-col items-center justify-center gap-4 sm:flex-row"
         >
           <Link
-            href="/discovery"
+            href="/places"
             className="inline-flex w-full items-center justify-center rounded-xl bg-brand px-8 py-4 text-base font-bold text-black transition-colors hover:bg-brand-dark sm:w-auto"
           >
             {t.hero.ctaExplore}

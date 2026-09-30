@@ -192,3 +192,40 @@ export type CloudinaryUploadResult = {
   format?: string;
   resource_type?: string;
 };
+
+export type PlaceEntryCategory = "tip" | "change" | "important";
+export type PlaceEntrySource = "ai" | "user";
+
+export type Place = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  summary: string;
+  summary_model?: string;
+  summary_updated_at?: string;
+  post_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlacesPage = {
+  places: Place[];
+  next_cursor?: string;
+};
+
+export type PlaceEntry = {
+  id: string;
+  place_id: string;
+  category: PlaceEntryCategory;
+  body: string;
+  source: PlaceEntrySource;
+  source_post_id?: string;
+  author_id?: string;
+  created_at: string;
+};
+
+export type PlaceEntriesPage = {
+  entries: PlaceEntry[];
+  next_cursor?: string;
+};

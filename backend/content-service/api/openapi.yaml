@@ -769,6 +769,98 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /places:
+    get:
+      tags: [Places]
+      summary: List / search place directory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: lat
+          in: query
+          schema: { type: number }
+        - name: lng
+          in: query
+          schema: { type: number }
+        - name: radius_m
+          in: query
+          schema: { type: number }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Places page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlacesPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /places/{id}:
+    get:
+      tags: [Places]
+      summary: Get a place
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Place detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Place"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /places/{id}/posts:
+    get:
+      tags: [Places]
+      summary: List posts for a place
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Posts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /places/{id}/entries:
+    get:
+      tags: [Places]
+      summary: List tip / change / important entries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [tip, change, important]
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Entries page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceEntriesPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -1232,6 +1324,54 @@ components:
             $ref: "#/components/schemas/Answer"
         next_cursor:
           type: string
+    Place:
+      type: object
+      required: [id, name, lat, lng, summary, post_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        summary: { type: string }
+        summary_model: { type: string }
+        summary_updated_at: { type: string, format: date-time }
+        post_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PlacesPage:
+      type: object
+      required: [places]
+      properties:
+        places:
+          type: array
+          items:
+            $ref: "#/components/schemas/Place"
+        next_cursor: { type: string }
+    PlaceEntry:
+      type: object
+      required: [id, place_id, category, body, source, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        place_id: { type: string, format: uuid }
+        category:
+          type: string
+          enum: [tip, change, important]
+        body: { type: string }
+        source:
+          type: string
+          enum: [ai, user]
+        source_post_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    PlaceEntriesPage:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaceEntry"
+        next_cursor: { type: string }
     Error:
       type: object
       required: [error]

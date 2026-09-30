@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 from uuid import UUID
 
 from app.domain.content_doc import ContentDocument
 from app.domain.ports import ContentReader, EmbeddingProvider, PostEmbeddingStore
+from app.domain.post_doc import PostDocument
 
 logger = logging.getLogger(__name__)
+
+
+class PlaceAttachHook(Protocol):
+    async def after_post_ingest(
+        self, post: PostDocument, embedding: list[float]
+    ) -> None: ...
 
 
 class IngestService:
@@ -20,12 +28,14 @@ class IngestService:
         *,
         similarity_top_k: int = 10,
         similarity_min_score: float = 0.55,
+        place_attach: PlaceAttachHook | None = None,
     ) -> None:
         self._reader = reader
         self._embedder = embedder
         self._store = store
         self._top_k = similarity_top_k
         self._min_score = similarity_min_score
+        self._place_attach = place_attach
 
     async def handle_event(self, event: str, payload: dict) -> bool:
         """Dispatch thin domain events to the right ingest path."""
@@ -56,7 +66,6 @@ class IngestService:
             logger.warning("ingest_post_empty_text post_id=%s", post_id)
             return False
         embedding = await self._embedder.embed(text)
-        # Related-posts graph (unchanged product path).
         await self._store.upsert_embedding(
             post, text, embedding, self._embedder.model_name
         )
@@ -67,7 +76,6 @@ class IngestService:
             min_score=self._min_score,
         )
         await self._store.replace_similar_edges(post.id, hits)
-        # Dual-write into typed chatbot index.
         content = await self._reader.content_for_post(post_id)
         if content is not None and content.text.strip():
             await self._store.upsert_content(
@@ -79,6 +87,8 @@ class IngestService:
             self._embedder.model_name,
             len(hits),
         )
+        if self._place_attach is not None:
+            await self._place_attach.after_post_ingest(post, embedding)
         return True
 
     async def ingest_comment(self, comment_id: UUID) -> bool:

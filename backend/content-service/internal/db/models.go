@@ -38,6 +38,40 @@ type Hashtag struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Place struct {
+	ID               pgtype.UUID        `json:"id"`
+	Name             string             `json:"name"`
+	Lat              float64            `json:"lat"`
+	Lng              float64            `json:"lng"`
+	Summary          string             `json:"summary"`
+	SummaryModel     string             `json:"summary_model"`
+	SummaryUpdatedAt pgtype.Timestamptz `json:"summary_updated_at"`
+	PostCount        int64              `json:"post_count"`
+	Embedding        []float64          `json:"embedding"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PlaceEntry struct {
+	ID           pgtype.UUID        `json:"id"`
+	PlaceID      pgtype.UUID        `json:"place_id"`
+	Category     string             `json:"category"`
+	Body         string             `json:"body"`
+	Source       string             `json:"source"`
+	SourcePostID pgtype.UUID        `json:"source_post_id"`
+	AuthorID     pgtype.UUID        `json:"author_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PlacePost struct {
+	PlaceID      pgtype.UUID        `json:"place_id"`
+	PostID       pgtype.UUID        `json:"post_id"`
+	AttachScore  float64            `json:"attach_score"`
+	AttachMethod string             `json:"attach_method"`
+	AttachedAt   pgtype.Timestamptz `json:"attached_at"`
+}
+
 type Post struct {
 	ID            pgtype.UUID        `json:"id"`
 	AuthorID      pgtype.UUID        `json:"author_id"`

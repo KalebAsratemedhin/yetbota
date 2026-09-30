@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.adapters.content.places import ContentPlacesClient
 from app.adapters.embeddings.sentence_transformers import SentenceTransformerEmbedder
 from app.adapters.llm.factory import build_chat_llm
 from app.adapters.postgres.content import PostgresContentReader
@@ -17,6 +18,7 @@ from app.api.routes import chat, health
 from app.config import get_settings
 from app.services.chat import ChatService
 from app.services.ingest import IngestService
+from app.services.place_attach import PlaceAttachService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -36,14 +38,28 @@ async def lifespan(app: FastAPI):
         embedding_dimensions=settings.embedding_dimensions,
     )
     await store.connect()
+    llm = build_chat_llm(settings)
+    places_client = ContentPlacesClient(
+        settings.content_base_url,
+        settings.internal_service_token,
+    )
+    place_attach = PlaceAttachService(
+        places_client,
+        llm,
+        radius_m=settings.place_match_radius_m,
+        embed_min=settings.place_embed_min,
+        name_min=settings.place_name_min,
+        ambiguity_margin=settings.place_ambiguity_margin,
+        summary_debounce_sec=settings.place_summary_debounce_sec,
+    )
     ingest = IngestService(
         PostgresContentReader(sessions),
         embedder,
         store,
         similarity_top_k=settings.similarity_top_k,
         similarity_min_score=settings.similarity_min_score,
+        place_attach=place_attach,
     )
-    llm = build_chat_llm(settings)
     app.state.chat = ChatService(
         embedder,
         store,
@@ -59,13 +75,14 @@ async def lifespan(app: FastAPI):
         name="rabbitmq-consumer",
     )
     logger.info(
-        "ai_service_started rabbitmq=%s model=%s dim=%s chat_provider=%s chat_llm=%s chat_configured=%s",
+        "ai_service_started rabbitmq=%s model=%s dim=%s chat_provider=%s chat_llm=%s chat_configured=%s content=%s",
         settings.rabbitmq_url,
         settings.embedding_model,
         settings.embedding_dimensions,
         settings.chat_llm_provider,
         llm.model_name,
         llm.configured,
+        settings.content_base_url,
     )
     try:
         yield

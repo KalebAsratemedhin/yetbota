@@ -7,6 +7,7 @@ import {
   BookmarkCheck,
   CircleHelp,
   MessageCircle,
+  Pencil,
   Share2,
   ThumbsDown,
   ThumbsUp,
@@ -229,6 +230,19 @@ export default function PostActions({
             <CircleHelp className="h-3.5 w-3.5" />
           </button>
         ) : null}
+        {isOwn ? (
+          <Link
+            href={`/compose?edit=${post.id}`}
+            className={cn(
+              "inline-flex items-center rounded-full border border-border-subtle bg-surface font-semibold text-fg-muted transition-colors hover:text-fg",
+              btn
+            )}
+            aria-label="Edit post"
+            title="Edit post"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Link>
+        ) : null}
       </div>
     );
   }
@@ -305,6 +319,16 @@ export default function PostActions({
         >
           <CircleHelp className="h-5 w-5" />
         </button>
+      ) : null}
+      {isOwn ? (
+        <Link
+          href={`/compose?edit=${post.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm text-fg hover:bg-surface-2"
+          aria-label="Edit post"
+          title="Edit post"
+        >
+          <Pencil className="h-5 w-5" />
+        </Link>
       ) : null}
       <button
         type="button"

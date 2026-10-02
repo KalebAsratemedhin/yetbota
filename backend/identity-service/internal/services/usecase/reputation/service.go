@@ -99,7 +99,7 @@ func (s *Service) SyncScore(ctx context.Context, in domain.SyncInput) (domain.Sn
 		delta = -2147483648
 	}
 	_ = s.repo.InsertEvent(ctx, uuid.New(), in.UserID, nil, domain.EventScoreSync, "user", &in.UserID, int32(delta))
-	if err := s.evaluateBadgesFromStats(ctx, in.UserID, in.PostsCreated, in.LikesReceived, score); err != nil {
+	if err := s.evaluateScoreBadges(ctx, in.UserID, score); err != nil {
 		return domain.Snapshot{}, err
 	}
 	return s.Snapshot(ctx, in.UserID)
@@ -143,16 +143,10 @@ func (s *Service) RecordEvent(ctx context.Context, in domain.EventInput) (domain
 	if err != nil {
 		return domain.Snapshot{}, err
 	}
-	if err := s.evaluateBadges(ctx, in.UserID, in.EventType, score); err != nil {
+	if err := s.evaluateScoreBadges(ctx, in.UserID, score); err != nil {
 		return domain.Snapshot{}, err
 	}
 	return s.Snapshot(ctx, in.UserID)
-}
-
-// AwardFirstFollowerBadge is called when someone follows userID.
-func (s *Service) AwardFirstFollowerBadge(ctx context.Context, userID uuid.UUID) error {
-	_, err := s.repo.AwardBadge(ctx, userID, domain.BadgeFirstFollower)
-	return err
 }
 
 func (s *Service) deltaFor(eventType string) (int, bool) {
@@ -168,44 +162,12 @@ func (s *Service) deltaFor(eventType string) (int, bool) {
 	}
 }
 
-func (s *Service) evaluateBadges(ctx context.Context, userID uuid.UUID, eventType string, score int64) error {
-	switch eventType {
-	case domain.EventPostCreated:
-		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeFirstPost); err != nil {
-			return err
+func (s *Service) evaluateScoreBadges(ctx context.Context, userID uuid.UUID, score int64) error {
+	for _, b := range domain.ScoreBadges {
+		if score < b.MinScore {
+			continue
 		}
-	case domain.EventPostLiked:
-		n, err := s.repo.CountEventsByType(ctx, userID, domain.EventPostLiked)
-		if err != nil {
-			return err
-		}
-		if n >= 10 {
-			if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeTenLikesReceived); err != nil {
-				return err
-			}
-		}
-	}
-	if score >= ThresholdContributor {
-		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeLevelContributor); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Service) evaluateBadgesFromStats(ctx context.Context, userID uuid.UUID, postsCreated, likesReceived, score int64) error {
-	if postsCreated >= 1 {
-		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeFirstPost); err != nil {
-			return err
-		}
-	}
-	if likesReceived >= 10 {
-		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeTenLikesReceived); err != nil {
-			return err
-		}
-	}
-	if score >= ThresholdContributor {
-		if _, err := s.repo.AwardBadge(ctx, userID, domain.BadgeLevelContributor); err != nil {
+		if _, err := s.repo.AwardBadge(ctx, userID, b.ID); err != nil {
 			return err
 		}
 	}

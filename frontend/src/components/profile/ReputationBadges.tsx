@@ -4,10 +4,11 @@ import type { ElementType } from "react";
 import {
   BadgeCheck,
   Compass,
-  Heart,
+  Footprints,
   MapPinned,
-  PenLine,
-  Users,
+  Sparkles,
+  Star,
+  Trophy,
 } from "lucide-react";
 import type { Badge } from "@/lib/auth/types";
 
@@ -19,22 +20,35 @@ const LEVELS = [
   { name: "Pathfinder", min: 1000 },
 ] as const;
 
+/** Icons for identity score-milestone badges (migration 00007/00008). */
 const BADGE_ICON: Record<string, { icon: ElementType; tint: string }> = {
-  first_post: {
-    icon: PenLine,
+  level_newcomer: {
+    icon: Footprints,
     tint: "bg-emerald-500/15 border-emerald-500/30 text-emerald-400",
   },
-  ten_likes_received: {
-    icon: Heart,
-    tint: "bg-rose-500/15 border-rose-500/30 text-rose-400",
-  },
-  first_follower: {
-    icon: Users,
-    tint: "bg-blue-500/15 border-blue-500/30 text-blue-400",
+  level_regular: {
+    icon: Sparkles,
+    tint: "bg-sky-500/15 border-sky-500/30 text-sky-400",
   },
   level_contributor: {
     icon: BadgeCheck,
     tint: "bg-yellow-500/15 border-yellow-500/30 text-yellow-400",
+  },
+  level_local_guide: {
+    icon: Compass,
+    tint: "bg-blue-500/15 border-blue-500/30 text-blue-400",
+  },
+  level_explorer: {
+    icon: MapPinned,
+    tint: "bg-teal-500/15 border-teal-500/30 text-teal-400",
+  },
+  level_legendary_explorer: {
+    icon: Trophy,
+    tint: "bg-amber-500/15 border-amber-500/30 text-amber-400",
+  },
+  level_pathfinder: {
+    icon: Star,
+    tint: "bg-violet-500/15 border-violet-500/30 text-violet-400",
   },
 };
 
@@ -154,8 +168,7 @@ export function BadgesCard({ badges }: { badges: Badge[] }) {
 
       {earned.length === 0 ? (
         <p className="text-sm text-fg-faint">
-          No badges yet. Publish a post, earn likes, or grow your network to unlock
-          them.
+          No badges yet. Earn reputation to unlock Newcomer and beyond.
         </p>
       ) : (
         <div className="-mx-2 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

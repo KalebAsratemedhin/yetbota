@@ -22,10 +22,6 @@ const (
 	listMaxLimit      = 50
 )
 
-type BadgeAwarder interface {
-	AwardFirstFollowerBadge(ctx context.Context, userID uuid.UUID) error
-}
-
 type ReputationReader interface {
 	Snapshot(ctx context.Context, userID uuid.UUID) (domainrep.Snapshot, error)
 }
@@ -34,16 +30,14 @@ type Service struct {
 	users      domainuser.Repository
 	follows    domainfollow.Store
 	reputation ReputationReader
-	badges     BadgeAwarder
 }
 
 func NewService(
 	users domainuser.Repository,
 	follows domainfollow.Store,
 	reputation ReputationReader,
-	badges BadgeAwarder,
 ) *Service {
-	return &Service{users: users, follows: follows, reputation: reputation, badges: badges}
+	return &Service{users: users, follows: follows, reputation: reputation}
 }
 
 type PublicProfile struct {
@@ -152,9 +146,6 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID uuid.UUID) 
 	}
 	if err := s.follows.Follow(ctx, followerID, followeeID); err != nil {
 		return err
-	}
-	if s.badges != nil {
-		_ = s.badges.AwardFirstFollowerBadge(ctx, followeeID)
 	}
 	return nil
 }

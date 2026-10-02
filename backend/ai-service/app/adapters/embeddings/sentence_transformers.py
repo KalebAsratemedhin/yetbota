@@ -4,19 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # sentence-transformers/all-MiniLM-L6-v2 via fastembed → 384 dims
 DEFAULT_DIMENSIONS = 384
+# fastembed's default is tempfile.gettempdir()/fastembed_cache — wiped on reboot / macOS cleanup.
+DEFAULT_CACHE_DIR = Path.home() / ".cache" / "yetbota" / "fastembed"
 
 
 class SentenceTransformerEmbedder:
     """Name kept for config compatibility; backed by fastembed TextEmbedding."""
 
-    def __init__(self, model_name: str, dimensions: int = DEFAULT_DIMENSIONS) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        dimensions: int = DEFAULT_DIMENSIONS,
+        cache_dir: str | Path | None = None,
+    ) -> None:
         self._model_name = model_name
         self._dimensions = dimensions
+        self._cache_dir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
         self._model = None
 
     @property
@@ -32,20 +41,30 @@ class SentenceTransformerEmbedder:
             return self._model
         from fastembed import TextEmbedding
 
-        logger.info("loading_embedding_model model=%s", self._model_name)
-        self._model = TextEmbedding(model_name=self._model_name)
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "loading_embedding_model model=%s cache_dir=%s",
+            self._model_name,
+            self._cache_dir,
+        )
+        self._model = TextEmbedding(
+            model_name=self._model_name,
+            cache_dir=str(self._cache_dir),
+        )
         return self._model
 
     async def warmup(self) -> None:
-        """Download/load the ONNX model at process start (not on first request)."""
+        """Download (once into persistent cache) / load the ONNX model at process start."""
         await asyncio.to_thread(self._load)
         logger.info(
-            "embedding_model_ready model=%s dim=%s",
+            "embedding_model_ready model=%s dim=%s cache_dir=%s",
             self._model_name,
             self._dimensions,
+            self._cache_dir,
         )
 
-    async def embed(self, text: str) -> list[float]:
+    async def embed(self, text: str, *, task: str | None = None) -> list[float]:
+        del task  # local model has no query/document split
         text = (text or "").strip() or " "
         model = await asyncio.to_thread(self._load)
 

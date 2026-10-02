@@ -27,8 +27,12 @@ class Settings(BaseSettings):
 
     rabbitmq_url: str = "amqp://yetbota:yetbota@localhost:5672/"
 
+    embedding_provider: str = "gemini"
+    gemini_embedding_model: str = "text-embedding-004"
+    embedding_dimensions: int = 768
+    # Local fastembed (EMBEDDING_PROVIDER=local)
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_dimensions: int = 384
+    embedding_cache_dir: str = ""
     similarity_top_k: int = 10
     similarity_min_score: float = 0.55
 

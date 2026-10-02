@@ -54,7 +54,7 @@ class FakeEmbedder:
     model_name = "fake"
     dimensions = 3
 
-    async def embed(self, text: str) -> list[float]:
+    async def embed(self, text: str, *, task: str | None = None) -> list[float]:
         return [0.1, 0.2, 0.3]
 
 

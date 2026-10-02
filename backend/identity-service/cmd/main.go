@@ -100,7 +100,7 @@ func main() {
 	hasher := auth.NewBcryptHasher()
 	tokens := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTTLMinutes)
 	authSvc := authuc.NewService(repo, hasher, tokens, repo, repo, images, repSvc, cfg.JWT.RefreshTTLDays)
-	socialSvc := socialuc.NewService(repo, follows, repSvc, repSvc)
+	socialSvc := socialuc.NewService(repo, follows, repSvc)
 
 	authEps := authhttp.Endpoints{
 		SignUp:         endpoint.MakeSignUpEndpoint(authSvc),

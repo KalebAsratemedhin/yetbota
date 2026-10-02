@@ -78,7 +78,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
 | FR-035 | Reputation shall be derived from a log of post interaction events (likes, comments, shares, bookmarks, …) with per-event time freshness, synced from content-service. | Self-engagement (except post create) shall not write scoring events |
 | FR-036 | A user’s reputation level shall be derived from their reputation score using configurable bands. | Level is display-only banding of score |
-| FR-037 | An authenticated user shall be able to unlock badges when badge criteria are met. | Badges are awarded once; criteria may use score and/or activity |
+| FR-037 | An authenticated user shall be able to unlock badges when badge criteria are met. | Badges are one-shot **reputation score milestones** (Newcomer → Explorer → Legendary explorer → Pathfinder); not activity counters |
 | FR-038 | An authenticated user shall be able to fetch their reputation score, level, and earned badges. | Also exposed on public profile (score, level, badges) |
 | FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; lat/lng optional (enables nearby + geo boost) |
 | FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
@@ -382,8 +382,8 @@ Matching defaults (configurable): nearby radius ~100–150 m; embed min after ge
 ### UC-026 — Unlock a badge
 
 - **Actor:** User (passive)
-- **Goal:** Receive a badge when criteria are met
-- **Main flow:** After a reputation or activity event, badge rules are evaluated; if newly satisfied, badge is awarded once.
+- **Goal:** Receive a badge when a score milestone is reached
+- **Main flow:** After identity syncs (or records) reputation score, score-milestone badges are evaluated; if newly satisfied, the badge is awarded once.
 - **Related FRs:** FR-037
 
 ### UC-027 — Home feed

@@ -65,7 +65,7 @@ class IngestService:
         if not text.strip():
             logger.warning("ingest_post_empty_text post_id=%s", post_id)
             return False
-        embedding = await self._embedder.embed(text)
+        embedding = await self._embedder.embed(text, task="document")
         await self._store.upsert_embedding(
             post, text, embedding, self._embedder.model_name
         )
@@ -125,7 +125,7 @@ class IngestService:
         if not doc.text.strip():
             logger.warning("ingest_%s_empty_text id=%s", label, entity_id)
             return False
-        embedding = await self._embedder.embed(doc.text)
+        embedding = await self._embedder.embed(doc.text, task="document")
         await self._store.upsert_content(doc, embedding, self._embedder.model_name)
         logger.info(
             "ingest_%s_ok id=%s model=%s",

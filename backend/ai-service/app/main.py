@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.adapters.content.places import ContentPlacesClient
-from app.adapters.embeddings.sentence_transformers import SentenceTransformerEmbedder
+from app.adapters.embeddings.factory import build_embedding_provider
 from app.adapters.llm.factory import build_chat_llm
 from app.adapters.postgres.content import PostgresContentReader
 from app.adapters.postgres.session import create_engine, create_session_factory
@@ -29,10 +29,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     engine = create_engine(settings)
     sessions = create_session_factory(engine)
-    embedder = SentenceTransformerEmbedder(
-        settings.embedding_model, dimensions=settings.embedding_dimensions
-    )
-    await embedder.warmup()
+    embedder = build_embedding_provider(settings)
+    warmup = getattr(embedder, "warmup", None)
+    if callable(warmup):
+        await warmup()
     store = SurrealPostEmbeddingStore(
         SurrealConfig.from_settings(settings),
         embedding_dimensions=settings.embedding_dimensions,
@@ -75,9 +75,10 @@ async def lifespan(app: FastAPI):
         name="rabbitmq-consumer",
     )
     logger.info(
-        "ai_service_started rabbitmq=%s model=%s dim=%s chat_provider=%s chat_llm=%s chat_configured=%s content=%s",
+        "ai_service_started rabbitmq=%s embed_provider=%s embed_model=%s dim=%s chat_provider=%s chat_llm=%s chat_configured=%s content=%s",
         settings.rabbitmq_url,
-        settings.embedding_model,
+        settings.embedding_provider,
+        embedder.model_name,
         settings.embedding_dimensions,
         settings.chat_llm_provider,
         llm.model_name,

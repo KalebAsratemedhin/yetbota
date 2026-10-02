@@ -645,7 +645,7 @@ components:
       properties:
         id:
           type: string
-          example: first_post
+          example: level_contributor
         name:
           type: string
         description:

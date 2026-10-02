@@ -13,11 +13,31 @@ const (
 	EventPostUnliked = "post.unliked"
 	EventScoreSync   = "score.sync"
 
-	BadgeFirstPost        = "first_post"
-	BadgeTenLikesReceived = "ten_likes_received"
-	BadgeFirstFollower    = "first_follower"
-	BadgeLevelContributor = "level_contributor"
+	BadgeNewcomer           = "level_newcomer"
+	BadgeRegular            = "level_regular"
+	BadgeContributor        = "level_contributor"
+	BadgeLocalGuide         = "level_local_guide"
+	BadgeExplorer           = "level_explorer"
+	BadgeLegendaryExplorer  = "level_legendary_explorer"
+	BadgePathfinder         = "level_pathfinder"
 )
+
+// ScoreBadge is a one-shot award when reputation score reaches MinScore.
+type ScoreBadge struct {
+	ID       string
+	MinScore int64
+}
+
+// ScoreBadges is ordered low → high for evaluation.
+var ScoreBadges = []ScoreBadge{
+	{ID: BadgeNewcomer, MinScore: 10},
+	{ID: BadgeRegular, MinScore: 40},
+	{ID: BadgeContributor, MinScore: 100},
+	{ID: BadgeLocalGuide, MinScore: 400},
+	{ID: BadgeExplorer, MinScore: 550},
+	{ID: BadgeLegendaryExplorer, MinScore: 850},
+	{ID: BadgePathfinder, MinScore: 1000},
+}
 
 // SyncInput sets denormalized score from content-side engagement math (Option 1).
 type SyncInput struct {

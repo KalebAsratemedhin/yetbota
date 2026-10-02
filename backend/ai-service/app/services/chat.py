@@ -79,7 +79,7 @@ class ChatService:
                 "chat LLM is not configured (set GEMINI_API_KEY or OPENAI_API_KEY)"
             )
 
-        embedding = await self._embedder.embed(text)
+        embedding = await self._embedder.embed(text, task="query")
         hits = await self._retrieve(embedding)
         context = _format_context(hits)
         user_block = (

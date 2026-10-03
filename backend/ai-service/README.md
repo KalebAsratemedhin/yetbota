@@ -10,7 +10,7 @@ Exposes **RAG chat** over the typed `content_embedding` index.
 | --- | --- |
 | HTTP | FastAPI + Uvicorn (`:8083`) |
 | Postgres | Read posts, comments, questions, answers |
-| Embeddings | Gemini `text-embedding-004` (768-d); optional local MiniLM via `EMBEDDING_PROVIDER=local` |
+| Embeddings | Gemini `gemini-embedding-001` (768-d via `outputDimensionality`); optional local MiniLM via `EMBEDDING_PROVIDER=local` |
 | Chatbot index | Surreal `content_embedding` (`kind`, `entity_id`, `parent_id`, …) |
 | Related graph | Surreal `post_embedding` + `similar` (posts only) |
 | Chat LLM | Pluggable (`CHAT_LLM_PROVIDER`): default **Gemini 2.5 Flash**; OpenAI kept as alternate |

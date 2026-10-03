@@ -25,13 +25,14 @@ class GeminiEmbeddingClient:
         self,
         api_key: str,
         *,
-        model: str = "text-embedding-004",
+        model: str = "gemini-embedding-001",
         dimensions: int = 768,
         base_url: str = "https://generativelanguage.googleapis.com/v1beta",
         timeout_s: float = 60.0,
     ) -> None:
         self._api_key = api_key.strip()
-        self._model = model.strip()
+        # ListModels returns "models/…"; callers may pass either form.
+        self._model = model.strip().removeprefix("models/")
         self._dimensions = dimensions
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_s
@@ -68,19 +69,37 @@ class GeminiEmbeddingClient:
             "content": {"parts": [{"text": body_text}]},
             "taskType": task_type,
         }
-        if self._dimensions and "embedding-001" in self._model:
+        # Default native size is 3072; pin so Surreal HNSW dim stays stable.
+        if self._dimensions > 0:
             payload["outputDimensionality"] = self._dimensions
 
         url = f"{self._base_url}/models/{self._model}:embedContent"
         data: dict[str, Any] | None = None
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             for attempt in range(_MAX_ATTEMPTS):
-                resp = await client.post(
-                    url,
-                    params={"key": self._api_key},
-                    headers={"Content-Type": "application/json"},
-                    json=payload,
-                )
+                try:
+                    resp = await client.post(
+                        url,
+                        params={"key": self._api_key},
+                        headers={"Content-Type": "application/json"},
+                        json=payload,
+                    )
+                except (
+                    httpx.TimeoutException,
+                    httpx.NetworkError,
+                    httpx.RemoteProtocolError,
+                ) as e:
+                    if attempt >= _MAX_ATTEMPTS - 1:
+                        raise
+                    delay = 0.75 * (2**attempt)
+                    logger.warning(
+                        "gemini_embed_transport_retry err=%s attempt=%s sleep=%.2fs",
+                        type(e).__name__,
+                        attempt + 1,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
                 if resp.status_code in _RETRYABLE and attempt < _MAX_ATTEMPTS - 1:
                     delay = 0.75 * (2**attempt)
                     logger.warning(

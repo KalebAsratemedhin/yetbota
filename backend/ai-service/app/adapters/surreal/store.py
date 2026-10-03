@@ -134,10 +134,21 @@ class SurrealPostEmbeddingStore:
     async def ensure_schema(self) -> None:
         if self._db is None:
             raise RuntimeError("surreal not connected")
+        # HNSW DIMENSION is fixed at DEFINE time; IF NOT EXISTS keeps a stale 384-d
+        # index after switching to Gemini 768-d. Always rebuild indexes + purge
+        # vectors that don't match the configured dimension.
+        await self._db.query(
+            f"""
+REMOVE INDEX IF EXISTS {TABLE}_hnsw ON {TABLE};
+REMOVE INDEX IF EXISTS {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE};
+"""
+        )
         try:
             await self._db.query(_schema_surql(self._dimensions))
         except Exception:
-            logger.warning("surreal_schema_if_not_exists_failed; retrying without IF NOT EXISTS")
+            logger.warning(
+                "surreal_schema_if_not_exists_failed; retrying without IF NOT EXISTS"
+            )
             bare = f"""
 DEFINE TABLE {TABLE} SCHEMALESS;
 DEFINE FIELD post_id ON {TABLE} TYPE string;
@@ -175,6 +186,39 @@ DEFINE INDEX {CONTENT_TABLE}_hnsw ON {CONTENT_TABLE}
             except Exception:
                 logger.exception("surreal_schema_define_failed")
                 raise
+        await self._purge_wrong_dimension_vectors()
+
+    async def _purge_wrong_dimension_vectors(self) -> None:
+        """Drop old MiniLM (or other) vectors that don't match current HNSW dim."""
+        assert self._db is not None
+        dim = self._dimensions
+        # Delete similar edges first (they reference post_embedding records).
+        await self._db.query(f"DELETE {EDGE};")
+        for table in (TABLE, CONTENT_TABLE):
+            result = await self._db.query(
+                f"""
+SELECT count() AS n FROM {table}
+WHERE array::len(embedding) != $dim
+GROUP ALL;
+""",
+                {"dim": dim},
+            )
+            rows = _unwrap_query_rows(result)
+            n = int(rows[0].get("n") or 0) if rows else 0
+            if n <= 0:
+                continue
+            await self._db.query(
+                f"""
+DELETE {table} WHERE array::len(embedding) != $dim;
+""",
+                {"dim": dim},
+            )
+            logger.warning(
+                "surreal_purged_wrong_dim_vectors table=%s count=%s expected_dim=%s",
+                table,
+                n,
+                dim,
+            )
 
     async def close(self) -> None:
         if self._db is not None:

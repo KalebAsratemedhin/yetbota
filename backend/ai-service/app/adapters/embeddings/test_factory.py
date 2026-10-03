@@ -14,13 +14,13 @@ def test_build_embedding_gemini_default():
     settings = Settings(
         embedding_provider="gemini",
         gemini_api_key="g-key",
-        gemini_embedding_model="text-embedding-004",
+        gemini_embedding_model="gemini-embedding-001",
         embedding_dimensions=768,
     )
     emb = build_embedding_provider(settings)
     assert isinstance(emb, GeminiEmbeddingClient)
     assert emb.configured
-    assert emb.model_name == "text-embedding-004"
+    assert emb.model_name == "gemini-embedding-001"
     assert emb.dimensions == 768
 
 

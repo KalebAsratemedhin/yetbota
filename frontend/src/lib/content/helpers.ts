@@ -1,10 +1,25 @@
 import type { CloudinaryUploadResult, MediaKind, SignMediaResponse } from "@/lib/content/types";
 
+/** Default matches content-service / Cloudinary Free plan when sign has not returned yet. */
+export const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export function formatMaxUploadLabel(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (!Number.isFinite(mb) || mb <= 0) return "10 MB";
+  return Number.isInteger(mb) ? `${mb} MB` : `${mb.toFixed(1)} MB`;
+}
+
+export type CloudinaryUploadOptions = {
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+};
+
 /** Upload a file to Cloudinary using signed params from content-service. */
-export async function uploadToCloudinary(
+export function uploadToCloudinary(
   file: File,
   sign: SignMediaResponse,
-  kind: MediaKind
+  kind: MediaKind,
+  opts?: CloudinaryUploadOptions
 ): Promise<CloudinaryUploadResult> {
   const form = new FormData();
   form.append("file", file);
@@ -17,12 +32,49 @@ export async function uploadToCloudinary(
   const resourceType = sign.resource_type || (kind === "image" ? "image" : "video");
   const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(sign.cloud_name)}/${resourceType}/upload`;
 
-  const res = await fetch(endpoint, { method: "POST", body: form });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Cloudinary upload failed (${res.status})`);
-  }
-  return (await res.json()) as CloudinaryUploadResult;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", endpoint);
+
+    const onAbort = () => {
+      xhr.abort();
+      reject(new DOMException("Upload aborted", "AbortError"));
+    };
+    if (opts?.signal) {
+      if (opts.signal.aborted) {
+        onAbort();
+        return;
+      }
+      opts.signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    xhr.upload.onprogress = (e) => {
+      if (!opts?.onProgress || !e.lengthComputable || e.total <= 0) return;
+      opts.onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+    };
+
+    xhr.onload = () => {
+      opts?.signal?.removeEventListener("abort", onAbort);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as CloudinaryUploadResult);
+        } catch {
+          reject(new Error("Invalid Cloudinary response"));
+        }
+        return;
+      }
+      reject(
+        new Error(xhr.responseText || `Cloudinary upload failed (${xhr.status})`)
+      );
+    };
+
+    xhr.onerror = () => {
+      opts?.signal?.removeEventListener("abort", onAbort);
+      reject(new Error("Cloudinary upload failed (network error)"));
+    };
+
+    xhr.send(form);
+  });
 }
 
 /** Split on spaces, commas, or `#` so `#a#b` and `#a #b` both work. */

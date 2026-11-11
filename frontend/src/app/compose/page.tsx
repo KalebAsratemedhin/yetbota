@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AudioLines, Film, ImagePlus, Music2, Scissors, X } from "lucide-react";
@@ -15,7 +15,12 @@ import {
   useUpdatePostMutation,
 } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
-import { parseHashtags, uploadToCloudinary } from "@/lib/content/helpers";
+import {
+  DEFAULT_MAX_UPLOAD_BYTES,
+  formatMaxUploadLabel,
+  parseHashtags,
+  uploadToCloudinary,
+} from "@/lib/content/helpers";
 import type { CreateMedia, MediaKind, MediaMode, UpdatePostRequest } from "@/lib/content/types";
 import {
   DEFAULT_MAX_CLIP_SEC,
@@ -43,7 +48,10 @@ const MODES: {
   { id: "video", title: "Video", blurb: "Clip ≤10s", icon: Film },
 ];
 
+type UploadStatus = "pending" | "uploading" | "ready" | "error";
+
 type Preview = {
+  id: string;
   /** Present for newly picked / clipped files. */
   file?: File;
   kind: MediaKind;
@@ -52,6 +60,11 @@ type Preview = {
   sourceFile?: File;
   /** Existing Cloudinary asset kept without re-upload. */
   existing?: CreateMedia;
+  /** Uploaded asset for new files. */
+  uploaded?: CreateMedia;
+  uploadStatus: UploadStatus;
+  uploadProgress: number;
+  uploadError?: string;
 };
 
 type ClipSession = {
@@ -67,6 +80,10 @@ function isMediaKind(v: string): v is MediaKind {
   return v === "image" || v === "video" || v === "audio";
 }
 
+function newPreviewId() {
+  return crypto.randomUUID();
+}
+
 function ComposeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,6 +95,9 @@ function ComposeContent() {
   const [hydratedEditId, setHydratedEditId] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortById = useRef(new Map<string, AbortController>());
+  const maxUploadBytesRef = useRef(DEFAULT_MAX_UPLOAD_BYTES);
+
   const [mode, setMode] = useState<MediaMode>("images");
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [mediaDirty, setMediaDirty] = useState(false);
@@ -92,6 +112,119 @@ function ComposeContent() {
   const [signMedia] = useSignMediaMutation();
   const [createPost] = useCreatePostMutation();
   const [updatePost] = useUpdatePostMutation();
+
+  const patchPreview = useCallback((id: string, patch: Partial<Preview>) => {
+    setPreviews((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
+
+  const abortUpload = useCallback((id: string) => {
+    const ctrl = abortById.current.get(id);
+    if (ctrl) {
+      ctrl.abort();
+      abortById.current.delete(id);
+    }
+  }, []);
+
+  const abortAllUploads = useCallback(() => {
+    abortById.current.forEach((ctrl) => ctrl.abort());
+    abortById.current.clear();
+  }, []);
+
+  const startUpload = useCallback(
+    async (id: string, file: File, kind: MediaKind) => {
+      abortUpload(id);
+      const ctrl = new AbortController();
+      abortById.current.set(id, ctrl);
+
+      const knownMax = maxUploadBytesRef.current || DEFAULT_MAX_UPLOAD_BYTES;
+      if (file.size > knownMax) {
+        const msg = `Max file size is ${formatMaxUploadLabel(knownMax)}.`;
+        patchPreview(id, {
+          uploadStatus: "error",
+          uploadProgress: 0,
+          uploadError: msg,
+        });
+        toast.error(msg);
+        abortById.current.delete(id);
+        return;
+      }
+
+      patchPreview(id, {
+        uploadStatus: "uploading",
+        uploadProgress: 0,
+        uploadError: undefined,
+        uploaded: undefined,
+      });
+
+      try {
+        const sign = await signMedia({ kind }).unwrap();
+        if (ctrl.signal.aborted) return;
+
+        const maxBytes =
+          sign.max_upload_bytes || sign.max_file_size || DEFAULT_MAX_UPLOAD_BYTES;
+        maxUploadBytesRef.current = maxBytes;
+
+        if (file.size > maxBytes) {
+          const msg = `Max file size is ${formatMaxUploadLabel(maxBytes)}.`;
+          patchPreview(id, {
+            uploadStatus: "error",
+            uploadProgress: 0,
+            uploadError: msg,
+          });
+          toast.error(msg);
+          return;
+        }
+
+        const uploaded = await uploadToCloudinary(file, sign, kind, {
+          signal: ctrl.signal,
+          onProgress: (pct) => patchPreview(id, { uploadProgress: pct }),
+        });
+
+        if (ctrl.signal.aborted) return;
+
+        const asset: CreateMedia = {
+          kind,
+          cloudinary_public_id: uploaded.public_id || sign.public_id,
+          url: uploaded.secure_url,
+          duration_ms: uploaded.duration
+            ? Math.round(uploaded.duration * 1000)
+            : undefined,
+          width: uploaded.width,
+          height: uploaded.height,
+          mime: file.type,
+          bytes: file.size,
+        };
+
+        patchPreview(id, {
+          uploadStatus: "ready",
+          uploadProgress: 100,
+          uploaded: asset,
+          uploadError: undefined,
+        });
+      } catch (err) {
+        if (ctrl.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+          return;
+        }
+        const msg =
+          err instanceof Error ? err.message : "Upload failed. Try again.";
+        patchPreview(id, {
+          uploadStatus: "error",
+          uploadProgress: 0,
+          uploadError: msg,
+        });
+        toast.error("Upload failed", {
+          description: getApiErrorMessage(err, msg),
+        });
+      } finally {
+        abortById.current.delete(id);
+      }
+    },
+    [abortUpload, patchPreview, signMedia]
+  );
+
+  useEffect(() => {
+    return () => abortAllUploads();
+  }, [abortAllUploads]);
 
   useEffect(() => {
     if (!isEdit || !postQ.data || hydratedEditId === postQ.data.id) return;
@@ -110,6 +243,7 @@ function ComposeContent() {
     setLng(post.lng);
     setPlaceLabel(post.title.trim() || null);
     setMediaDirty(false);
+    abortAllUploads();
     setPreviews((prev) => {
       prev.forEach((p) => {
         if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
@@ -118,6 +252,7 @@ function ComposeContent() {
         .sort((a, b) => a.sort_order - b.sort_order)
         .filter((m) => isMediaKind(m.kind))
         .map((m) => ({
+          id: newPreviewId(),
           kind: m.kind as MediaKind,
           url: m.url,
           existing: {
@@ -130,10 +265,12 @@ function ComposeContent() {
             height: m.height || undefined,
             mime: m.mime || undefined,
           },
+          uploadStatus: "ready" as const,
+          uploadProgress: 100,
         }));
     });
     setHydratedEditId(post.id);
-  }, [isEdit, postQ.data, hydratedEditId, viewerId, router]);
+  }, [isEdit, postQ.data, hydratedEditId, viewerId, router, abortAllUploads]);
 
   const accept = useMemo(() => {
     if (mode === "video") return "video/*";
@@ -142,6 +279,7 @@ function ComposeContent() {
   }, [mode]);
 
   function resetMedia() {
+    abortAllUploads();
     setPreviews((prev) => {
       prev.forEach((p) => {
         if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
@@ -158,6 +296,11 @@ function ComposeContent() {
   }
 
   function openClipStudio(file: File, kind: ClipKind) {
+    const max = maxUploadBytesRef.current || DEFAULT_MAX_UPLOAD_BYTES;
+    if (file.size > max) {
+      toast.error(`Max file size is ${formatMaxUploadLabel(max)}.`);
+      return;
+    }
     setClipSession({ file, kind });
   }
 
@@ -170,43 +313,57 @@ function ComposeContent() {
     setClipSession(null);
     const url = URL.createObjectURL(result.file);
     setMediaDirty(true);
+    const id = newPreviewId();
 
     if (result.kind === "video") {
       setPreviews((prev) => {
         prev.forEach((p) => {
+          abortUpload(p.id);
           if (p.file || p.sourceFile) URL.revokeObjectURL(p.url);
         });
         return [
           {
+            id,
             file: result.file,
             kind: "video",
             url,
             sourceFile: source,
+            uploadStatus: "pending",
+            uploadProgress: 0,
           },
         ];
       });
+      void startUpload(id, result.file, "video");
       return;
     }
 
     setPreviews((prev) => {
       const imgs = prev.filter((p) => p.kind === "image");
       const old = prev.find((p) => p.kind === "audio");
-      if (old && (old.file || old.sourceFile)) URL.revokeObjectURL(old.url);
+      if (old) {
+        abortUpload(old.id);
+        if (old.file || old.sourceFile) URL.revokeObjectURL(old.url);
+      }
       return [
         ...imgs,
         {
+          id,
           file: result.file,
           kind: "audio",
           url,
           sourceFile: source,
+          uploadStatus: "pending",
+          uploadProgress: 0,
         },
       ];
     });
+    void startUpload(id, result.file, "audio");
   }
 
   function onPickFiles(files: FileList | null) {
     if (!files?.length) return;
     const incoming = Array.from(files);
+    const max = maxUploadBytesRef.current || DEFAULT_MAX_UPLOAD_BYTES;
 
     try {
       if (mode === "video") {
@@ -227,15 +384,32 @@ function ComposeContent() {
         setPreviews((prev) => {
           const keptImages = prev.filter((p) => p.kind === "image");
           const keptAudio = prev.find((p) => p.kind === "audio");
+          let slots = MAX_IMAGES - keptImages.length;
           const nextImages = [...keptImages];
+          const started: { id: string; file: File }[] = [];
           for (const file of images) {
-            if (nextImages.length >= MAX_IMAGES) break;
+            if (slots <= 0) break;
+            if (file.size > max) {
+              toast.error(`Max file size is ${formatMaxUploadLabel(max)}.`, {
+                description: file.name,
+              });
+              continue;
+            }
+            const id = newPreviewId();
             nextImages.push({
+              id,
               file,
               kind: "image",
               url: URL.createObjectURL(file),
+              uploadStatus: "pending",
+              uploadProgress: 0,
             });
+            started.push({ id, file });
+            slots -= 1;
           }
+          queueMicrotask(() => {
+            for (const s of started) void startUpload(s.id, s.file, "image");
+          });
           return keptAudio ? [...nextImages, keptAudio] : nextImages;
         });
       }
@@ -252,13 +426,19 @@ function ComposeContent() {
     }
   }
 
-  function removePreview(url: string) {
+  function removePreview(id: string) {
     setMediaDirty(true);
+    abortUpload(id);
     setPreviews((prev) => {
-      const hit = prev.find((p) => p.url === url);
+      const hit = prev.find((p) => p.id === id);
       if (hit && (hit.file || hit.sourceFile)) URL.revokeObjectURL(hit.url);
-      return prev.filter((p) => p.url !== url);
+      return prev.filter((p) => p.id !== id);
     });
+  }
+
+  function retryUpload(p: Preview) {
+    if (!p.file) return;
+    void startUpload(p.id, p.file, p.kind);
   }
 
   function setLocation(nextLat: number, nextLng: number, label?: string) {
@@ -271,7 +451,7 @@ function ComposeContent() {
     }
   }
 
-  async function buildMediaPayload(): Promise<CreateMedia[]> {
+  function collectMediaPayload(): CreateMedia[] {
     const images = previews.filter((p) => p.kind === "image");
     const video = previews.find((p) => p.kind === "video");
     const audio = previews.find((p) => p.kind === "audio");
@@ -286,32 +466,13 @@ function ComposeContent() {
             : [...images]
           : images;
 
-    const media: CreateMedia[] = [];
-    let order = 0;
-    for (const item of queue) {
-      if (item.existing && !item.file) {
-        media.push({ ...item.existing, sort_order: order++ });
-        continue;
+    return queue.map((item, order) => {
+      const asset = item.uploaded ?? item.existing;
+      if (!asset) {
+        throw new Error("Media not uploaded yet");
       }
-      if (!item.file) {
-        throw new Error("Missing media file");
-      }
-      const sign = await signMedia({ kind: item.kind }).unwrap();
-      const uploaded = await uploadToCloudinary(item.file, sign, item.kind);
-      media.push({
-        kind: item.kind,
-        cloudinary_public_id: uploaded.public_id || sign.public_id,
-        url: uploaded.secure_url,
-        sort_order: order++,
-        duration_ms: uploaded.duration
-          ? Math.round(uploaded.duration * 1000)
-          : undefined,
-        width: uploaded.width,
-        height: uploaded.height,
-        mime: item.file.type,
-      });
-    }
-    return media;
+      return { ...asset, sort_order: order };
+    });
   }
 
   function mediaReady(): boolean {
@@ -322,6 +483,14 @@ function ComposeContent() {
     if (mode === "images_audio") return images.length >= 1 && Boolean(audio);
     return Boolean(video);
   }
+
+  const uploadsInFlight = previews.some(
+    (p) => p.uploadStatus === "pending" || p.uploadStatus === "uploading"
+  );
+  const uploadsFailed = previews.some((p) => p.uploadStatus === "error");
+  const allMediaReady =
+    previews.length > 0 &&
+    previews.every((p) => p.uploadStatus === "ready" && (p.uploaded || p.existing));
 
   async function onPublish(e: React.FormEvent) {
     e.preventDefault();
@@ -348,6 +517,14 @@ function ComposeContent() {
         toast.error("Add a video");
         return;
       }
+      if (uploadsInFlight) {
+        toast.error("Wait for uploads to finish");
+        return;
+      }
+      if (uploadsFailed || !allMediaReady) {
+        toast.error("Fix failed uploads before publishing");
+        return;
+      }
     }
 
     setBusy(true);
@@ -362,7 +539,7 @@ function ComposeContent() {
         };
         if (mediaDirty) {
           body.media_mode = mode;
-          body.media = await buildMediaPayload();
+          body.media = collectMediaPayload();
         }
         const post = await updatePost({ id: editId, body }).unwrap();
         toast.success("Post updated");
@@ -370,7 +547,7 @@ function ComposeContent() {
         return;
       }
 
-      const media = await buildMediaPayload();
+      const media = collectMediaPayload();
       const post = await createPost({
         title: placeName,
         caption: caption.trim(),
@@ -400,7 +577,11 @@ function ComposeContent() {
     lng != null &&
     Number.isFinite(lat) &&
     Number.isFinite(lng) &&
-    (isEdit && !mediaDirty ? true : mediaReady());
+    !uploadsInFlight &&
+    !uploadsFailed &&
+    (isEdit && !mediaDirty
+      ? true
+      : mediaReady() && allMediaReady);
 
   if (isEdit && postQ.isLoading) {
     return (
@@ -435,8 +616,8 @@ function ComposeContent() {
             </h1>
             <p className="mt-1 text-sm text-fg-muted">
               {isEdit
-                ? "Update the place, caption, tags, or media. Existing media is kept unless you change it."
-                : "Name the place, add media, write a caption, and pin it on the map."}
+                ? "Update the place, caption, tags, or media. New media uploads as soon as you pick it."
+                : "Name the place, add media (uploads start immediately), write a caption, and pin it on the map."}
             </p>
           </div>
 
@@ -452,6 +633,8 @@ function ComposeContent() {
                     : mode === "images_audio"
                       ? `${imageCount}/${MAX_IMAGES} photos · ${hasAudio ? "audio clipped" : "no audio"}`
                       : `${imageCount}/${MAX_IMAGES}`}
+                  {" · "}
+                  Max {formatMaxUploadLabel(maxUploadBytesRef.current)}
                 </span>
               </div>
 
@@ -507,7 +690,7 @@ function ComposeContent() {
                 <ul className="mt-3 grid grid-cols-3 gap-2">
                   {previews.map((p) => (
                     <li
-                      key={p.url}
+                      key={p.id}
                       className="relative aspect-square overflow-hidden rounded-lg border border-border-subtle bg-surface-2"
                     >
                       {p.kind === "image" ? (
@@ -521,8 +704,42 @@ function ComposeContent() {
                           <span className="text-[10px]">Audio</span>
                         </div>
                       )}
+
+                      {p.uploadStatus === "uploading" || p.uploadStatus === "pending" ? (
+                        <div className="absolute inset-x-0 bottom-0 bg-black/70 px-1.5 py-1.5">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
+                            <div
+                              className="h-full rounded-full bg-brand transition-[width] duration-150"
+                              style={{ width: `${p.uploadProgress}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-center text-[9px] font-semibold text-white">
+                            {p.uploadStatus === "pending"
+                              ? "Starting…"
+                              : `${p.uploadProgress}%`}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {p.uploadStatus === "ready" && p.kind === "image" ? (
+                        <span className="absolute bottom-1 left-1 rounded bg-brand/90 px-1.5 py-0.5 text-[9px] font-bold text-black">
+                          Ready
+                        </span>
+                      ) : null}
+
+                      {p.uploadStatus === "error" ? (
+                        <button
+                          type="button"
+                          onClick={() => retryUpload(p)}
+                          className="absolute inset-x-1 bottom-1 rounded bg-rose-600/90 px-1.5 py-1 text-[9px] font-semibold text-white"
+                        >
+                          Retry
+                        </button>
+                      ) : null}
+
                       {(p.kind === "video" || p.kind === "audio") &&
-                      (p.sourceFile || p.file) ? (
+                      (p.sourceFile || p.file) &&
+                      p.uploadStatus === "ready" ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -540,7 +757,7 @@ function ComposeContent() {
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => removePreview(p.url)}
+                        onClick={() => removePreview(p.id)}
                         className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white"
                         aria-label="Remove"
                       >
@@ -603,6 +820,11 @@ function ComposeContent() {
           </div>
 
           <div className="sticky bottom-0 border-t border-border-subtle bg-bg px-5 py-4 sm:px-6">
+            {uploadsInFlight ? (
+              <p className="mb-2 text-center text-xs text-fg-faint">
+                Uploading media… Publish unlocks when all files are ready.
+              </p>
+            ) : null}
             <button
               type="submit"
               disabled={busy || !canPublish}

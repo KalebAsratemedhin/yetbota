@@ -20,6 +20,7 @@ cloudinary:
 media:
   max_images: 10
   max_av_duration_sec: 10
+  max_upload_bytes: 10485760 # 10 MiB — Cloudinary Free plan upload cap
   default_page_size: 20
   max_page_size: 50
 share:

@@ -79,6 +79,7 @@ type Service struct {
 	repCfg             ReputationConfig
 	maxImages          int
 	maxAVDurationMs    int
+	maxUploadBytes     int64
 	defaultPageSize    int
 	maxPageSize        int
 	sharePublicBaseURL string
@@ -95,6 +96,7 @@ func NewService(
 	trending TrendingConfig,
 	repCfg ReputationConfig,
 	maxImages, maxAVDurationSec, defaultPageSize, maxPageSize int,
+	maxUploadBytes int64,
 	sharePublicBaseURL string,
 ) *Service {
 	if maxImages <= 0 {
@@ -102,6 +104,9 @@ func NewService(
 	}
 	if maxAVDurationSec <= 0 {
 		maxAVDurationSec = 10
+	}
+	if maxUploadBytes <= 0 {
+		maxUploadBytes = 10 * 1024 * 1024
 	}
 	if defaultPageSize <= 0 {
 		defaultPageSize = 20
@@ -150,7 +155,7 @@ func NewService(
 		posts: posts, signer: signer, follows: follows, similar: similar, reputation: reputation,
 		postEvents: postEvents,
 		feed: feed, trending: trending, repCfg: repCfg,
-		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000,
+		maxImages: maxImages, maxAVDurationMs: maxAVDurationSec * 1000, maxUploadBytes: maxUploadBytes,
 		defaultPageSize: defaultPageSize, maxPageSize: maxPageSize,
 		sharePublicBaseURL: strings.TrimRight(sharePublicBaseURL, "/"),
 	}
@@ -1203,6 +1208,16 @@ func (s *Service) validateCreate(in CreatePostInput) (domain.MediaMode, []domain
 		default:
 			details = append(details, apperr.Field{Field: prefix + ".kind", Code: "INVALID", Message: "kind must be image, video, or audio"})
 		}
+		if m.Bytes < 0 {
+			details = append(details, apperr.Field{
+				Field: prefix + ".bytes", Code: "INVALID", Message: "bytes must be >= 0",
+			})
+		} else if m.Bytes > s.maxUploadBytes {
+			details = append(details, apperr.Field{
+				Field: prefix + ".bytes", Code: "TOO_LARGE",
+				Message: fmt.Sprintf("file must be at most %d bytes", s.maxUploadBytes),
+			})
+		}
 		mediaItems = append(mediaItems, domain.CreateMediaInput{
 			Kind:               kind,
 			CloudinaryPublicID: strings.TrimSpace(m.CloudinaryPublicID),
@@ -1212,6 +1227,7 @@ func (s *Service) validateCreate(in CreatePostInput) (domain.MediaMode, []domain
 			Width:              m.Width,
 			Height:             m.Height,
 			Mime:               strings.TrimSpace(m.Mime),
+			Bytes:              m.Bytes,
 		})
 	}
 

@@ -62,6 +62,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-020 | An authenticated user shall be able to create a post with a required place `title`, caption, required lat/lng, hashtags, and media. | `title` is the place name; must include visual media per allowed modes |
 | FR-021 | Post media shall be one of: (1) 1–10 images; (2) 1–10 images + one audio; (3) exactly one video. | No text-only; no audio-only; no video combined with images or audio |
 | FR-022 | Max images per post shall be 10; max video and audio duration shall default to 10 seconds and be configurable. | Config/env on content-service |
+| FR-022a | Post media uploads shall not exceed a configurable max byte size (default 10 MiB, Cloudinary Free plan). | Advertised on `/media/sign` as `max_file_size` / `max_upload_bytes` for client checks; enforced on create/update via optional `bytes` (not a Cloudinary signed upload param) |
 | FR-023 | An authenticated user shall be able to fetch a post by id. | Public post payload |
 | FR-023a | An authenticated post author shall be able to edit their post (title, caption, lat/lng, hashtags, media). | Partial PATCH; author-only |
 | FR-024 | An authenticated user shall be able to list another user’s (or own) posts. | Publicly visible posts; keyset pagination |

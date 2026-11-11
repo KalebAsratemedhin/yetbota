@@ -51,7 +51,7 @@ func main() {
 		log.Error("config_load_failed", "err", err.Error())
 		os.Exit(1)
 	}
-	signer := cloudinary.NewSigner(cfg.Cloudinary)
+	signer := cloudinary.NewSigner(cfg.Cloudinary, cfg.Media.MaxUploadBytes)
 	log.Info("config_loaded",
 		"http_addr", cfg.HTTP.Addr,
 		"migrate_on_start", cfg.MigrateOnStart,
@@ -60,6 +60,7 @@ func main() {
 		"cloudinary_configured", signer.Configured(),
 		"max_images", cfg.Media.MaxImages,
 		"max_av_duration_sec", cfg.Media.MaxAVDurationSec,
+		"max_upload_bytes", cfg.Media.MaxUploadBytes,
 		"feed_nearby_km", cfg.Feed.NearbyRadiusKm,
 	)
 
@@ -145,6 +146,7 @@ func main() {
 		cfg.Media.MaxAVDurationSec,
 		cfg.Media.DefaultPageSize,
 		cfg.Media.MaxPageSize,
+		cfg.Media.MaxUploadBytes,
 		cfg.Share.PublicBaseURL,
 	)
 

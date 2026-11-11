@@ -124,6 +124,8 @@ type CreateMediaInput struct {
 	Width              int
 	Height             int
 	Mime               string
+	// Bytes is optional client-reported size; when > 0, validated against MaxUploadBytes.
+	Bytes int64
 }
 
 type CreateInput struct {

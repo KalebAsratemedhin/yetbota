@@ -87,10 +87,12 @@ type CloudinaryConfig struct {
 }
 
 type MediaConfig struct {
-	MaxImages        int `yaml:"max_images"`
-	MaxAVDurationSec int `yaml:"max_av_duration_sec"`
-	DefaultPageSize  int `yaml:"default_page_size"`
-	MaxPageSize      int `yaml:"max_page_size"`
+	MaxImages        int   `yaml:"max_images"`
+	MaxAVDurationSec int   `yaml:"max_av_duration_sec"`
+	// MaxUploadBytes matches Cloudinary Free plan upload cap (10 MiB).
+	MaxUploadBytes  int64 `yaml:"max_upload_bytes"`
+	DefaultPageSize int   `yaml:"default_page_size"`
+	MaxPageSize     int   `yaml:"max_page_size"`
 }
 
 type ShareConfig struct {
@@ -174,6 +176,11 @@ func Load(path string) (Config, error) {
 	if v := os.Getenv("MEDIA_MAX_AV_DURATION_SEC"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Media.MaxAVDurationSec = n
+		}
+	}
+	if v := os.Getenv("MEDIA_MAX_UPLOAD_BYTES"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.Media.MaxUploadBytes = n
 		}
 	}
 	if v := os.Getenv("MIGRATE_ON_START"); v != "" {
@@ -300,6 +307,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Media.MaxAVDurationSec <= 0 {
 		cfg.Media.MaxAVDurationSec = 10
+	}
+	if cfg.Media.MaxUploadBytes <= 0 {
+		cfg.Media.MaxUploadBytes = 10 * 1024 * 1024 // Cloudinary Free plan
 	}
 	if cfg.Media.DefaultPageSize <= 0 {
 		cfg.Media.DefaultPageSize = 20

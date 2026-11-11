@@ -12,6 +12,10 @@ export type SignMediaResponse = {
   folder: string;
   public_id: string;
   resource_type: "image" | "video";
+  /** Echo of server limit; prefer max_upload_bytes for client checks. Not a Cloudinary form field. */
+  max_file_size: number;
+  /** Client-side size limit before upload (bytes). Not signed / not sent to Cloudinary. */
+  max_upload_bytes: number;
 };
 
 export type CreateMedia = {
@@ -23,6 +27,8 @@ export type CreateMedia = {
   width?: number;
   height?: number;
   mime?: string;
+  /** Client-reported file size; when set, API validates ≤ max_upload_bytes. */
+  bytes?: number;
 };
 
 export type CreatePostRequest = {

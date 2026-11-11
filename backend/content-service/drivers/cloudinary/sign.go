@@ -19,22 +19,27 @@ import (
 var _ media.Signer = (*Signer)(nil)
 
 type Signer struct {
-	cloudName string
-	apiKey    string
-	apiSecret string
-	folder    string
+	cloudName      string
+	apiKey         string
+	apiSecret      string
+	folder         string
+	maxUploadBytes int64
 }
 
-func NewSigner(cfg config.CloudinaryConfig) *Signer {
+func NewSigner(cfg config.CloudinaryConfig, maxUploadBytes int64) *Signer {
 	folder := strings.Trim(cfg.Folder, "/")
 	if folder == "" {
 		folder = "yetbota/posts"
 	}
+	if maxUploadBytes <= 0 {
+		maxUploadBytes = 10 * 1024 * 1024
+	}
 	return &Signer{
-		cloudName: cfg.CloudName,
-		apiKey:    cfg.APIKey,
-		apiSecret: cfg.APISecret,
-		folder:    folder,
+		cloudName:      cfg.CloudName,
+		apiKey:         cfg.APIKey,
+		apiSecret:      cfg.APISecret,
+		folder:         folder,
+		maxUploadBytes: maxUploadBytes,
 	}
 }
 
@@ -63,18 +68,23 @@ func (s *Signer) SignUpload(_ context.Context, in media.SignRequest) (media.Sign
 	if uid := strings.TrimSpace(in.UserID); uid != "" {
 		folder = s.folder + "/" + uid
 	}
+	// Only sign params Cloudinary includes in the upload string-to-sign.
+	// max_file_size is not a signed upload param (preset-only); including it
+	// makes Cloudinary verify folder&public_id&timestamp against a different hash.
 	params := map[string]string{
 		"folder":    folder,
 		"public_id": publicID,
 		"timestamp": strconv.FormatInt(ts, 10),
 	}
 	return media.SignResult{
-		CloudName: s.cloudName,
-		APIKey:    s.apiKey,
-		Timestamp: ts,
-		Signature: sign(params, s.apiSecret),
-		Folder:    folder,
-		PublicID:  publicID,
+		CloudName:      s.cloudName,
+		APIKey:         s.apiKey,
+		Timestamp:      ts,
+		Signature:      sign(params, s.apiSecret),
+		Folder:         folder,
+		PublicID:       publicID,
+		MaxFileSize:    s.maxUploadBytes,
+		MaxUploadBytes: s.maxUploadBytes,
 	}, nil
 }
 

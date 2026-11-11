@@ -75,6 +75,7 @@ type CreateMediaJSON struct {
 	Width              int    `json:"width"`
 	Height             int    `json:"height"`
 	Mime               string `json:"mime"`
+	Bytes              int64  `json:"bytes,omitempty"`
 }
 
 type PostIDRequest struct {
@@ -255,6 +256,7 @@ func MakeCreatePostEndpoint(svc PostService) endpoint.Endpoint {
 			media = append(media, domain.CreateMediaInput{
 				Kind: domain.MediaKind(m.Kind), CloudinaryPublicID: m.CloudinaryPublicID, URL: m.URL,
 				SortOrder: m.SortOrder, DurationMs: m.DurationMs, Width: m.Width, Height: m.Height, Mime: m.Mime,
+				Bytes: m.Bytes,
 			})
 		}
 		p, err := svc.Create(ctx, postuc.CreatePostInput{
@@ -289,6 +291,7 @@ func MakeUpdatePostEndpoint(svc PostService) endpoint.Endpoint {
 				media = append(media, domain.CreateMediaInput{
 					Kind: domain.MediaKind(m.Kind), CloudinaryPublicID: m.CloudinaryPublicID, URL: m.URL,
 					SortOrder: m.SortOrder, DurationMs: m.DurationMs, Width: m.Width, Height: m.Height, Mime: m.Mime,
+					Bytes: m.Bytes,
 				})
 			}
 			in.Media = &media

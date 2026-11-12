@@ -7,9 +7,17 @@ const AI_SERVICE_BASE =
 
 /**
  * Same-origin proxy for RAG chat. AI service has no CORS middleware yet;
- * the browser talks to Next, Next forwards to :8083.
+ * the browser talks to Next, Next forwards to the AI service.
  */
 export async function POST(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (!auth?.trim()) {
+    return NextResponse.json(
+      { detail: "Sign in to use the assistant." },
+      { status: 401 }
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -21,9 +29,8 @@ export async function POST(req: NextRequest) {
   const headers: HeadersInit = {
     Accept: "application/json",
     "Content-Type": "application/json",
+    Authorization: auth,
   };
-  const auth = req.headers.get("authorization");
-  if (auth) headers.Authorization = auth;
 
   try {
     const res = await fetch(upstream, {
@@ -40,7 +47,10 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     return NextResponse.json(
-      { detail: "Cannot reach AI service. Is it running on :8083?" },
+      {
+        detail:
+          "The assistant is temporarily unavailable. Please try again later.",
+      },
       { status: 502 }
     );
   }

@@ -4,7 +4,7 @@ import type { ChatRequest, ChatResponse } from "@/lib/ai/types";
 
 /**
  * Browser calls same-origin Next proxy (`/api/ai`) to avoid AI-service CORS.
- * The route forwards to `NEXT_PUBLIC_AI_API_BASE_URL` (default :8083).
+ * The route forwards to `NEXT_PUBLIC_AI_API_BASE_URL` / `AI_API_BASE_URL`.
  */
 export const AI_API_BASE = "/api/ai";
 

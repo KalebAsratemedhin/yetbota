@@ -39,7 +39,7 @@ export function getApiErrorMessage(error: unknown, fallback = "Something went wr
   const err = error as FetchBaseQueryError;
   if ("status" in err) {
     if (err.status === "FETCH_ERROR") {
-      return "Cannot reach the server. Is the API running?";
+      return "Unable to connect. Please check your connection and try again.";
     }
     if (err.status === 401) return "Invalid username or password";
     if (err.status === 409) return "Username is already taken";

@@ -39,7 +39,7 @@ function getChatErrorMessage(error: unknown): string {
   }
   return getApiErrorMessage(
     error,
-    "Could not reach the assistant. Is ai-service running?"
+    "The assistant is temporarily unavailable. Please try again later."
   );
 }
 

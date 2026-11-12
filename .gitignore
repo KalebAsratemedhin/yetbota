@@ -4,3 +4,4 @@ backend/content-service/tmp/
 .env
 **/.env
 !**/.env.example
+docs/

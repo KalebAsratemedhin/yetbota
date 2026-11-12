@@ -22,7 +22,6 @@ import {
 import UserAvatar from "@/components/shared/UserAvatar";
 import type { Post } from "@/lib/content/types";
 import { placeTitle } from "@/lib/content/helpers";
-import { useAppSelector } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 const RAIL_LIMIT = 5;
@@ -86,11 +85,10 @@ function TrendingCreatorRow({
   dense?: boolean;
   onNavigate?: () => void;
 }) {
-  const accessToken = useAppSelector((s) => s.auth.accessToken);
   const { data: user, isLoading } = useGetUserProfileQuery(userId);
   const { data: followers } = useListFollowersQuery(
     { id: userId, limit: 1 },
-    { skip: !userId || !accessToken }
+    { skip: !userId }
   );
 
   if (isLoading && !user) {

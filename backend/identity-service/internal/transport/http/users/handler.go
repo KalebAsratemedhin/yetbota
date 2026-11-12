@@ -32,8 +32,8 @@ func NewHandler(eps Endpoints, authn shared.TokenAuthenticator) http.Handler {
 	mux.Handle("GET /{id}", shared.OptionalAuth(authn, kithttp.NewServer(eps.GetProfile, decodeGetProfile, shared.EncodeJSONResponse, opts...)))
 	mux.Handle("POST /{id}/follow", shared.RequireAuth(authn, kithttp.NewServer(eps.Follow, decodeUserID, shared.EncodeJSONResponse, opts...)))
 	mux.Handle("DELETE /{id}/follow", shared.RequireAuth(authn, kithttp.NewServer(eps.Unfollow, decodeUserID, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("GET /{id}/followers", shared.RequireAuth(authn, kithttp.NewServer(eps.Followers, decodeUserList, shared.EncodeJSONResponse, opts...)))
-	mux.Handle("GET /{id}/following", shared.RequireAuth(authn, kithttp.NewServer(eps.Following, decodeUserList, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("GET /{id}/followers", shared.OptionalAuth(authn, kithttp.NewServer(eps.Followers, decodeUserList, shared.EncodeJSONResponse, opts...)))
+	mux.Handle("GET /{id}/following", shared.OptionalAuth(authn, kithttp.NewServer(eps.Following, decodeUserList, shared.EncodeJSONResponse, opts...)))
 	return mux
 }
 
@@ -70,10 +70,6 @@ func decodeUserID(ctx context.Context, r *http.Request) (interface{}, error) {
 }
 
 func decodeUserList(ctx context.Context, r *http.Request) (interface{}, error) {
-	claims, err := shared.ClaimsFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := svcendpoint.ParseUserID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -82,12 +78,15 @@ func decodeUserList(ctx context.Context, r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.UserListRequest{
-		Claims: claims,
+	req := svcendpoint.UserListRequest{
 		UserID: id,
 		Limit:  limit,
 		Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	}
+	if claims, ok := shared.ClaimsFromCtxOptional(ctx); ok {
+		req.Claims = claims
+	}
+	return req, nil
 }
 
 func decodeSearch(ctx context.Context, r *http.Request) (interface{}, error) {

@@ -30,7 +30,7 @@ export default function ProfileBody({
   onOpenSettings?: () => void;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
-  const { isSignedIn, requireSignIn } = useRequireSignIn();
+  const { requireSignIn } = useRequireSignIn();
   const [listKind, setListKind] = useState<ListKind>(null);
   const [followOverride, setFollowOverride] = useState<boolean | null>(null);
   const [trackedUserId, setTrackedUserId] = useState(user.user_id);
@@ -40,15 +40,15 @@ export default function ProfileBody({
     setFollowOverride(null);
   }
 
-  // Followers/following lists stay auth-required on identity.
-  const { data: followers } = useListFollowersQuery(
-    { id: user.user_id, limit: 20 },
-    { skip: !isSignedIn }
-  );
-  const { data: following } = useListFollowingQuery(
-    { id: user.user_id, limit: 20 },
-    { skip: !isSignedIn }
-  );
+  // Counts + lists are public reads once identity allows anonymous GETs.
+  const { data: followers } = useListFollowersQuery({
+    id: user.user_id,
+    limit: 20,
+  });
+  const { data: following } = useListFollowingQuery({
+    id: user.user_id,
+    limit: 20,
+  });
   const { data: myFollowing } = useListFollowingQuery(
     { id: viewerId ?? "", limit: 50 },
     { skip: !viewerId || mode !== "public" }
@@ -96,14 +96,10 @@ export default function ProfileBody({
         <ProfileHeader
           user={user}
           mode={mode}
-          followerCount={isSignedIn ? followers?.total : undefined}
-          followingCount={isSignedIn ? following?.total : undefined}
-          onOpenFollowers={
-            isSignedIn ? () => setListKind("followers") : undefined
-          }
-          onOpenFollowing={
-            isSignedIn ? () => setListKind("following") : undefined
-          }
+          followerCount={followers?.total}
+          followingCount={following?.total}
+          onOpenFollowers={() => setListKind("followers")}
+          onOpenFollowing={() => setListKind("following")}
           onOpenSettings={onOpenSettings}
           isFollowing={isFollowing}
           followBusy={followBusy || unfollowBusy}

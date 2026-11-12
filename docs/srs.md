@@ -54,8 +54,8 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-012 | Any client (including unauthenticated) shall be able to view a user’s public profile by id. | Public fields only; invalid Bearer → 401; follow/search remain authenticated |
 | FR-013 | An authenticated user shall be able to follow another user. | Stored in SurrealDB graph |
 | FR-014 | An authenticated user shall be able to unfollow another user. | |
-| FR-015 | An authenticated user shall be able to list a user’s followers. | Hydrated public profiles; keyset pagination |
-| FR-016 | An authenticated user shall be able to list who a user is following. | Hydrated public profiles; keyset pagination |
+| FR-015 | Any client (including unauthenticated) shall be able to list a user’s followers. | Hydrated public profiles; keyset pagination; invalid Bearer → 401 |
+| FR-016 | Any client (including unauthenticated) shall be able to list who a user is following. | Hydrated public profiles; keyset pagination; invalid Bearer → 401 |
 | FR-017 | An authenticated user shall be able to search users by username or full name. | Min query length 2; max 20 results |
 | FR-018 | An authenticated user shall be able to upload and delete a profile avatar. | Stored on Cloudinary; URL on user |
 | FR-019 | An authenticated user shall obtain a Cloudinary signed upload for post media. | Issued by content-service |
@@ -274,9 +274,9 @@ Matching defaults (configurable): nearby radius ~100–150 m; embed min after ge
 
 ### UC-012 — Followers / following lists
 
-- **Actor:** User
+- **Actor:** Any client (guest or authenticated)
 - **Goal:** See followers or following for a user
-- **Main flow:** `GET /users/{id}/followers|following?limit=&cursor=` → Surreal edge page → batch Postgres hydrate → `{ users, next_cursor?, total }`.
+- **Main flow:** Optional-auth `GET /users/{id}/followers|following?limit=&cursor=` → Surreal edge page → batch Postgres hydrate → `{ users, next_cursor?, total }`. Missing Authorization allowed; invalid Bearer → 401. Follow/unfollow remain authenticated.
 - **Related FRs:** FR-015, FR-016
 
 ### UC-013 — Search users

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import UserAvatar from "@/components/shared/UserAvatar";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import {
   useFollowUserMutation,
   useLazyListFollowersQuery,
@@ -96,6 +97,7 @@ export default function FollowListModal({
   onClose: () => void;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const listKey = `${kind}:${userId}`;
   const [activeKey, setActiveKey] = useState(listKey);
   const [extraUsers, setExtraUsers] = useState<UserInfo[]>([]);
@@ -184,6 +186,7 @@ export default function FollowListModal({
 
   const onToggle = useCallback(
     async (target: UserInfo, currentlyFollowing: boolean) => {
+      if (!requireSignIn("Sign in to follow")) return;
       setFollowOverrides((prev) => ({ ...prev, [target.user_id]: !currentlyFollowing }));
       try {
         if (currentlyFollowing) {
@@ -204,7 +207,7 @@ export default function FollowListModal({
         });
       }
     },
-    [followUser, unfollowUser]
+    [followUser, unfollowUser, requireSignIn]
   );
 
   if (!open) return null;

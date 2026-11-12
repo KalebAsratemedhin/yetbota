@@ -371,12 +371,12 @@ paths:
       tags: [Social]
       summary: List followers
       description: |
-        Returns public profiles for users who follow `{id}`, newest follows first.
-        Keyset pagination via `cursor` / `next_cursor`. Hydrated from Postgres in one batch
-        after reading follow edges from SurrealDB.
+        Public read (auth optional; invalid Bearer → 401). Returns public profiles for
+        users who follow `{id}`, newest follows first. Keyset pagination via `cursor` /
+        `next_cursor`. Hydrated from Postgres in one batch after reading follow edges
+        from SurrealDB. Follow/unfollow and search remain authenticated.
       operationId: listFollowers
-      security:
-        - bearerAuth: []
+      security: []
       parameters:
         - $ref: "#/components/parameters/UserId"
         - $ref: "#/components/parameters/ListLimit"
@@ -399,11 +399,11 @@ paths:
       tags: [Social]
       summary: List following
       description: |
-        Returns public profiles for users `{id}` follows, newest follows first.
-        Same pagination and hydration model as followers.
+        Public read (auth optional; invalid Bearer → 401). Returns public profiles for
+        users `{id}` follows, newest follows first. Same pagination and hydration model
+        as followers. Follow/unfollow and search remain authenticated.
       operationId: listFollowing
-      security:
-        - bearerAuth: []
+      security: []
       parameters:
         - $ref: "#/components/parameters/UserId"
         - $ref: "#/components/parameters/ListLimit"

@@ -1,60 +1,97 @@
 "use client";
 
-import { Trophy, Award } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { useContent } from "@/lib/useContent";
+import Link from "next/link";
+import { BadgeCheck, Compass, Footprints, MapPinned, Star, Trophy } from "lucide-react";
 import Reveal from "@/components/landing/Reveal";
-import AnimatedBar from "@/components/landing/AnimatedBar";
+import SectionShell from "@/components/landing/SectionShell";
+import { useContent } from "@/lib/useContent";
+
+const LEVELS = [
+  { name: "Explorer", min: 0, icon: Footprints },
+  { name: "Contributor", min: 100, icon: BadgeCheck },
+  { name: "Local Guide", min: 400, icon: Compass },
+  { name: "Pathfinder", min: 1000, icon: MapPinned },
+] as const;
+
+const MILESTONES = [
+  { name: "Newcomer", icon: Footprints },
+  { name: "Legendary explorer", icon: Trophy },
+  { name: "Pathfinder", icon: Star },
+] as const;
 
 export default function GamificationSection() {
   const t = useContent();
 
   return (
-    <section className="bg-stone-100 px-6 py-16 dark:bg-surface">
-      <div className="mx-auto grid max-w-7xl items-center gap-12 md:grid-cols-2">
+    <SectionShell className="min-h-[72vh] bg-surface py-28 sm:min-h-[78vh] sm:py-36">
+      <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
         <Reveal direction="left">
-          <p className="mb-4 text-xs font-bold tracking-widest text-brand uppercase">
+          <p className="mb-2 text-[11px] font-bold tracking-[0.18em] text-brand uppercase">
             {t.gamification.badge}
           </p>
-          <h2 className="mb-6 text-4xl leading-tight font-extrabold text-fg md:text-5xl">
+          <h2 className="mb-4 text-3xl font-extrabold tracking-tight text-fg sm:text-4xl">
             {t.gamification.title}
           </h2>
-          <p className="mb-8 text-base leading-relaxed text-fg-muted">
+          <p className="mb-6 max-w-lg text-sm leading-relaxed text-fg-muted sm:text-base">
             {t.gamification.description}
           </p>
-
-          <div className="flex flex-wrap gap-2">
-            {t.gamification.badges.map((b) => (
-              <Badge
-                key={b}
-                className="cursor-default rounded-full border border-border-subtle bg-surface-2 px-4 py-1.5 text-xs text-fg-muted transition-colors hover:border-brand/40 hover:text-fg"
-              >
-                {b}
-              </Badge>
-            ))}
-          </div>
+          <Link
+            href="/signup"
+            className="inline-flex h-11 items-center rounded-xl bg-brand px-5 text-sm font-bold text-black transition-colors hover:bg-brand-dark"
+          >
+            Start earning reputation
+          </Link>
         </Reveal>
 
-        <Reveal
-          direction="right"
-          delay={150}
-          className="rounded-3xl border border-border-subtle bg-bg p-6 transition-all duration-300 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10"
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div className="group flex flex-col items-center rounded-2xl bg-bg p-5 text-center">
-              <Trophy className="mb-3 h-8 w-8 text-brand transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-6" />
-              <p className="mb-1 text-base font-bold text-fg">{t.gamification.levels.current}</p>
-              <p className="text-sm text-fg-faint">{t.gamification.levels.currentXp}</p>
-            </div>
+        <Reveal direction="right" delay={120} className="space-y-6">
+          <div>
+            <p className="mb-3 text-xs font-semibold tracking-wide text-fg-faint uppercase">
+              Reputation levels
+            </p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {LEVELS.map((level) => {
+                const Icon = level.icon;
+                return (
+                  <li
+                    key={level.name}
+                    className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-bg px-3 py-3"
+                  >
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/12 text-brand">
+                      <Icon className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-fg">{level.name}</p>
+                      <p className="text-[11px] text-fg-faint">
+                        From {level.min.toLocaleString()} pts
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
 
-            <div className="flex flex-col items-center rounded-2xl bg-bg p-5 text-center">
-              <Award className="mb-3 h-8 w-8 text-fg-faint" />
-              <p className="mb-3 text-base font-bold text-fg">{t.gamification.levels.next}</p>
-              <AnimatedBar value={72} />
+          <div>
+            <p className="mb-3 text-xs font-semibold tracking-wide text-fg-faint uppercase">
+              Score milestone badges
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {MILESTONES.map((b) => {
+                const Icon = b.icon;
+                return (
+                  <span
+                    key={b.name}
+                    className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg px-4 py-2 text-sm font-medium text-fg-muted"
+                  >
+                    <Icon className="h-4 w-4 text-brand" aria-hidden />
+                    {b.name}
+                  </span>
+                );
+              })}
             </div>
           </div>
         </Reveal>
       </div>
-    </section>
+    </SectionShell>
   );
 }

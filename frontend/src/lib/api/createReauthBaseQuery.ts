@@ -93,8 +93,13 @@ export function createReauthBaseQuery(
     const url = requestUrl(args);
 
     if (result.error?.status === 401 && !shouldSkipReauth(url)) {
+      const hadToken = Boolean((api.getState() as AuthRoot).auth.accessToken);
       const refreshed = await tryRefresh(api, extraOptions);
       if (refreshed) {
+        result = await serviceQuery(args, api, extraOptions);
+      } else if (hadToken) {
+        // Bad/expired session cleared. Retry once without Bearer so public
+        // GETs succeed; private routes still 401.
         result = await serviceQuery(args, api, extraOptions);
       }
     }

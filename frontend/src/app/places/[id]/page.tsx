@@ -9,7 +9,6 @@ import {
   MapPin,
   RefreshCw,
 } from "lucide-react";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import PostsGrid from "@/components/posts/PostsGrid";
 import {
@@ -308,13 +307,11 @@ export default function PlacePage({
   const { id } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <PlaceDetail placeId={id} />
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <PlaceDetail placeId={id} />
+      </div>
+    </main>
   );
 }

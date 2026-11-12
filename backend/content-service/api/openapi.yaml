@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: YetBota Content Service
   description: Posts (with place title), Q&A, media, reactions, comments, bookmarks, share, search, feed, and trending.
-  version: 0.4.0
+  version: 0.4.2
 servers:
   - url: /
     description: Current host
@@ -78,6 +78,7 @@ paths:
       tags: [Posts]
       summary: Search posts
       operationId: searchPosts
+      security: []
       parameters:
         - name: q
           in: query
@@ -102,10 +103,14 @@ paths:
       tags: [Feed]
       summary: Home feed
       description: |
-        Ranked feed (HN-style gravity; no ML). Following posts when available; otherwise
-        recent site-wide posts. Optional `lat`/`lng` (both or neither): when set, nearby
-        posts are mixed in and distance boosts ranking.
+        Public read (auth optional; invalid Bearer → 401). Anonymous callers use the empty
+        follow-graph path. Ranked feed (HN-style gravity; no ML). Phase `home`: following
+        posts when available, otherwise recent site-wide posts; optional `lat`/`lng` mixes
+        nearby + geo boost. When home is exhausted (or empty), pagination continues into
+        phase `suggested` (trending-style ranking, excluding home candidates). Response
+        includes `phase`.
       operationId: getFeed
+      security: []
       parameters:
         - name: lat
           in: query
@@ -131,7 +136,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PostsPage"
+                $ref: "#/components/schemas/FeedPage"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -144,12 +149,37 @@ paths:
         Recent posts ranked with the feed HN-style formula (engagement ÷ age gravity),
         without follow or geo boosts. Default lookback 7 days.
       operationId: listTrendingPosts
+      security: []
       parameters:
         - $ref: "#/components/parameters/ListLimit"
         - $ref: "#/components/parameters/ListCursor"
       responses:
         "200":
           description: Ranked posts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostsPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /posts/top:
+    get:
+      tags: [Trending]
+      summary: Top posts by absolute engagement
+      description: |
+        Public read (auth optional; invalid Bearer → 401). Posts ordered by
+        likes + comments + shares + bookmarks (no age decay). Distinct from
+        `/posts/trending` (HN gravity) and `/creators/trending` (event-based).
+      operationId: listTopPosts
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Posts page
           content:
             application/json:
               schema:
@@ -167,6 +197,7 @@ paths:
         and freshness. Returns `user_id` + display `score`; hydrate profiles via identity.
         Top-N only (no cursor). Default lookback 7 days.
       operationId: listTrendingCreators
+      security: []
       parameters:
         - $ref: "#/components/parameters/ListLimit"
       responses:
@@ -185,6 +216,7 @@ paths:
       tags: [Posts]
       summary: Get a post
       operationId: getPost
+      security: []
       parameters:
         - $ref: "#/components/parameters/PostId"
       responses:
@@ -236,6 +268,7 @@ paths:
         similar to the seed via Surreal cosine `similar` edges (FTS fallback when
         the graph has no neighbors). Without `q`, only similar.
       operationId: listRelatedPosts
+      security: []
       parameters:
         - $ref: "#/components/parameters/PostId"
         - name: q
@@ -330,6 +363,7 @@ paths:
       tags: [Posts]
       summary: List top-level comments
       operationId: listComments
+      security: []
       parameters:
         - $ref: "#/components/parameters/PostId"
         - $ref: "#/components/parameters/ListLimit"
@@ -350,6 +384,7 @@ paths:
       tags: [Posts]
       summary: List replies to a comment
       operationId: listReplies
+      security: []
       parameters:
         - $ref: "#/components/parameters/CommentId"
         - $ref: "#/components/parameters/ListLimit"
@@ -455,6 +490,7 @@ paths:
       tags: [Posts]
       summary: List a user's posts
       operationId: listUserPosts
+      security: []
       parameters:
         - name: id
           in: path
@@ -497,6 +533,7 @@ paths:
       tags: [Posts]
       summary: List posts for a hashtag
       operationId: listHashtagPosts
+      security: []
       parameters:
         - name: tag
           in: path
@@ -546,6 +583,7 @@ paths:
       tags: [Q&A]
       summary: List questions
       operationId: listQuestions
+      security: []
       parameters:
         - name: post_id
           in: query
@@ -572,6 +610,7 @@ paths:
       tags: [Q&A]
       summary: Get a question
       operationId: getQuestion
+      security: []
       parameters:
         - $ref: "#/components/parameters/QuestionId"
       responses:
@@ -698,6 +737,7 @@ paths:
       tags: [Q&A]
       summary: List answers
       operationId: listAnswers
+      security: []
       parameters:
         - $ref: "#/components/parameters/QuestionId"
         - $ref: "#/components/parameters/ListLimit"
@@ -769,11 +809,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /places/top:
+    get:
+      tags: [Places]
+      summary: Top places by engagement
+      description: |
+        Public read (auth optional; invalid Bearer → 401). Places ordered by the
+        sum of attached posts' (likes + comments + shares + bookmarks). Optional
+        `cover_url` (first media of the top attached post) and `engagement_score`.
+      operationId: listTopPlaces
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListCursor"
+      responses:
+        "200":
+          description: Places page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlacesPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /places:
     get:
       tags: [Places]
       summary: List / search place directory
-      security: [{ bearerAuth: [] }]
+      security: []
       parameters:
         - name: q
           in: query
@@ -802,7 +866,7 @@ paths:
     get:
       tags: [Places]
       summary: Get a place
-      security: [{ bearerAuth: [] }]
+      security: []
       parameters:
         - $ref: "#/components/parameters/id"
       responses:
@@ -820,7 +884,7 @@ paths:
     get:
       tags: [Places]
       summary: List posts for a place
-      security: [{ bearerAuth: [] }]
+      security: []
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/limit"
@@ -840,7 +904,7 @@ paths:
     get:
       tags: [Places]
       summary: List tip / change / important entries
-      security: [{ bearerAuth: [] }]
+      security: []
       parameters:
         - $ref: "#/components/parameters/id"
         - name: category
@@ -1116,6 +1180,18 @@ components:
             $ref: "#/components/schemas/Post"
         next_cursor:
           type: string
+    FeedPage:
+      allOf:
+        - $ref: "#/components/schemas/PostsPage"
+        - type: object
+          required: [phase]
+          properties:
+            phase:
+              type: string
+              enum: [home, suggested]
+              description: |
+                `home` = follow/nearby/recent pools; `suggested` = discovery continuation
+                after home is exhausted (or when home is empty).
     RelatedPostsPage:
       type: object
       required: [posts, source]
@@ -1348,6 +1424,8 @@ components:
         summary_model: { type: string }
         summary_updated_at: { type: string, format: date-time }
         post_count: { type: integer }
+        cover_url: { type: string, description: "Present on GET /places/top when a cover media exists" }
+        engagement_score: { type: integer, description: "Present on GET /places/top (sum of attached post engagement)" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     PlacesPage:

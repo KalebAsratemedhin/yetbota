@@ -2,8 +2,6 @@
 
 import { Suspense, use, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import RequireAuth from "@/components/auth/RequireAuth";
-
 /** Legacy `/comments` URL → post page with comments panel open. */
 function RedirectBody({ postId }: { postId: string }) {
   const router = useRouter();
@@ -30,18 +28,16 @@ export default function PostCommentsRedirectPage({
   const { id } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen bg-bg text-fg">
-        <Suspense
-          fallback={
-            <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
-              Loading…
-            </div>
-          }
-        >
-          <RedirectBody postId={id} />
-        </Suspense>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen bg-bg text-fg">
+      <Suspense
+        fallback={
+          <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
+            Loading…
+          </div>
+        }
+      >
+        <RedirectBody postId={id} />
+      </Suspense>
+    </main>
   );
 }

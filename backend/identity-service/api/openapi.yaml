@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: YetBota Identity Service
   description: Auth, profile, follow graph, user search, avatar upload (Cloudinary), and reputation/badges.
-  version: 0.6.0
+  version: 0.6.2
 servers:
   - url: /
     description: Current host (local or Render)
@@ -274,13 +274,44 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /users/leaderboard:
+    get:
+      tags: [Social]
+      summary: Reputation leaderboard
+      description: |
+        Public read (auth optional; invalid Bearer → 401). Users ordered by
+        denormalized `reputation_score` descending. Same public fields as GET /users/{id}.
+      operationId: listReputationLeaderboard
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Top users by reputation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Users"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /users/{id}:
     get:
       tags: [Social]
       summary: Get public profile
+      description: |
+        Public read (auth optional; invalid Bearer → 401). Returns the same public
+        profile fields as before (username, full_name, avatar, reputation/badges).
       operationId: getUserProfile
-      security:
-        - bearerAuth: []
+      security: []
       parameters:
         - $ref: "#/components/parameters/UserId"
       responses:

@@ -21,6 +21,14 @@ export const socialApi = baseApi.injectEndpoints({
       query: (id) => `/users/${id}`,
       providesTags: (_r, _e, id) => [{ type: "User", id }],
     }),
+    /** Top users by denormalized reputation_score. Public. */
+    listReputationLeaders: build.query<Users, { limit?: number } | void>({
+      query: (args) => ({
+        url: "/users/leaderboard",
+        params: { limit: args?.limit ?? 12 },
+      }),
+      providesTags: ["User"],
+    }),
     listFollowers: build.query<UsersPage, UserListArgs>({
       query: ({ id, limit = 20, cursor }) => ({
         url: `/users/${encodeURIComponent(id)}/followers`,
@@ -71,6 +79,7 @@ export const socialApi = baseApi.injectEndpoints({
 export const {
   useSearchUsersQuery,
   useGetUserProfileQuery,
+  useListReputationLeadersQuery,
   useListFollowersQuery,
   useListFollowingQuery,
   useLazyListFollowersQuery,

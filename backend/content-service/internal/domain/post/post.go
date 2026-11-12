@@ -172,6 +172,8 @@ type Repository interface {
 	ListByAuthorIDs(ctx context.Context, authorIDs []uuid.UUID, since time.Time, limit int) ([]Post, error)
 	ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]Post, error)
 	ListRecent(ctx context.Context, since time.Time, limit int) ([]Post, error)
+	// ListTopByEngagement pages by absolute engagement (likes+comments+shares+bookmarks) DESC.
+	ListTopByEngagement(ctx context.Context, cursorEngagement *int64, cursorID *uuid.UUID, limit int) (posts []Post, hasMore bool, err error)
 	ListAuthorInteractions(ctx context.Context, authorID uuid.UUID, since time.Time, limit int) ([]InteractionEvent, error)
 	ListInteractionsSince(ctx context.Context, since time.Time, limit int) ([]InteractionEvent, error)
 	SearchExcluding(ctx context.Context, query string, excludeID uuid.UUID, p ListParams) (Page, error)

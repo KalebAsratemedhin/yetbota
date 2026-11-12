@@ -13,6 +13,7 @@ import {
   useListFollowingQuery,
   useUnfollowUserMutation,
 } from "@/lib/api/socialApi";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { placeTitle, relativeTime } from "@/lib/content/helpers";
 import type { Post } from "@/lib/content/types";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 function AuthorHeader({ authorId, createdAt }: { authorId: string; createdAt: string }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const isSelf = Boolean(viewerId && viewerId === authorId);
   const { data: author } = useGetUserProfileQuery(authorId);
   const { data: myFollowing } = useListFollowingQuery(
@@ -49,7 +51,9 @@ function AuthorHeader({ authorId, createdAt }: { authorId: string; createdAt: st
   async function toggleFollow(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!viewerId || isSelf || busy || !author) return;
+    if (isSelf) return;
+    if (!requireSignIn("Sign in to follow")) return;
+    if (!viewerId || busy || !author) return;
     setBusy(true);
     setFollowOverride(!isFollowing);
     try {
@@ -101,7 +105,7 @@ function AuthorHeader({ authorId, createdAt }: { authorId: string; createdAt: st
         </div>
         <p className="truncate text-xs text-fg-faint">{relativeTime(createdAt)}</p>
       </div>
-      {!isSelf && viewerId ? (
+      {!isSelf ? (
         <button
           type="button"
           disabled={busy || !author}

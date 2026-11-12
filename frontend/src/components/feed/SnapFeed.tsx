@@ -9,7 +9,7 @@ import PostMapPanel from "@/components/posts/PostMapPanel";
 import PostQuestionsPanel from "@/components/posts/PostQuestionsPanel";
 import { usePostSidePanel } from "@/hooks/use-post-side-panel";
 import { prefetchPostMedia } from "@/lib/media/prefetch";
-import type { Post } from "@/lib/content/types";
+import type { FeedPhase, FeedPage, Post } from "@/lib/content/types";
 import { cn } from "@/lib/utils";
 
 /** Which post owns A/V: last one whose top has crossed mid-viewport. */
@@ -28,6 +28,7 @@ export function pickFocusedPostId(orderedIds: string[]): string | null {
 
 export default function SnapFeed({
   initialPosts,
+  initialPhase,
   nextCursor,
   onLoadMore,
   initialCommentsOpen = false,
@@ -35,8 +36,12 @@ export default function SnapFeed({
   fromUser = false,
 }: {
   initialPosts: Post[];
+  /** Home feed only: first page phase from GET /feed. */
+  initialPhase?: FeedPhase;
   nextCursor?: string;
-  onLoadMore: (cursor: string) => Promise<{ posts: Post[]; next_cursor?: string }>;
+  onLoadMore: (
+    cursor: string
+  ) => Promise<{ posts: Post[]; next_cursor?: string; phase?: FeedPhase } | FeedPage>;
   initialCommentsOpen?: boolean;
   /** When true, parent owns page width (e.g. home with trending rail). */
   embedded?: boolean;
@@ -47,6 +52,10 @@ export default function SnapFeed({
   const [cursor, setCursor] = useState<string | null | undefined>(nextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
   const [focusedId, setFocusedId] = useState(initialPosts[0]?.id ?? "");
+  /** First post id in the suggested phase; divider renders before it. */
+  const [suggestedAtId, setSuggestedAtId] = useState<string | null>(() =>
+    initialPhase === "suggested" ? (initialPosts[0]?.id ?? null) : null
+  );
   const {
     commentsOpen,
     mapOpen,
@@ -138,11 +147,18 @@ export default function SnapFeed({
     setLoadingMore(true);
     try {
       const page = await onLoadMore(cursor);
+      let firstSuggestedId: string | undefined;
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         const next = page.posts.filter((p) => !seen.has(p.id));
+        if (page.phase === "suggested" && next[0]) {
+          firstSuggestedId = next[0].id;
+        }
         return next.length ? [...prev, ...next] : prev;
       });
+      if (firstSuggestedId) {
+        setSuggestedAtId((cur) => cur ?? firstSuggestedId!);
+      }
       setCursor(page.next_cursor ?? null);
     } catch {
       setCursor(null);
@@ -173,12 +189,20 @@ export default function SnapFeed({
           Follow people and drop places — posts from your network (and nearby, when
           location is on) will show up here.
         </p>
-        <Link
-          href="/compose"
-          className="mt-2 rounded-full bg-brand px-4 py-2 text-xs font-bold text-black hover:bg-brand-dark"
-        >
-          Drop a place
-        </Link>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <Link
+            href="/compose"
+            className="rounded-full bg-brand px-4 py-2 text-xs font-bold text-black hover:bg-brand-dark"
+          >
+            Drop a place
+          </Link>
+          <Link
+            href="/welcome"
+            className="rounded-full border border-border-subtle px-4 py-2 text-xs font-semibold text-fg-muted hover:bg-surface-2 hover:text-fg"
+          >
+            About Yet Bota
+          </Link>
+        </div>
       </div>
     );
   }
@@ -209,6 +233,19 @@ export default function SnapFeed({
             key={p.id}
             className="scroll-mt-20 box-border min-h-[calc(100dvh-5rem)] w-full"
           >
+            {p.id === suggestedAtId ? (
+              <div
+                className="flex items-center gap-3 px-1 pb-4 pt-6"
+                role="separator"
+                aria-label="Suggested posts"
+              >
+                <div className="h-px flex-1 bg-border-subtle" />
+                <p className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-fg-faint">
+                  More to explore
+                </p>
+                <div className="h-px flex-1 bg-border-subtle" />
+              </div>
+            ) : null}
             <PostDetailCard
               post={p}
               active={p.id === focusedId}

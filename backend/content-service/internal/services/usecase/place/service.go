@@ -47,6 +47,11 @@ type PlacePageResult struct {
 	NextCursor string
 }
 
+type RankedPlacePageResult struct {
+	Places     []domain.RankedPlace
+	NextCursor string
+}
+
 type PostPageResult struct {
 	Posts      []domainpost.Post
 	NextCursor string
@@ -143,6 +148,22 @@ func (s *Service) List(ctx context.Context, in ListInput) (PlacePageResult, erro
 		return PlacePageResult{}, err
 	}
 	return PlacePageResult{Places: page.Places, NextCursor: encodeCursor(page.NextCursor)}, nil
+}
+
+func (s *Service) ListTop(ctx context.Context, limit int, cursor string) (RankedPlacePageResult, error) {
+	limit = s.clampLimit(limit)
+	cur, err := decodeEngagementCursor(cursor)
+	if err != nil {
+		return RankedPlacePageResult{}, err
+	}
+	page, err := s.repo.ListTopByEngagement(ctx, cur, limit)
+	if err != nil {
+		return RankedPlacePageResult{}, err
+	}
+	return RankedPlacePageResult{
+		Places:     page.Places,
+		NextCursor: encodeEngagementCursor(page.NextCursor),
+	}, nil
 }
 
 func (s *Service) ListNearbyInternal(ctx context.Context, lat, lng, radiusM float64, limit int) ([]domain.Place, error) {
@@ -332,6 +353,38 @@ func (s *Service) clampLimit(n int) int {
 		return s.maxPageSize
 	}
 	return n
+}
+
+func encodeEngagementCursor(c *domain.EngagementCursor) string {
+	if c == nil {
+		return ""
+	}
+	raw := fmt.Sprintf("%d|%s", c.Engagement, c.ID.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeEngagementCursor(raw string) (*domain.EngagementCursor, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	b, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, apperr.Validation(apperr.Field{Field: "cursor", Code: "INVALID", Message: "invalid cursor"})
+	}
+	parts := strings.SplitN(string(b), "|", 2)
+	if len(parts) != 2 {
+		return nil, apperr.Validation(apperr.Field{Field: "cursor", Code: "INVALID", Message: "invalid cursor"})
+	}
+	eng, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return nil, apperr.Validation(apperr.Field{Field: "cursor", Code: "INVALID", Message: "invalid cursor"})
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return nil, apperr.Validation(apperr.Field{Field: "cursor", Code: "INVALID", Message: "invalid cursor"})
+	}
+	return &domain.EngagementCursor{Engagement: eng, ID: id}, nil
 }
 
 func encodeCursor(c *domain.PageCursor) string {

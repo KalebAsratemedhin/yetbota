@@ -36,15 +36,18 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	auth := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
 		return shared.RequireAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
 	}
+	public := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
+		return shared.OptionalAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
+	}
 
 	mux.Handle("POST /questions", auth(eps.CreateQuestion, decodeCreateQuestion))
-	mux.Handle("GET /questions", auth(eps.ListQuestions, decodeListQuestions))
-	mux.Handle("GET /questions/{id}", auth(eps.GetQuestion, decodeQuestionID))
+	mux.Handle("GET /questions", public(eps.ListQuestions, decodeListQuestions))
+	mux.Handle("GET /questions/{id}", public(eps.GetQuestion, decodeGetQuestion))
 	mux.Handle("PATCH /questions/{id}", auth(eps.UpdateQuestion, decodeUpdateQuestion))
 	mux.Handle("POST /questions/{id}/close", auth(eps.CloseQuestion, decodeQuestionID))
 	mux.Handle("POST /questions/{id}/vote", auth(eps.QuestionVote, decodeQuestionVote))
 	mux.Handle("POST /questions/{id}/answers", auth(eps.AddAnswer, decodeAddAnswer))
-	mux.Handle("GET /questions/{id}/answers", auth(eps.ListAnswers, decodeListAnswers))
+	mux.Handle("GET /questions/{id}/answers", public(eps.ListAnswers, decodeListAnswers))
 	mux.Handle("PATCH /answers/{id}", auth(eps.UpdateAnswer, decodeUpdateAnswer))
 	mux.Handle("POST /answers/{id}/vote", auth(eps.AnswerVote, decodeAnswerVote))
 }
@@ -63,10 +66,6 @@ func decodeCreateQuestion(ctx context.Context, r *http.Request) (interface{}, er
 }
 
 func decodeListQuestions(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
@@ -81,9 +80,25 @@ func decodeListQuestions(ctx context.Context, r *http.Request) (interface{}, err
 		}
 		postID = &id
 	}
-	return svcendpoint.ListQuestionsRequest{
-		Principal: p, PostID: postID, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.ListQuestionsRequest{
+		PostID: postID, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
+}
+
+func decodeGetQuestion(ctx context.Context, r *http.Request) (interface{}, error) {
+	id, err := parseID(r.PathValue("id"), "id")
+	if err != nil {
+		return nil, err
+	}
+	req := svcendpoint.QuestionIDRequest{QuestionID: id}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeQuestionID(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -177,10 +192,6 @@ func decodeAddAnswer(ctx context.Context, r *http.Request) (interface{}, error) 
 }
 
 func decodeListAnswers(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := parseID(r.PathValue("id"), "id")
 	if err != nil {
 		return nil, err
@@ -189,9 +200,13 @@ func decodeListAnswers(ctx context.Context, r *http.Request) (interface{}, error
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.ListAnswersRequest{
-		Principal: p, QuestionID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.ListAnswersRequest{
+		QuestionID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeAnswerVote(ctx context.Context, r *http.Request) (interface{}, error) {

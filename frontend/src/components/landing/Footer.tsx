@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Globe, Share2 } from "lucide-react";
 import { useContent } from "@/lib/useContent";
 
 export default function Footer() {
@@ -10,9 +9,9 @@ export default function Footer() {
   const navGroups = [t.footer.nav.discovery, t.footer.nav.community];
 
   return (
-    <footer className="border-t border-border-subtle bg-bg px-6 pt-16 pb-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-14 grid grid-cols-2 gap-10 md:grid-cols-3">
+    <footer className="border-t border-border-subtle bg-bg px-6 pt-20 pb-10 sm:pt-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-16 grid grid-cols-2 gap-12 md:grid-cols-3">
           <div className="col-span-2 md:col-span-1">
             <div className="mb-4 flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg">
@@ -26,23 +25,9 @@ export default function Footer() {
               </div>
               <span className="text-lg font-bold text-fg">Yet Bota</span>
             </div>
-            <p className="mb-5 max-w-55 text-sm leading-relaxed text-fg-faint">{t.footer.tagline}</p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border-subtle"
-                aria-label="Language"
-              >
-                <Globe className="h-4 w-4 text-fg-faint" />
-              </button>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border-subtle"
-                aria-label="Share"
-              >
-                <Share2 className="h-4 w-4 text-fg-faint" />
-              </button>
-            </div>
+            <p className="mb-5 max-w-55 text-sm leading-relaxed text-fg-faint">
+              {t.footer.tagline}
+            </p>
           </div>
 
           {navGroups.map((group) => (
@@ -50,12 +35,12 @@ export default function Footer() {
               <h4 className="mb-5 text-sm font-semibold text-fg">{group.title}</h4>
               <ul className="space-y-3">
                 {group.links.map((link) => (
-                  <li key={link}>
+                  <li key={link.href}>
                     <Link
-                      href="#"
-                      className="relative inline-flex items-center text-sm text-fg-faint transition-colors hover:text-green-700 after:absolute after:left-1/2 after:-bottom-1.5 after:h-0.5 after:w-0 after:bg-green-700 after:transition-all after:duration-300 after:content-[''] hover:after:w-full after:-translate-x-1/2 dark:hover:text-green-500 dark:after:bg-green-500"
+                      href={link.href}
+                      className="text-sm text-fg-faint transition-colors hover:text-fg"
                     >
-                      {link}
+                      {link.label}
                     </Link>
                   </li>
                 ))}

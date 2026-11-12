@@ -19,6 +19,7 @@ import {
   useSetReactionMutation,
   useSharePostMutation,
 } from "@/lib/api/contentApi";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { useAppSelector } from "@/lib/hooks";
 import type { Post, Reaction } from "@/lib/content/types";
@@ -45,6 +46,7 @@ export default function PostActions({
   onQaClick?: () => void;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const isOwn = Boolean(viewerId && viewerId === post.author_id);
   const commentsTo = commentsHref ?? `/posts/${post.id}?comments=1`;
   const [reaction, setReactionLocal] = useState<Reaction | null>(initialReaction);
@@ -63,6 +65,7 @@ export default function PostActions({
   const [sharePost, { isLoading: sharing }] = useSharePostMutation();
 
   async function onReact(next: Reaction) {
+    if (!requireSignIn("Sign in to react")) return;
     if (isOwn) return;
     const prev = reaction;
     const clearing = prev === next;
@@ -96,6 +99,7 @@ export default function PostActions({
   }
 
   async function onBookmark() {
+    if (!requireSignIn("Sign in to save posts")) return;
     const prev = bookmarked;
     setBookmarked(!prev);
     setCounts((c) => ({
@@ -115,6 +119,7 @@ export default function PostActions({
   }
 
   async function onShare() {
+    if (!requireSignIn("Sign in to share")) return;
     try {
       const res = await sharePost(post.id).unwrap();
       setCounts((c) => ({ ...c, share: res.post.share_count }));

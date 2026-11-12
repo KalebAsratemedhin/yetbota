@@ -114,6 +114,41 @@ func (s *Service) GetPublicProfile(ctx context.Context, userID uuid.UUID) (Publi
 	return p, nil
 }
 
+func (s *Service) Leaderboard(ctx context.Context, limit int) ([]PublicProfile, error) {
+	if limit <= 0 {
+		limit = listDefaultLimit
+	}
+	if limit > listMaxLimit {
+		limit = listMaxLimit
+	}
+	rows, err := s.users.ListByReputation(ctx, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicProfile, 0, len(rows))
+	for _, u := range rows {
+		p := toPublic(u)
+		if s.reputation != nil {
+			snap, err := s.reputation.Snapshot(ctx, u.ID)
+			if err != nil {
+				return nil, err
+			}
+			p.ReputationScore = snap.Score
+			p.ReputationLevel = snap.Level
+			p.Badges = make([]BadgeInfo, 0, len(snap.Badges))
+			for _, b := range snap.Badges {
+				info := BadgeInfo{ID: b.ID, Name: b.Name, Description: b.Description}
+				if b.AwardedAt != nil {
+					info.AwardedAt = b.AwardedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")
+				}
+				p.Badges = append(p.Badges, info)
+			}
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
 func (s *Service) Search(ctx context.Context, viewerID uuid.UUID, query string) ([]PublicProfile, error) {
 	q := strings.TrimSpace(query)
 	if utf8.RuneCountInString(q) < searchMinQueryLen {

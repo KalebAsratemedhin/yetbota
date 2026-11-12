@@ -4,7 +4,6 @@ import { use, useCallback, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { toast } from "sonner";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import UserAvatar from "@/components/shared/UserAvatar";
 import {
@@ -18,6 +17,7 @@ import {
   useVoteAnswerMutation,
   useVoteQuestionMutation,
 } from "@/lib/api/contentApi";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import { useGetUserProfileQuery } from "@/lib/api/socialApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { placeTitle, relativeTime } from "@/lib/content/helpers";
@@ -107,6 +107,7 @@ function useLocalVote() {
 
 function QuestionBlock({ question }: { question: Question }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const isAuthor = Boolean(viewerId && viewerId === question.author_id);
   const closed = Boolean(question.closed_at);
   const [voteQuestion] = useVoteQuestionMutation();
@@ -117,6 +118,7 @@ function QuestionBlock({ question }: { question: Question }) {
   });
 
   async function vote(clicked: QaVote) {
+    if (!requireSignIn("Sign in to vote")) return;
     if (isAuthor) return;
     const prev = myVote;
     const vote = nextVote(clicked);
@@ -205,6 +207,7 @@ function AnswerRow({
   questionId: string;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const isAuthor = Boolean(viewerId && viewerId === answer.author_id);
   const [voteAnswer] = useVoteAnswerMutation();
   const [updateAnswer, { isLoading: saving }] = useUpdateAnswerMutation();
@@ -213,6 +216,7 @@ function AnswerRow({
   const [draft, setDraft] = useState(answer.body);
 
   async function vote(clicked: QaVote) {
+    if (!requireSignIn("Sign in to vote")) return;
     if (isAuthor) return;
     const prev = myVote;
     const vote = nextVote(clicked);
@@ -318,6 +322,7 @@ function AnswerRow({
 }
 
 function QuestionDetail({ questionId }: { questionId: string }) {
+  const { requireSignIn } = useRequireSignIn();
   const q = useGetQuestionQuery(questionId);
   const answersQ = useListAnswersQuery({ questionId, limit: 20 });
   const [fetchMore] = useLazyListAnswersQuery();
@@ -361,6 +366,7 @@ function QuestionDetail({ questionId }: { questionId: string }) {
 
   async function onAnswer(e: React.FormEvent) {
     e.preventDefault();
+    if (!requireSignIn("Sign in to answer")) return;
     const text = body.trim();
     if (!text) return;
     try {
@@ -480,13 +486,11 @@ export default function QuestionPage({
   const { id } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <QuestionDetail questionId={id} />
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <QuestionDetail questionId={id} />
+      </div>
+    </main>
   );
 }

@@ -141,6 +141,45 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []pgtype.UUID) ([]User,
 	return items, nil
 }
 
+const listLeaderboard = `-- name: ListLeaderboard :many
+SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users
+ORDER BY reputation_score DESC, id DESC
+LIMIT $1
+`
+
+// Public reputation ranking (denormalized score on users).
+func (q *Queries) ListLeaderboard(ctx context.Context, resultLimit int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listLeaderboard, resultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.PasswordHash,
+			&i.CreatedAt,
+			&i.FullName,
+			&i.Phone,
+			&i.Address,
+			&i.Bio,
+			&i.AvatarUrl,
+			&i.AvatarPublicID,
+			&i.ReputationScore,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchUsers = `-- name: SearchUsers :many
 SELECT id, username, password_hash, created_at, full_name, phone, address, bio, avatar_url, avatar_public_id, reputation_score FROM users
 WHERE (

@@ -8,7 +8,7 @@ import FeedShell from "@/components/feed/FeedShell";
 import { useLocationPreference } from "@/hooks/use-location-preference";
 import { useGetFeedQuery, useLazyGetFeedQuery } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
-import type { PostsPage } from "@/lib/content/types";
+import type { FeedPage } from "@/lib/content/types";
 import {
   consumeLocationPrompt,
   writeLocationPref,
@@ -100,12 +100,12 @@ export default function HomeFeed() {
 
   const feedQ = useGetFeedQuery(feedArgs);
   const [fetchMore] = useLazyGetFeedQuery();
-  const lastFeedRef = useRef<PostsPage | null>(null);
+  const lastFeedRef = useRef<FeedPage | null>(null);
   if (feedQ.data) lastFeedRef.current = feedQ.data;
   const feedData = feedQ.data ?? lastFeedRef.current;
 
   const onLoadMore = useCallback(
-    async (cursor: string) => {
+    async (cursor: string): Promise<FeedPage> => {
       return fetchMore({
         ...feedArgs,
         cursor,
@@ -153,6 +153,7 @@ export default function HomeFeed() {
         key={feedKey}
         embedded
         initialPosts={feedData.posts}
+        initialPhase={feedData.phase}
         nextCursor={feedData.next_cursor}
         onLoadMore={onLoadMore}
       />

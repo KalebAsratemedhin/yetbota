@@ -2,7 +2,7 @@ export { default as Navbar } from "./Navbar";
 export { default as HeroSection } from "./HeroSection";
 export { default as DiscoverySection } from "./DiscoverySection";
 export { default as AssistantSection } from "./AssistantSection";
-export { default as NavigationSection } from "./NavigationSection";
+export { default as CommunityQaSection } from "./CommunityQaSection";
 export { default as AccuracySection } from "./AccuracySection";
 export { default as GamificationSection } from "./GamificationSection";
 export { default as PrinciplesSection } from "./PrinciplesSection";

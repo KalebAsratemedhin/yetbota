@@ -912,6 +912,32 @@ func (r *Repo) ListRecent(ctx context.Context, since time.Time, limit int) ([]do
 	return page.Posts, nil
 }
 
+func (r *Repo) ListTopByEngagement(ctx context.Context, cursorEngagement *int64, cursorID *uuid.UUID, limit int) ([]domain.Post, bool, error) {
+	if limit <= 0 {
+		return []domain.Post{}, false, nil
+	}
+	params := db.ListTopPostsParams{
+		ResultLimit: int32(limit + 1),
+	}
+	if cursorEngagement != nil && cursorID != nil {
+		params.CursorEngagement = pgtype.Int8{Int64: *cursorEngagement, Valid: true}
+		params.CursorID = pgUUID(*cursorID)
+	}
+	rows, err := r.q.ListTopPosts(ctx, params)
+	if err != nil {
+		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "list top posts")
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	page, err := r.hydratePosts(ctx, rows, postIDs(rows), limit, false)
+	if err != nil {
+		return nil, false, err
+	}
+	return page.Posts, hasMore, nil
+}
+
 func (r *Repo) ListNearby(ctx context.Context, lat, lng, radiusKm float64, since time.Time, limit int) ([]domain.Post, error) {
 	if limit <= 0 || radiusKm <= 0 {
 		return []domain.Post{}, nil

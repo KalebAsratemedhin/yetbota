@@ -145,6 +145,25 @@ func (r *Repo) Search(ctx context.Context, query string, excludeID uuid.UUID, li
 	return out, nil
 }
 
+func (r *Repo) ListByReputation(ctx context.Context, limit int32) ([]domain.User, error) {
+	if limit <= 0 {
+		return []domain.User{}, nil
+	}
+	rows, err := r.q.ListLeaderboard(ctx, limit)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "list leaderboard")
+	}
+	out := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		u, err := toDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
 func (r *Repo) Delete(ctx context.Context, id uuid.UUID) error {
 	if err := r.q.DeleteUser(ctx, pgUUID(id)); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "delete user")

@@ -3,7 +3,6 @@
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import ProfileBody, { ProfileLoadError } from "@/components/profile/ProfileBody";
 import { useGetUserProfileQuery } from "@/lib/api/socialApi";
@@ -58,13 +57,11 @@ export default function UserProfilePage({
   const { id } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg">
-        <Navbar />
-        <div className="pt-20">
-          <PublicProfileContent userId={id} />
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg">
+      <Navbar />
+      <div className="pt-20">
+        <PublicProfileContent userId={id} />
+      </div>
+    </main>
   );
 }

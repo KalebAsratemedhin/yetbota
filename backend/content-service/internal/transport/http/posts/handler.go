@@ -35,6 +35,7 @@ type Endpoints struct {
 	Feed               endpoint.Endpoint
 	Related            endpoint.Endpoint
 	TrendingPosts      endpoint.Endpoint
+	TopPosts           endpoint.Endpoint
 	TrendingCreators   endpoint.Endpoint
 }
 
@@ -45,27 +46,31 @@ func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	auth := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
 		return shared.RequireAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
 	}
+	public := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
+		return shared.OptionalAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
+	}
 
 	mux.Handle("POST /media/sign", auth(eps.SignMedia, decodeSignMedia))
 	mux.Handle("POST /posts", auth(eps.Create, decodeCreate))
 	mux.Handle("PATCH /posts/{id}", auth(eps.Update, decodeUpdate))
-	mux.Handle("GET /posts/search", auth(eps.Search, decodeSearch))
-	mux.Handle("GET /posts/trending", auth(eps.TrendingPosts, decodeTrending))
-	mux.Handle("GET /posts/{id}", auth(eps.Get, decodePostID))
+	mux.Handle("GET /posts/search", public(eps.Search, decodeSearch))
+	mux.Handle("GET /posts/trending", public(eps.TrendingPosts, decodeTrending))
+	mux.Handle("GET /posts/top", public(eps.TopPosts, decodeTrending))
+	mux.Handle("GET /posts/{id}", public(eps.Get, decodeGetPost))
 	mux.Handle("POST /posts/{id}/reaction", auth(eps.SetReaction, decodeReaction))
 	mux.Handle("POST /posts/{id}/comments", auth(eps.AddComment, decodeComment))
-	mux.Handle("GET /posts/{id}/comments", auth(eps.ListComments, decodePostList))
-	mux.Handle("GET /comments/{id}/replies", auth(eps.ListReplies, decodeCommentList))
+	mux.Handle("GET /posts/{id}/comments", public(eps.ListComments, decodePostList))
+	mux.Handle("GET /comments/{id}/replies", public(eps.ListReplies, decodeCommentList))
 	mux.Handle("POST /comments/{id}/reaction", auth(eps.SetCommentReaction, decodeCommentReaction))
 	mux.Handle("POST /posts/{id}/bookmark", auth(eps.AddBookmark, decodePostID))
 	mux.Handle("DELETE /posts/{id}/bookmark", auth(eps.RemoveBookmark, decodePostID))
 	mux.Handle("POST /posts/{id}/share", auth(eps.Share, decodePostID))
-	mux.Handle("GET /users/{id}/posts", auth(eps.ListUser, decodeUserPosts))
+	mux.Handle("GET /users/{id}/posts", public(eps.ListUser, decodeUserPosts))
 	mux.Handle("GET /me/bookmarks", auth(eps.ListBookmarks, decodeMeList))
-	mux.Handle("GET /hashtags/{tag}/posts", auth(eps.ListHashtag, decodeHashtag))
-	mux.Handle("GET /feed", auth(eps.Feed, decodeFeed))
-	mux.Handle("GET /posts/{id}/related", auth(eps.Related, decodeRelated))
-	mux.Handle("GET /creators/trending", auth(eps.TrendingCreators, decodeTrendingCreators))
+	mux.Handle("GET /hashtags/{tag}/posts", public(eps.ListHashtag, decodeHashtag))
+	mux.Handle("GET /feed", public(eps.Feed, decodeFeed))
+	mux.Handle("GET /posts/{id}/related", public(eps.Related, decodeRelated))
+	mux.Handle("GET /creators/trending", public(eps.TrendingCreators, decodeTrendingCreators))
 }
 
 func decodeSignMedia(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -113,6 +118,18 @@ func decodeUpdate(ctx context.Context, r *http.Request) (interface{}, error) {
 	return req, nil
 }
 
+func decodeGetPost(ctx context.Context, r *http.Request) (interface{}, error) {
+	id, err := svcendpoint.ParsePostID(r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	req := svcendpoint.PostIDRequest{PostID: id}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
+}
+
 func decodePostID(ctx context.Context, r *http.Request) (interface{}, error) {
 	p, err := shared.PrincipalFromCtx(ctx)
 	if err != nil {
@@ -126,10 +143,6 @@ func decodePostID(ctx context.Context, r *http.Request) (interface{}, error) {
 }
 
 func decodeUserPosts(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := svcendpoint.ParseUserID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -138,9 +151,13 @@ func decodeUserPosts(ctx context.Context, r *http.Request) (interface{}, error) 
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.UserPostsRequest{
-		Principal: p, UserID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.UserPostsRequest{
+		UserID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeReaction(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -187,10 +204,6 @@ func decodeComment(ctx context.Context, r *http.Request) (interface{}, error) {
 }
 
 func decodeCommentList(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := svcendpoint.ParseCommentID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -199,9 +212,13 @@ func decodeCommentList(ctx context.Context, r *http.Request) (interface{}, error
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.CommentListRequest{
-		Principal: p, CommentID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.CommentListRequest{
+		CommentID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeCommentReaction(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -229,10 +246,6 @@ func decodeCommentReaction(ctx context.Context, r *http.Request) (interface{}, e
 }
 
 func decodePostList(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := svcendpoint.ParsePostID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -241,9 +254,13 @@ func decodePostList(ctx context.Context, r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.ListRequest{
-		Principal: p, PostID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.ListRequest{
+		PostID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeMeList(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -261,38 +278,34 @@ func decodeMeList(ctx context.Context, r *http.Request) (interface{}, error) {
 }
 
 func decodeSearch(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.SearchRequest{
-		Principal: p, Query: r.URL.Query().Get("q"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.SearchRequest{
+		Query: r.URL.Query().Get("q"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeHashtag(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.HashtagRequest{
-		Principal: p, Tag: r.PathValue("tag"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.HashtagRequest{
+		Tag: r.PathValue("tag"), Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeFeed(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	lat, err := svcendpoint.ParseOptionalCoord(r.URL.Query().Get("lat"), "lat")
 	if err != nil {
 		return nil, err
@@ -305,16 +318,16 @@ func decodeFeed(ctx context.Context, r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.FeedRequest{
-		Principal: p, Lat: lat, Lng: lng, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.FeedRequest{
+		Lat: lat, Lng: lng, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeRelated(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := svcendpoint.ParsePostID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -323,39 +336,42 @@ func decodeRelated(ctx context.Context, r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.RelatedRequest{
-		Principal: p,
-		PostID:    id,
-		Query:     r.URL.Query().Get("q"),
-		Limit:     limit,
-		Cursor:    r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.RelatedRequest{
+		PostID: id,
+		Query:  r.URL.Query().Get("q"),
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeTrending(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.TrendingRequest{
-		Principal: p, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.TrendingRequest{
+		Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeTrendingCreators(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.TrendingRequest{Principal: p, Limit: limit}, nil
+	req := svcendpoint.TrendingRequest{Limit: limit}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodeJSON(r *http.Request, dest interface{}) error {

@@ -80,6 +80,46 @@ func (r *Repo) List(ctx context.Context, p domain.ListParams) (domain.PlacePage,
 	return placePage(rows, p.Limit)
 }
 
+func (r *Repo) ListTopByEngagement(ctx context.Context, cursor *domain.EngagementCursor, limit int) (domain.RankedPlacePage, error) {
+	if limit <= 0 {
+		return domain.RankedPlacePage{}, nil
+	}
+	params := db.ListTopPlacesParams{ResultLimit: int32(limit + 1)}
+	if cursor != nil {
+		params.CursorEngagement = pgtype.Int8{Int64: cursor.Engagement, Valid: true}
+		params.CursorID = pgUUID(cursor.ID)
+	}
+	rows, err := r.q.ListTopPlaces(ctx, params)
+	if err != nil {
+		return domain.RankedPlacePage{}, apperr.Wrap(err, apperr.CodeInternal, "list top places")
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	out := make([]domain.RankedPlace, 0, len(rows))
+	for _, row := range rows {
+		p, err := placeFromDB(db.Place{
+			ID: row.ID, Name: row.Name, Lat: row.Lat, Lng: row.Lng,
+			Summary: row.Summary, SummaryModel: row.SummaryModel,
+			SummaryUpdatedAt: row.SummaryUpdatedAt, PostCount: row.PostCount,
+			Embedding: row.Embedding, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		})
+		if err != nil {
+			return domain.RankedPlacePage{}, err
+		}
+		out = append(out, domain.RankedPlace{
+			Place: p, EngagementScore: row.EngagementScore, CoverURL: asString(row.CoverUrl),
+		})
+	}
+	page := domain.RankedPlacePage{Places: out}
+	if hasMore && len(out) > 0 {
+		last := out[len(out)-1]
+		page.NextCursor = &domain.EngagementCursor{Engagement: last.EngagementScore, ID: last.ID}
+	}
+	return page, nil
+}
+
 func (r *Repo) ListNearby(ctx context.Context, p domain.NearbyParams) ([]domain.Place, error) {
 	minLat, maxLat, minLng, maxLng := bbox(p.Lat, p.Lng, p.RadiusM)
 	limit := p.Limit
@@ -401,6 +441,17 @@ func entryFromDB(row db.PlaceEntry) (domain.Entry, error) {
 		e.AuthorID = &aid
 	}
 	return e, nil
+}
+
+func asString(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	default:
+		return ""
+	}
 }
 
 func pgUUID(id uuid.UUID) pgtype.UUID {

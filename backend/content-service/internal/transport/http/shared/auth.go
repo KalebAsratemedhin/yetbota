@@ -34,6 +34,25 @@ func RequireAuth(authn TokenAuthenticator, next http.Handler) http.Handler {
 	})
 }
 
+// OptionalAuth allows anonymous access when Authorization is absent.
+// A present but invalid/malformed Bearer token still returns 401.
+func OptionalAuth(authn TokenAuthenticator, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := BearerToken(r)
+		if raw == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		principal, err := authn.AuthenticateToken(r.Context(), raw)
+		if err != nil {
+			EncodeError(r.Context(), err, w)
+			return
+		}
+		ctx := context.WithValue(r.Context(), principalKey, principal)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func BearerToken(r *http.Request) string {
 	h := r.Header.Get("Authorization")
 	if h == "" {
@@ -52,4 +71,9 @@ func PrincipalFromCtx(ctx context.Context) (auth.Principal, error) {
 		return auth.Principal{}, apperr.ErrUnauthorized
 	}
 	return p, nil
+}
+
+func PrincipalFromCtxOptional(ctx context.Context) (auth.Principal, bool) {
+	p, ok := ctx.Value(principalKey).(auth.Principal)
+	return p, ok
 }

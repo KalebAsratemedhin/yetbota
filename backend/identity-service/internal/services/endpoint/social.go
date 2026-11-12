@@ -15,11 +15,16 @@ import (
 
 type SocialService interface {
 	GetPublicProfile(ctx context.Context, userID uuid.UUID) (socialuc.PublicProfile, error)
+	Leaderboard(ctx context.Context, limit int) ([]socialuc.PublicProfile, error)
 	Search(ctx context.Context, viewerID uuid.UUID, query string) ([]socialuc.PublicProfile, error)
 	Follow(ctx context.Context, followerID, followeeID uuid.UUID) error
 	Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) error
 	Followers(ctx context.Context, userID uuid.UUID, in socialuc.ListInput) (socialuc.ProfilePage, error)
 	Following(ctx context.Context, userID uuid.UUID, in socialuc.ListInput) (socialuc.ProfilePage, error)
+}
+
+type LeaderboardRequest struct {
+	Limit int
 }
 
 type UserIDRequest struct {
@@ -83,6 +88,21 @@ func MakeGetPublicProfileEndpoint(svc SocialService) endpoint.Endpoint {
 			return nil, err
 		}
 		return toPublicUserResponse(res), nil
+	}
+}
+
+func MakeLeaderboardEndpoint(svc SocialService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(LeaderboardRequest)
+		rows, err := svc.Leaderboard(ctx, req.Limit)
+		if err != nil {
+			return nil, err
+		}
+		users := make([]UserResponse, 0, len(rows))
+		for _, row := range rows {
+			users = append(users, toPublicUserResponse(row))
+		}
+		return UsersResponse{Users: users}, nil
 	}
 }
 

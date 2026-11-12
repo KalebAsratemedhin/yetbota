@@ -3,7 +3,6 @@
 import { use } from "react";
 import Link from "next/link";
 import { ArrowLeft, Hash } from "lucide-react";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import PostsGrid from "@/components/posts/PostsGrid";
 import {
@@ -73,13 +72,11 @@ export default function HashtagPage({
   const { tag } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <HashtagContent tag={tag} />
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <HashtagContent tag={tag} />
+      </div>
+    </main>
   );
 }

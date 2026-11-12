@@ -35,6 +35,7 @@ type PostService interface {
 	Feed(ctx context.Context, in postuc.FeedInput) (postuc.PageResult, error)
 	Related(ctx context.Context, in postuc.RelatedInput) (postuc.RelatedResult, error)
 	TrendingPosts(ctx context.Context, in postuc.TrendingListInput) (postuc.PageResult, error)
+	TopPosts(ctx context.Context, in postuc.TrendingListInput) (postuc.PageResult, error)
 	TrendingCreators(ctx context.Context, in postuc.TrendingListInput) (postuc.TrendingCreatorsResult, error)
 }
 
@@ -207,6 +208,7 @@ type PostJSON struct {
 type PostsPageJSON struct {
 	Posts      []PostJSON `json:"posts"`
 	NextCursor string     `json:"next_cursor,omitempty"`
+	Phase      string     `json:"phase,omitempty"` // feed only: home | suggested
 }
 
 type CommentJSON struct {
@@ -502,9 +504,13 @@ func MakeListByHashtagEndpoint(svc PostService) endpoint.Endpoint {
 func MakeFeedEndpoint(svc PostService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(FeedRequest)
-		viewerID, err := ParseUserID(req.Principal.UserID)
-		if err != nil {
-			return nil, err
+		var viewerID uuid.UUID
+		if strings.TrimSpace(req.Principal.UserID) != "" {
+			id, err := ParseUserID(req.Principal.UserID)
+			if err != nil {
+				return nil, err
+			}
+			viewerID = id
 		}
 		page, err := svc.Feed(ctx, postuc.FeedInput{
 			ViewerID: viewerID,
@@ -544,6 +550,19 @@ func MakeTrendingPostsEndpoint(svc PostService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(TrendingRequest)
 		page, err := svc.TrendingPosts(ctx, postuc.TrendingListInput{
+			Limit: req.Limit, Cursor: req.Cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return toPostsPageJSON(page), nil
+	}
+}
+
+func MakeTopPostsEndpoint(svc PostService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(TrendingRequest)
+		page, err := svc.TopPosts(ctx, postuc.TrendingListInput{
 			Limit: req.Limit, Cursor: req.Cursor,
 		})
 		if err != nil {
@@ -656,7 +675,7 @@ func toPostsPageJSON(page postuc.PageResult) PostsPageJSON {
 	for _, p := range page.Posts {
 		posts = append(posts, toPostJSON(p))
 	}
-	return PostsPageJSON{Posts: posts, NextCursor: page.NextCursor}
+	return PostsPageJSON{Posts: posts, NextCursor: page.NextCursor, Phase: page.Phase}
 }
 
 func toCommentJSON(c domain.Comment) CommentJSON {

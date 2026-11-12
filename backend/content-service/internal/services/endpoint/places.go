@@ -18,6 +18,7 @@ type PlaceService interface {
 	Get(ctx context.Context, id uuid.UUID) (domain.Place, error)
 	GetByPostID(ctx context.Context, postID uuid.UUID) (domain.Place, error)
 	List(ctx context.Context, in placeuc.ListInput) (placeuc.PlacePageResult, error)
+	ListTop(ctx context.Context, limit int, cursor string) (placeuc.RankedPlacePageResult, error)
 	ListNearbyInternal(ctx context.Context, lat, lng, radiusM float64, limit int) ([]domain.Place, error)
 	ListPosts(ctx context.Context, placeID uuid.UUID, limit int, cursor string) (placeuc.PostPageResult, error)
 	ListEntries(ctx context.Context, placeID uuid.UUID, category string, limit int, cursor string) (placeuc.EntryPageResult, error)
@@ -25,6 +26,11 @@ type PlaceService interface {
 	CreateAndAttach(ctx context.Context, in placeuc.CreatePlaceAttachInput) (domain.Place, error)
 	UpdateSummary(ctx context.Context, placeID uuid.UUID, summary, model string) (domain.Place, error)
 	AddEntries(ctx context.Context, in placeuc.AddEntriesInput) ([]domain.Entry, error)
+}
+
+type ListTopPlacesRequest struct {
+	Limit  int
+	Cursor string
 }
 
 type ListPlacesRequest struct {
@@ -88,6 +94,8 @@ type PlaceJSON struct {
 	SummaryModel     string    `json:"summary_model,omitempty"`
 	SummaryUpdatedAt *string   `json:"summary_updated_at,omitempty"`
 	PostCount        int64     `json:"post_count"`
+	CoverURL         string    `json:"cover_url,omitempty"`
+	EngagementScore  *int64    `json:"engagement_score,omitempty"`
 	Embedding        []float64 `json:"embedding,omitempty"`
 	CreatedAt        string    `json:"created_at"`
 	UpdatedAt        string    `json:"updated_at"`
@@ -125,6 +133,27 @@ func MakeListPlacesEndpoint(svc PlaceService) endpoint.Endpoint {
 			return nil, err
 		}
 		return PlacesPageJSON{Places: toPlacesJSON(page.Places, false), NextCursor: page.NextCursor}, nil
+	}
+}
+
+func MakeListTopPlacesEndpoint(svc PlaceService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(ListTopPlacesRequest)
+		page, err := svc.ListTop(ctx, req.Limit, req.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		places := make([]PlaceJSON, 0, len(page.Places))
+		for _, p := range page.Places {
+			j := toPlaceJSON(p.Place, false)
+			if p.CoverURL != "" {
+				j.CoverURL = p.CoverURL
+			}
+			score := p.EngagementScore
+			j.EngagementScore = &score
+			places = append(places, j)
+		}
+		return PlacesPageJSON{Places: places, NextCursor: page.NextCursor}, nil
 	}
 }
 

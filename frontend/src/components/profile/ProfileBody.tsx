@@ -7,6 +7,7 @@ import ContributionsPanel from "@/components/profile/ContributionsPanel";
 import FollowListModal from "@/components/profile/FollowListModal";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import { BadgesCard, ReputationCard } from "@/components/profile/ReputationBadges";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import {
   useFollowUserMutation,
   useListFollowersQuery,
@@ -29,6 +30,7 @@ export default function ProfileBody({
   onOpenSettings?: () => void;
 }) {
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { isSignedIn, requireSignIn } = useRequireSignIn();
   const [listKind, setListKind] = useState<ListKind>(null);
   const [followOverride, setFollowOverride] = useState<boolean | null>(null);
   const [trackedUserId, setTrackedUserId] = useState(user.user_id);
@@ -38,8 +40,15 @@ export default function ProfileBody({
     setFollowOverride(null);
   }
 
-  const { data: followers } = useListFollowersQuery({ id: user.user_id, limit: 20 });
-  const { data: following } = useListFollowingQuery({ id: user.user_id, limit: 20 });
+  // Followers/following lists stay auth-required on identity.
+  const { data: followers } = useListFollowersQuery(
+    { id: user.user_id, limit: 20 },
+    { skip: !isSignedIn }
+  );
+  const { data: following } = useListFollowingQuery(
+    { id: user.user_id, limit: 20 },
+    { skip: !isSignedIn }
+  );
   const { data: myFollowing } = useListFollowingQuery(
     { id: viewerId ?? "", limit: 50 },
     { skip: !viewerId || mode !== "public" }
@@ -56,6 +65,7 @@ export default function ProfileBody({
   const isFollowing = followOverride ?? fromApi;
 
   const toggleFollow = useCallback(async () => {
+    if (!requireSignIn("Sign in to follow")) return;
     setFollowOverride(!isFollowing);
     try {
       if (isFollowing) {
@@ -71,7 +81,14 @@ export default function ProfileBody({
         description: getApiErrorMessage(err),
       });
     }
-  }, [followUser, unfollowUser, isFollowing, user.user_id, user.username]);
+  }, [
+    followUser,
+    unfollowUser,
+    isFollowing,
+    requireSignIn,
+    user.user_id,
+    user.username,
+  ]);
 
   return (
     <div className="bg-bg text-fg">
@@ -79,10 +96,14 @@ export default function ProfileBody({
         <ProfileHeader
           user={user}
           mode={mode}
-          followerCount={followers?.total}
-          followingCount={following?.total}
-          onOpenFollowers={() => setListKind("followers")}
-          onOpenFollowing={() => setListKind("following")}
+          followerCount={isSignedIn ? followers?.total : undefined}
+          followingCount={isSignedIn ? following?.total : undefined}
+          onOpenFollowers={
+            isSignedIn ? () => setListKind("followers") : undefined
+          }
+          onOpenFollowing={
+            isSignedIn ? () => setListKind("following") : undefined
+          }
           onOpenSettings={onOpenSettings}
           isFollowing={isFollowing}
           followBusy={followBusy || unfollowBusy}

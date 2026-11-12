@@ -1,158 +1,133 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { Hash, Heart, MapPin } from "lucide-react";
-import { useContent } from "@/lib/useContent";
+import { Heart, MessageCircle, Share2 } from "lucide-react";
 import Reveal from "@/components/landing/Reveal";
+import SectionShell from "@/components/landing/SectionShell";
+import { useListTopPostsQuery } from "@/lib/api/contentApi";
+import { coverUrl, placeTitle } from "@/lib/content/helpers";
+import type { Post } from "@/lib/content/types";
+import { useContent } from "@/lib/useContent";
+import { cn } from "@/lib/utils";
 
-type MockPlace = {
-  id: string;
-  title: string;
-  address: string;
-  likes: number;
-  photo: string;
-  tag: string;
-};
-
-const MOCK_PLACES: MockPlace[] = [
-  {
-    id: "1",
-    title: "Tomoca Coffee – Piazza",
-    address: "Piazza, Addis Ababa",
-    likes: 128,
-    photo: "/images/places/galani.jpg",
-    tag: "coffee",
-  },
-  {
-    id: "2",
-    title: "Galani Coffee",
-    address: "Bole, Addis Ababa",
-    likes: 96,
-    photo: "/images/places/galani.jpg",
-    tag: "coffee",
-  },
-  {
-    id: "3",
-    title: "Yeshi Bunna",
-    address: "Kazanchis, Addis Ababa",
-    likes: 84,
-    photo: "/images/places/yeshi.jpg",
-    tag: "coffee",
-  },
-  {
-    id: "4",
-    title: "Mercato Spice Market",
-    address: "Addis Ketema",
-    likes: 210,
-    photo: "/images/places/mercato.jpg",
-    tag: "markets",
-  },
-  {
-    id: "5",
-    title: "Shola Traditional Market",
-    address: "Yeka, Addis Ababa",
-    likes: 74,
-    photo: "/images/places/shola.jpg",
-    tag: "markets",
-  },
-  {
-    id: "6",
-    title: "Bole Day Market",
-    address: "Bole, Addis Ababa",
-    likes: 61,
-    photo: "/images/places/bole.jpg",
-    tag: "markets",
-  },
-  {
-    id: "7",
-    title: "Friendship Park",
-    address: "Addis Ababa",
-    likes: 155,
-    photo: "/images/places/friendship.jpg",
-    tag: "parks",
-  },
-  {
-    id: "8",
-    title: "Unity Park",
-    address: "Arat Kilo, Addis Ababa",
-    likes: 142,
-    photo: "/images/places/unity.jpg",
-    tag: "parks",
-  },
-];
-
-function displayTag(tag: string): string {
-  return tag.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function postEngagement(post: Post): number {
+  return (
+    post.like_count +
+    post.comment_count +
+    post.share_count +
+    post.bookmark_count
+  );
 }
 
-function TrendingPlaceCard({ place }: { place: MockPlace }) {
+function formatCount(n: number): string {
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
+}
+
+function SpotCard({ post }: { post: Post }) {
+  const thumb = coverUrl(post);
+  const title = placeTitle(post);
+  const score = postEngagement(post);
+
   return (
-    <div className="group block h-full cursor-pointer overflow-hidden rounded-2xl border border-border-subtle bg-bg transition-all duration-300 hover:-translate-y-1.5 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10">
-      <div className="relative h-36 w-full overflow-hidden sm:h-40 md:h-44">
-        <Image
-          src={place.photo}
-          alt={place.title}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-110"
-          sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, 33vw"
+    <Link
+      href={`/posts/${post.id}`}
+      className="group relative block aspect-[3/4] overflow-hidden rounded-3xl bg-surface-2 outline-none ring-brand/40 transition-transform duration-500 hover:-translate-y-1 focus-visible:ring-2"
+    >
+      {thumb ? (
+        // eslint-disable-next-line @next/next/no-img-element -- Cloudinary URLs
+        <img
+          src={thumb}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
-        <span className="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] leading-tight font-medium whitespace-nowrap text-white backdrop-blur-sm">
-          <Heart className="h-2.5 w-2.5 fill-current" />
-          {place.likes}
-        </span>
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-brand/25 via-surface to-surface-2" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+      <div className="absolute top-4 right-4 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+        <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
+        {formatCount(score)}
       </div>
-      <div className="p-3">
-        <p className="mb-1 truncate text-xs font-semibold text-fg md:text-sm">{place.title}</p>
-        <div className="flex items-center gap-1">
-          <MapPin className="h-3 w-3 shrink-0 text-fg-faint" />
-          <span className="truncate text-[10px] text-fg-faint">{place.address}</span>
-        </div>
+      <div className="absolute inset-x-0 bottom-0 p-5">
+        <p className="line-clamp-2 text-base font-semibold text-white">{title}</p>
+        <p className="mt-2 flex flex-wrap items-center gap-3 text-xs text-white/70">
+          <span className="inline-flex items-center gap-1">
+            <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+            {post.comment_count}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Share2 className="h-3.5 w-3.5" aria-hidden />
+            {post.share_count}
+          </span>
+        </p>
       </div>
-    </div>
+    </Link>
+  );
+}
+
+function SkeletonStrip({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-3xl bg-overlay", className)}
+      aria-hidden
+    />
   );
 }
 
 export default function DiscoverySection() {
   const t = useContent();
-  const tags = ["coffee", "markets", "parks"];
+  const postsQ = useListTopPostsQuery({ limit: 5 });
+  const posts = postsQ.data?.posts ?? [];
 
   return (
-    <section className="bg-brand/5 py-12 dark:bg-surface">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
-        <Reveal className="mb-10 text-center">
-          <h2 className="mb-1 text-xl font-bold text-fg md:text-2xl">{t.discovery.title}</h2>
-          <p className="text-sm text-fg-faint">{t.discovery.subtitle}</p>
-        </Reveal>
+    <SectionShell className="relative overflow-hidden bg-bg">
+      <Reveal className="relative mb-8 max-w-2xl">
+        <p className="mb-2 text-[11px] font-bold tracking-[0.18em] text-brand uppercase">
+          Top posts
+        </p>
+        <h2 className="text-3xl font-extrabold tracking-tight text-fg sm:text-4xl">
+          {t.discovery.title}
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-fg-muted sm:text-base">
+          {t.discovery.subtitle}
+        </p>
+        <Link
+          href="/"
+          className="mt-4 inline-flex text-sm font-semibold text-brand hover:underline"
+        >
+          Open the feed →
+        </Link>
+      </Reveal>
 
-        {tags.map((tag) => {
-          const places = MOCK_PLACES.filter((p) => p.tag === tag);
-          return (
-            <div key={tag} className="mb-10">
-              <div className="mb-4 flex items-center">
-                <Hash className="mr-2 h-4 w-4 shrink-0 text-brand" />
-                <h3 className="text-sm font-semibold text-fg md:text-base">{displayTag(tag)}</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
-                {places.map((place, i) => (
-                  <Reveal key={place.id} direction="scale" delay={i * 90} className="h-full">
-                    <TrendingPlaceCard place={place} />
-                  </Reveal>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        <Reveal direction="scale" className="mt-8 flex justify-center">
-          <Link
-            href="/places"
-            className="inline-flex rounded-full bg-brand px-8 py-2.5 text-sm font-semibold text-black transition-transform hover:scale-105 hover:bg-brand-dark"
-          >
-            {t.discovery.viewFeed} →
-          </Link>
-        </Reveal>
-      </div>
-    </section>
+      {postsQ.isLoading ? (
+        <div className="relative flex gap-4 overflow-hidden">
+          {Array.from({ length: 3 }, (_, i) => (
+            <SkeletonStrip key={i} className="h-72 w-52 shrink-0 sm:h-80 sm:w-56" />
+          ))}
+        </div>
+      ) : postsQ.isError ? (
+        <p className="relative max-w-md text-sm text-fg-muted">
+          Top posts will show here once the engagement ranking API is available.
+        </p>
+      ) : posts.length === 0 ? (
+        <p className="relative text-sm text-fg-faint">
+          No highly engaged posts yet — drop a place to get started.
+        </p>
+      ) : (
+        <div className="yb-scrollbar relative flex gap-4 overflow-x-auto pb-1 sm:gap-5">
+          {posts.map((post, i) => (
+            <Reveal
+              key={post.id}
+              delay={i * 70}
+              direction="scale"
+              className="w-52 shrink-0 sm:w-56"
+            >
+              <SpotCard post={post} />
+            </Reveal>
+          ))}
+        </div>
+      )}
+    </SectionShell>
   );
 }

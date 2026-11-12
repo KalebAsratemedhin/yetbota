@@ -485,6 +485,121 @@ func (q *Queries) ListPlacesNearby(ctx context.Context, arg ListPlacesNearbyPara
 	return items, nil
 }
 
+const listTopPlaces = `-- name: ListTopPlaces :many
+WITH place_eng AS (
+  SELECT
+    p.id,
+    p.name,
+    p.lat,
+    p.lng,
+    p.summary,
+    p.summary_model,
+    p.summary_updated_at,
+    p.post_count,
+    p.embedding,
+    p.created_at,
+    p.updated_at,
+    COALESCE(SUM(po.like_count + po.comment_count + po.share_count + po.bookmark_count), 0)::bigint AS engagement_score
+  FROM places p
+  LEFT JOIN place_posts pp ON pp.place_id = p.id
+  LEFT JOIN posts po ON po.id = pp.post_id
+  GROUP BY p.id
+)
+SELECT
+  pe.id,
+  pe.name,
+  pe.lat,
+  pe.lng,
+  pe.summary,
+  pe.summary_model,
+  pe.summary_updated_at,
+  pe.post_count,
+  pe.embedding,
+  pe.created_at,
+  pe.updated_at,
+  pe.engagement_score,
+  COALESCE((
+    SELECT pm.url
+    FROM place_posts pp2
+    INNER JOIN posts po2 ON po2.id = pp2.post_id
+    LEFT JOIN LATERAL (
+      SELECT m.url
+      FROM post_media m
+      WHERE m.post_id = po2.id
+      ORDER BY m.sort_order ASC, m.id ASC
+      LIMIT 1
+    ) pm ON true
+    WHERE pp2.place_id = pe.id
+    ORDER BY (po2.like_count + po2.comment_count + po2.share_count + po2.bookmark_count) DESC, po2.id DESC
+    LIMIT 1
+  ), '') AS cover_url
+FROM place_eng pe
+WHERE (
+    $1::bigint IS NULL
+    OR (pe.engagement_score, pe.id) < ($1::bigint, $2::uuid)
+  )
+ORDER BY pe.engagement_score DESC, pe.id DESC
+LIMIT $3
+`
+
+type ListTopPlacesParams struct {
+	CursorEngagement pgtype.Int8 `json:"cursor_engagement"`
+	CursorID         pgtype.UUID `json:"cursor_id"`
+	ResultLimit      int32       `json:"result_limit"`
+}
+
+type ListTopPlacesRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	Name             string             `json:"name"`
+	Lat              float64            `json:"lat"`
+	Lng              float64            `json:"lng"`
+	Summary          string             `json:"summary"`
+	SummaryModel     string             `json:"summary_model"`
+	SummaryUpdatedAt pgtype.Timestamptz `json:"summary_updated_at"`
+	PostCount        int64              `json:"post_count"`
+	Embedding        []float64          `json:"embedding"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	EngagementScore  int64              `json:"engagement_score"`
+	CoverUrl         interface{}        `json:"cover_url"`
+}
+
+// Absolute engagement = sum of attached posts' (likes+comments+shares+bookmarks).
+// cover_url = first media of the highest-engagement attached post (optional).
+func (q *Queries) ListTopPlaces(ctx context.Context, arg ListTopPlacesParams) ([]ListTopPlacesRow, error) {
+	rows, err := q.db.Query(ctx, listTopPlaces, arg.CursorEngagement, arg.CursorID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTopPlacesRow{}
+	for rows.Next() {
+		var i ListTopPlacesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Lat,
+			&i.Lng,
+			&i.Summary,
+			&i.SummaryModel,
+			&i.SummaryUpdatedAt,
+			&i.PostCount,
+			&i.Embedding,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EngagementScore,
+			&i.CoverUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updatePlaceEmbedding = `-- name: UpdatePlaceEmbedding :one
 UPDATE places
 SET embedding = $1,

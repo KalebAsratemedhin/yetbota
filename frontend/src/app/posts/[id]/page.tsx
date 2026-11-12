@@ -2,7 +2,6 @@
 
 import { Suspense, use, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import AuthorPostFeed from "@/components/posts/AuthorPostFeed";
 import RelatedPostFeed from "@/components/posts/RelatedPostFeed";
@@ -67,21 +66,19 @@ export default function PostPage({
   const { id } = use(params);
 
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <Suspense
-            fallback={
-              <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
-                Loading…
-              </div>
-            }
-          >
-            <PostDetail postId={id} />
-          </Suspense>
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <Suspense
+          fallback={
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
+              Loading…
+            </div>
+          }
+        >
+          <PostDetail postId={id} />
+        </Suspense>
+      </div>
+    </main>
   );
 }

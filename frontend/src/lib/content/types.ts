@@ -87,6 +87,13 @@ export type PostsPage = {
   next_cursor?: string;
 };
 
+/** GET /feed page; phase marks home vs suggested continuation. */
+export type FeedPhase = "home" | "suggested";
+
+export type FeedPage = PostsPage & {
+  phase: FeedPhase;
+};
+
 export type RelatedPostsSource = "search" | "similar" | "mixed";
 
 export type RelatedPostsPage = {
@@ -211,6 +218,10 @@ export type Place = {
   summary_model?: string;
   summary_updated_at?: string;
   post_count: number;
+  /** Present on GET /places/top when backend provides a cover. */
+  cover_url?: string;
+  /** Aggregate engagement when returned by /places/top. */
+  engagement_score?: number;
   created_at: string;
   updated_at: string;
 };

@@ -16,6 +16,7 @@ import (
 
 type Endpoints struct {
 	List    endpoint.Endpoint
+	Top     endpoint.Endpoint
 	Get     endpoint.Endpoint
 	Posts   endpoint.Endpoint
 	Entries endpoint.Endpoint
@@ -23,29 +24,38 @@ type Endpoints struct {
 
 func Mount(mux *http.ServeMux, eps Endpoints, authn shared.TokenAuthenticator) {
 	opts := []kithttp.ServerOption{kithttp.ServerErrorEncoder(shared.EncodeError)}
-	auth := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
-		return shared.RequireAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
+	public := func(ep endpoint.Endpoint, dec kithttp.DecodeRequestFunc) http.Handler {
+		return shared.OptionalAuth(authn, kithttp.NewServer(ep, dec, shared.EncodeJSONResponse, opts...))
 	}
-	mux.Handle("GET /places", auth(eps.List, decodeListPlaces))
-	mux.Handle("GET /places/{id}", auth(eps.Get, decodePlaceID))
-	mux.Handle("GET /places/{id}/posts", auth(eps.Posts, decodePlacePosts))
-	mux.Handle("GET /places/{id}/entries", auth(eps.Entries, decodePlaceEntries))
+	mux.Handle("GET /places", public(eps.List, decodeListPlaces))
+	mux.Handle("GET /places/top", public(eps.Top, decodeTopPlaces))
+	mux.Handle("GET /places/{id}", public(eps.Get, decodePlaceID))
+	mux.Handle("GET /places/{id}/posts", public(eps.Posts, decodePlacePosts))
+	mux.Handle("GET /places/{id}/entries", public(eps.Entries, decodePlaceEntries))
 }
 
-func decodeListPlaces(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
+func decodeTopPlaces(ctx context.Context, r *http.Request) (interface{}, error) {
+	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
+	return svcendpoint.ListTopPlacesRequest{
+		Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}, nil
+}
+
+func decodeListPlaces(ctx context.Context, r *http.Request) (interface{}, error) {
 	limit, err := svcendpoint.ParseListLimit(r.URL.Query().Get("limit"))
 	if err != nil {
 		return nil, err
 	}
 	req := svcendpoint.ListPlacesRequest{
-		Principal: p,
-		Query:     r.URL.Query().Get("q"),
-		Limit:     limit,
-		Cursor:    r.URL.Query().Get("cursor"),
+		Query:  r.URL.Query().Get("q"),
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
 	}
 	latRaw, lngRaw := r.URL.Query().Get("lat"), r.URL.Query().Get("lng")
 	if latRaw != "" || lngRaw != "" {
@@ -71,22 +81,18 @@ func decodeListPlaces(ctx context.Context, r *http.Request) (interface{}, error)
 }
 
 func decodePlaceID(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.PlaceIDRequest{Principal: p, PlaceID: id}, nil
+	req := svcendpoint.PlaceIDRequest{PlaceID: id}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodePlacePosts(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -95,16 +101,16 @@ func decodePlacePosts(ctx context.Context, r *http.Request) (interface{}, error)
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.PlaceIDRequest{
-		Principal: p, PlaceID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
-	}, nil
+	req := svcendpoint.PlaceIDRequest{
+		PlaceID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func decodePlaceEntries(ctx context.Context, r *http.Request) (interface{}, error) {
-	p, err := shared.PrincipalFromCtx(ctx)
-	if err != nil {
-		return nil, err
-	}
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
 		return nil, err
@@ -113,10 +119,14 @@ func decodePlaceEntries(ctx context.Context, r *http.Request) (interface{}, erro
 	if err != nil {
 		return nil, err
 	}
-	return svcendpoint.PlaceIDRequest{
-		Principal: p, PlaceID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
+	req := svcendpoint.PlaceIDRequest{
+		PlaceID: id, Limit: limit, Cursor: r.URL.Query().Get("cursor"),
 		Category: r.URL.Query().Get("category"),
-	}, nil
+	}
+	if p, ok := shared.PrincipalFromCtxOptional(ctx); ok {
+		req.Principal = p
+	}
+	return req, nil
 }
 
 func parseID(raw string) (uuid.UUID, error) {

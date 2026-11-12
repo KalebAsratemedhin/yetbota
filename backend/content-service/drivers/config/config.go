@@ -47,15 +47,16 @@ type IdentityConfig struct {
 }
 
 type FeedConfig struct {
-	Gravity        float64 `yaml:"gravity"`
-	CommentWeight  float64 `yaml:"comment_weight"`
-	ShareWeight    float64 `yaml:"share_weight"`
-	BookmarkWeight float64 `yaml:"bookmark_weight"`
-	FollowBoost    float64 `yaml:"follow_boost"`
-	GeoD0Km        float64 `yaml:"geo_d0_km"`
-	NearbyRadiusKm float64 `yaml:"nearby_radius_km"`
-	CandidateLimit int     `yaml:"candidate_limit"`
-	LookbackDays   int     `yaml:"lookback_days"`
+	Gravity                 float64 `yaml:"gravity"`
+	CommentWeight           float64 `yaml:"comment_weight"`
+	ShareWeight             float64 `yaml:"share_weight"`
+	BookmarkWeight          float64 `yaml:"bookmark_weight"`
+	FollowBoost             float64 `yaml:"follow_boost"`
+	GeoD0Km                 float64 `yaml:"geo_d0_km"`
+	NearbyRadiusKm          float64 `yaml:"nearby_radius_km"`
+	CandidateLimit          int `yaml:"candidate_limit"`
+	LookbackDays            int `yaml:"lookback_days"`
+	SuggestedCandidateLimit int `yaml:"suggested_candidate_limit"`
 }
 
 type TrendingConfig struct {
@@ -253,6 +254,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Feed.LookbackDays <= 0 {
 		cfg.Feed.LookbackDays = 14
+	}
+	if cfg.Feed.SuggestedCandidateLimit <= 0 {
+		cfg.Feed.SuggestedCandidateLimit = 500
 	}
 	if cfg.Trending.LookbackDays <= 0 {
 		cfg.Trending.LookbackDays = 7

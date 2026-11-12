@@ -4,12 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Hash, MapPin, Search, Users } from "lucide-react";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import PlaceCard from "@/components/places/PlaceCard";
 import PostsGrid from "@/components/posts/PostsGrid";
 import UserAvatar from "@/components/shared/UserAvatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import {
   useLazySearchPostsQuery,
   useListPlacesQuery,
@@ -17,30 +17,34 @@ import {
 } from "@/lib/api/contentApi";
 import { useSearchUsersQuery } from "@/lib/api/socialApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
+import { useAppSelector } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 const MIN_QUERY = 2;
 
 type Tab = "people" | "directory" | "posts";
 
-function parseTab(raw: string | null): Tab {
+function parseTab(raw: string | null, signedIn: boolean): Tab {
   if (raw === "posts") return "posts";
   if (raw === "places" || raw === "directory") return "directory";
-  return "people";
+  if (raw === "people") return "people";
+  return signedIn ? "people" : "posts";
 }
 
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const accessToken = useAppSelector((s) => s.auth.accessToken);
+  const { isSignedIn, requireSignIn } = useRequireSignIn();
   const initialQ = searchParams.get("q") ?? "";
-  const initialTab = parseTab(searchParams.get("tab"));
+  const initialTab = parseTab(searchParams.get("tab"), Boolean(accessToken));
   const [query, setQuery] = useState(initialQ);
   const [tab, setTab] = useState<Tab>(initialTab);
   const debounced = useDebouncedValue(query.trim(), 300);
   const canSearch = debounced.length >= MIN_QUERY;
 
   const usersQ = useSearchUsersQuery(debounced, {
-    skip: !canSearch || tab !== "people",
+    skip: !canSearch || tab !== "people" || !isSignedIn,
   });
   const postsQ = useSearchPostsQuery(
     { q: debounced, limit: 20 },
@@ -55,14 +59,14 @@ function SearchContent() {
   useEffect(() => {
     const nextQ = query.trim();
     const currentQ = searchParams.get("q") ?? "";
-    const currentTab = parseTab(searchParams.get("tab"));
+    const currentTab = parseTab(searchParams.get("tab"), isSignedIn);
     if (nextQ === currentQ && tab === currentTab) return;
     const params = new URLSearchParams();
     if (nextQ) params.set("q", nextQ);
     if (tab !== "people") params.set("tab", tab);
     const qs = params.toString();
     router.replace(qs ? `/search?${qs}` : "/search", { scroll: false });
-  }, [query, tab, router, searchParams]);
+  }, [query, tab, router, searchParams, isSignedIn]);
 
   const users = usersQ.data?.users ?? [];
   const places = placesQ.data?.places ?? [];
@@ -102,7 +106,12 @@ function SearchContent() {
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                if (t.id === "people" && !requireSignIn("Sign in to search people")) {
+                  return;
+                }
+                setTab(t.id);
+              }}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors sm:text-sm",
                 tab === t.id
@@ -138,7 +147,11 @@ function SearchContent() {
               : "Results appear as you type."}
           </p>
         ) : tab === "people" ? (
-          usersQ.isFetching && !usersQ.data ? (
+          !isSignedIn ? (
+            <p className="text-center text-sm text-fg-faint">
+              Sign in to search people.
+            </p>
+          ) : usersQ.isFetching && !usersQ.data ? (
             <p className="text-center text-sm text-fg-faint">Searching people…</p>
           ) : usersQ.isError ? (
             <p className="text-center text-sm text-fg-muted">
@@ -208,21 +221,19 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <Suspense
-            fallback={
-              <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
-                Loading search…
-              </div>
-            }
-          >
-            <SearchContent />
-          </Suspense>
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <Suspense
+          fallback={
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
+              Loading search…
+            </div>
+          }
+        >
+          <SearchContent />
+        </Suspense>
+      </div>
+    </main>
   );
 }

@@ -12,6 +12,7 @@ import {
   useListCommentsQuery,
   useSetCommentReactionMutation,
 } from "@/lib/api/contentApi";
+import { useRequireSignIn } from "@/hooks/use-require-signin";
 import { useGetUserProfileQuery } from "@/lib/api/socialApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
 import { relativeTime } from "@/lib/content/helpers";
@@ -32,10 +33,12 @@ function CommentComposer({
   autoFocus?: boolean;
   compact?: boolean;
 }) {
+  const { requireSignIn } = useRequireSignIn();
   const [body, setBody] = useState("");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!requireSignIn("Sign in to comment")) return;
     const text = body.trim();
     if (!text) return;
     await onSubmit(text);
@@ -80,6 +83,7 @@ function CommentRow({
 }) {
   const { data: author } = useGetUserProfileQuery(comment.author_id);
   const viewerId = useAppSelector((s) => s.auth.userId);
+  const { requireSignIn } = useRequireSignIn();
   const isOwn = Boolean(viewerId && viewerId === comment.author_id);
   const [setReaction, { isLoading: reacting }] = useSetCommentReactionMutation();
   const [addComment, { isLoading: postingReply }] = useAddCommentMutation();
@@ -98,6 +102,7 @@ function CommentRow({
   const [loadingReplies, setLoadingReplies] = useState(false);
 
   async function onReact(next: Reaction) {
+    if (!requireSignIn("Sign in to react")) return;
     if (isOwn) return;
     const prev = reaction;
     const nextReaction = prev === next ? null : next;

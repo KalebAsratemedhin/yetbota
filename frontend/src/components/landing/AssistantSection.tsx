@@ -1,36 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { Send, Pencil, HelpCircle, Sparkles } from "lucide-react";
-import { useContent } from "@/lib/useContent";
+import { ArrowRight, Sparkles } from "lucide-react";
 import Reveal from "@/components/landing/Reveal";
+import SectionShell from "@/components/landing/SectionShell";
+import { useContent } from "@/lib/useContent";
 
 export default function AssistantSection() {
   const t = useContent();
 
   return (
-    <section className="bg-bg px-6 py-14">
-      <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2">
-        <Reveal direction="left" className="h-full">
-          <div className="h-full rounded-3xl border border-border-subtle bg-bg p-6 transition-all duration-300 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/20">
-                <Sparkles className="h-5 w-5 text-brand" />
-              </div>
-              <h3 className="text-lg font-semibold text-fg">{t.assistant.title}</h3>
+    <SectionShell className="min-h-[72vh] bg-bg py-28 sm:min-h-[78vh] sm:py-36">
+      <Reveal>
+        <div className="overflow-hidden rounded-[2rem] border border-border-subtle bg-gradient-to-br from-brand/15 via-surface to-bg p-6 sm:p-8 lg:p-10">
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div>
+              <p className="mb-4 inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.18em] text-brand uppercase">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                {t.assistant.label}
+              </p>
+              <h2 className="mb-4 text-3xl font-extrabold tracking-tight text-fg sm:text-4xl">
+                {t.assistant.title}
+              </h2>
+              <p className="mb-6 max-w-lg text-sm leading-relaxed text-fg-muted sm:text-base">
+                Ask about neighborhoods, routes, and what’s worth knowing — then jump into
+                places and posts that match.
+              </p>
+              <Link
+                href="/assistant"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-black transition-colors hover:bg-brand-dark"
+              >
+                Try the assistant
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </Link>
             </div>
 
-            <div className="mb-6 space-y-4">
-              <div className="max-w-xs rounded-2xl rounded-tl-sm bg-surface px-4 py-3">
-                <p className="text-sm text-fg">{t.assistant.exampleQuery}</p>
+            <div className="space-y-4">
+              <div className="max-w-md rounded-3xl rounded-tl-md bg-bg/85 px-5 py-4 shadow-sm">
+                <p className="text-base text-fg">{t.assistant.exampleQuery}</p>
               </div>
-
-              <div className="rounded-2xl rounded-tl-sm border border-brand/20 bg-brand/10 px-4 py-3">
-                <p className="mb-2 text-[10px] font-bold tracking-widest text-brand uppercase">
+              <div className="rounded-3xl rounded-tl-md border border-brand/25 bg-brand/10 px-5 py-5">
+                <p className="mb-3 text-[10px] font-bold tracking-widest text-brand uppercase">
                   {t.assistant.label}
                 </p>
                 <p
-                  className="text-sm leading-relaxed text-fg-muted"
+                  className="text-base leading-relaxed text-fg-muted"
                   dangerouslySetInnerHTML={{
                     __html: t.assistant.exampleResponse.replace(
                       /\*\*(.*?)\*\*/g,
@@ -40,77 +54,9 @@ export default function AssistantSection() {
                 />
               </div>
             </div>
-
-            <div className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-surface-2 px-4 py-3">
-              <input
-                type="text"
-                placeholder={t.assistant.placeholder}
-                className="flex-1 bg-transparent text-sm text-fg-muted outline-none placeholder:text-gray-600"
-                readOnly
-              />
-              <Link
-                href="/assistant"
-                aria-label={t.nav.aiAssistant}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-brand transition-colors hover:bg-brand-dark"
-              >
-                <Send className="h-4 w-4 text-black" />
-              </Link>
-            </div>
           </div>
-        </Reveal>
-
-        <Reveal direction="right" delay={150} className="h-full">
-          <div className="flex h-full flex-col rounded-3xl border border-border-subtle bg-bg p-6 transition-all duration-300 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/20">
-                <HelpCircle className="h-5 w-5 text-brand" />
-              </div>
-              <h3 className="text-lg font-semibold text-fg">{t.community.helpTitle}</h3>
-            </div>
-
-            <div className="mb-6 flex-1 rounded-2xl border border-border-subtle bg-surface-2 p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-700 text-sm font-bold text-white">
-                  A
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-fg">{t.community.user}</p>
-                  <p className="text-[10px] font-bold tracking-widest text-brand uppercase">
-                    {t.community.trendingQuestion}
-                  </p>
-                </div>
-              </div>
-              <p className="mb-4 text-base leading-relaxed text-fg">{t.community.exampleQuestion}</p>
-              <div className="flex items-center justify-between">
-                <div className="flex -space-x-2">
-                  {["B", "S"].map((initial) => (
-                    <div
-                      key={initial}
-                      className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-gray-600 text-[10px] font-bold text-fg"
-                    >
-                      {initial}
-                    </div>
-                  ))}
-                </div>
-                <Link
-                  href="/ask"
-                  className="inline-flex items-center rounded-full bg-brand px-5 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-brand-dark"
-                >
-                  <Pencil className="mr-1.5 h-3 w-3" />
-                  {t.community.helpOut}
-                </Link>
-              </div>
-            </div>
-
-            <Link
-              href="/qa"
-              className="text-center text-sm text-fg-muted transition-colors hover:text-fg"
-            >
-              {t.community.browseQuestions} →
-            </Link>
-          </div>
-        </Reveal>
-      </div>
-    </section>
+        </div>
+      </Reveal>
+    </SectionShell>
   );
 }

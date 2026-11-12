@@ -200,6 +200,15 @@
   animation: media-transport-idle 1.8s ease-in-out infinite;
 }
 
+@keyframes welcome-kenburns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
 @keyframes champions-scroll {
   from {
     transform: translateX(0);

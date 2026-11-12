@@ -51,7 +51,7 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-009 | A client shall refresh tokens using a valid refresh token. | |
 | FR-010 | An authenticated user shall be able to delete their account. | |
 | FR-011 | An authenticated user shall be able to update profile fields: full name, phone, address, bio. | Phone: if non-empty, length 7–15 |
-| FR-012 | An authenticated user shall be able to view another user’s public profile by id. | |
+| FR-012 | Any client (including unauthenticated) shall be able to view a user’s public profile by id. | Public fields only; invalid Bearer → 401; follow/search remain authenticated |
 | FR-013 | An authenticated user shall be able to follow another user. | Stored in SurrealDB graph |
 | FR-014 | An authenticated user shall be able to unfollow another user. | |
 | FR-015 | An authenticated user shall be able to list a user’s followers. | Hydrated public profiles; keyset pagination |
@@ -63,51 +63,55 @@ Posts and post media belong to **content-service** (shared Postgres). Media file
 | FR-021 | Post media shall be one of: (1) 1–10 images; (2) 1–10 images + one audio; (3) exactly one video. | No text-only; no audio-only; no video combined with images or audio |
 | FR-022 | Max images per post shall be 10; max video and audio duration shall default to 10 seconds and be configurable. | Config/env on content-service |
 | FR-022a | Post media uploads shall not exceed a configurable max byte size (default 10 MiB, Cloudinary Free plan). | Advertised on `/media/sign` as `max_file_size` / `max_upload_bytes` for client checks; enforced on create/update via optional `bytes` (not a Cloudinary signed upload param) |
-| FR-023 | An authenticated user shall be able to fetch a post by id. | Public post payload |
+| FR-023 | Any client (including unauthenticated) shall be able to fetch a post by id. | Public post payload; invalid Bearer → 401 |
 | FR-023a | An authenticated post author shall be able to edit their post (title, caption, lat/lng, hashtags, media). | Partial PATCH; author-only |
-| FR-024 | An authenticated user shall be able to list another user’s (or own) posts. | Publicly visible posts; keyset pagination |
+| FR-024 | Any client (including unauthenticated) shall be able to list another user’s (or own) posts. | Publicly visible posts; keyset pagination |
 | FR-025 | An authenticated user shall be able to like, dislike, or clear their reaction on a post. | At most one of like/dislike per user per post |
-| FR-026 | An authenticated user shall be able to add and list top-level comments on a post. | Keyset pagination; top-level only on list |
+| FR-026 | Any client may list top-level comments on a post; an authenticated user shall be able to add them. | Keyset pagination; top-level only on list |
 | FR-027 | An authenticated user shall be able to bookmark and unbookmark a post. | |
 | FR-028 | An authenticated user shall be able to list their own bookmarked posts. | Caller only; not visible to other users |
 | FR-029 | An authenticated user shall be able to share a post. | Returns share URL; increments share count |
-| FR-030 | An authenticated user shall be able to search posts by text and hashtags. | Full-text over title + caption + hashtags |
-| FR-031 | An authenticated user shall be able to list posts for a hashtag. | Keyset pagination |
-| FR-031a | An authenticated user shall be able to list posts related to a seed post: remaining search matches for an optional query, then similar posts from the Surreal cosine graph (FTS fallback if no edges). | Not the home feed; keyset pagination |
-| FR-032 | An authenticated user shall be able to reply to a top-level comment and list those replies. | One level only (no reply-to-reply); keyset pagination |
+| FR-030 | Any client (including unauthenticated) shall be able to search posts by text and hashtags. | Full-text over title + caption + hashtags |
+| FR-031 | Any client (including unauthenticated) shall be able to list posts for a hashtag. | Keyset pagination |
+| FR-031a | Any client (including unauthenticated) shall be able to list posts related to a seed post: remaining search matches for an optional query, then similar posts from the Surreal cosine graph (FTS fallback if no edges). | Not the home feed; keyset pagination |
+| FR-032 | Any client may list replies to a top-level comment; an authenticated user shall be able to reply. | One level only (no reply-to-reply); keyset pagination |
 | FR-033 | An authenticated user shall be able to like, dislike, or clear their reaction on a comment. | At most one of like/dislike per user per comment |
 | FR-034 | Each user shall have a reputation score derived from a ledger of reputation events. | Source of truth is the ledger; profile stores denormalized score |
 | FR-035 | Reputation shall be derived from a log of post interaction events (likes, comments, shares, bookmarks, …) with per-event time freshness, synced from content-service. | Self-engagement (except post create) shall not write scoring events |
 | FR-036 | A user’s reputation level shall be derived from their reputation score using configurable bands. | Level is display-only banding of score |
 | FR-037 | An authenticated user shall be able to unlock badges when badge criteria are met. | Badges are one-shot **reputation score milestones** (Newcomer → Explorer → Legendary explorer → Pathfinder); not activity counters |
 | FR-038 | An authenticated user shall be able to fetch their reputation score, level, and earned badges. | Also exposed on public profile (score, level, badges) |
-| FR-039 | An authenticated user shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; lat/lng optional (enables nearby + geo boost) |
-| FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below |
-| FR-041 | An authenticated user shall be able to list trending posts. | HN-style score without follow/geo; keyset pagination; default 7-day window |
-| FR-042 | An authenticated user shall be able to list trending creators. | Ranked by recent interaction events; top-N; hydrate profiles via identity |
+| FR-039 | Any client (including unauthenticated) shall be able to fetch a home feed that blends posts from followed users and nearby posts. | Keyset pagination; lat/lng optional; anonymous = empty follow graph (recent + suggested) |
+| FR-039a | When the home candidate pool is empty or exhausted under keyset pagination, the feed shall continue into a **suggested** phase (trending-style ranking), excluding posts already in the home pool. | Cursor encodes phase; response includes `phase` (`home` \| `suggested`); UI may label suggested |
+| FR-040 | Feed ranking shall order candidate posts by a configurable heuristic score (engagement, freshness, follow boost, geo proximity). | No ML in this slice; formula documented below; suggested phase omits follow/geo boosts |
+| FR-041 | Any client (including unauthenticated) shall be able to list trending posts. | HN-style score without follow/geo; keyset pagination; default 7-day window |
+| FR-041a | Any client (including unauthenticated) shall be able to list top posts by absolute engagement (likes+comments+shares+bookmarks), not age-decayed. | `GET /posts/top`; keyset pagination; distinct from FR-041 |
+| FR-042 | Any client (including unauthenticated) shall be able to list trending creators. | Ranked by recent interaction events; top-N; hydrate profiles via identity |
+| FR-042a | Any client (including unauthenticated) shall be able to list a reputation leaderboard of users ordered by denormalized reputation score. | `GET /users/leaderboard`; same public profile fields as FR-012 |
 | FR-043 | An authenticated user shall be able to ask a question with a body, optionally linked to a post and/or a place lat/lng. | Lat/lng optional; when set, both required — place location like posts, not GPS-only |
-| FR-044 | An authenticated user shall be able to list and fetch questions (optionally filter by `post_id`). | Keyset pagination |
+| FR-044 | Any client (including unauthenticated) shall be able to list and fetch questions (optionally filter by `post_id`). | Keyset pagination |
 | FR-045 | An authenticated user shall be able to upvote, downvote, or clear their vote on a question or answer. | At most one vote per user per item; authors cannot vote on their own question/answer |
 | FR-046 | The author of a question shall be able to mark it closed. | Closed questions reject new answers; votes still allowed |
 | FR-046a | The author of a question shall be able to edit it (body, post link, place). | Partial PATCH; closed questions cannot be edited |
-| FR-047 | An authenticated user shall be able to answer an open question and list answers. | Keyset pagination |
+| FR-047 | Any client may list answers; an authenticated user shall be able to answer an open question. | Keyset pagination |
 | FR-047a | The author of an answer shall be able to edit its body. | Partial PATCH |
 | FR-048 | A client shall be able to ask the AI chatbot a question and receive an answer grounded in ingested posts, comments, questions, and answers. | `POST /chat` on ai-service; RAG over `content_embedding`; Gemini by default; returns reply + sources; auth deferred |
 | FR-049 | The system shall maintain a **place directory**: one Place per real-world location, distinct from Related-posts similarity. | Owned by content-service (Postgres); AI attach/summary on ingest |
 | FR-050 | After a post is ingested, ai-service shall attach it to an existing Place or create a new Place when no same-place match passes the cutoff. | Hybrid geo + name + embedding; hard cutoff; ambiguous → do not merge (create or skip merge) |
 | FR-051 | A post shall belong to at most one Place (v1). | `place_posts` unique on `post_id` |
 | FR-052 | Place matching shall not use the Surreal `similar` edge graph; Related posts remain a separate feature. | Same-place identity vs soft content similarity |
-| FR-053 | An authenticated user shall be able to list and search Places (text and/or nearby lat/lng). | Keyset pagination |
-| FR-054 | An authenticated user shall be able to fetch a Place (name, location, AI summary, counts). | |
-| FR-055 | An authenticated user shall be able to list posts attached to a Place. | Keyset pagination |
+| FR-053 | Any client (including unauthenticated) shall be able to list and search Places (text and/or nearby lat/lng). | Keyset pagination |
+| FR-053a | Any client (including unauthenticated) shall be able to list top Places by summed attached-post engagement. | `GET /places/top`; optional `cover_url` + `engagement_score`; keyset pagination |
+| FR-054 | Any client (including unauthenticated) shall be able to fetch a Place (name, location, AI summary, counts). | |
+| FR-055 | Any client (including unauthenticated) shall be able to list posts attached to a Place. | Keyset pagination |
 | FR-056 | Each Place shall expose directory entries classified as `tip`, `change`, or `important`. | AI-extracted from posts in v1; schema allows future `source=user` |
-| FR-057 | An authenticated user shall be able to list Place entries, optionally filtered by category. | Keyset pagination |
+| FR-057 | Any client (including unauthenticated) shall be able to list Place entries, optionally filtered by category. | Keyset pagination |
 | FR-058 | When a post is attached (or Place membership/entries change), ai-service shall refresh the Place AI summary asynchronously (debounced). | Grounded in member posts + entries; no internal IDs in prose |
 | FR-059 | User-authored Place entries (`tip` / `change` / `important`) are deferred; the data model shall allow `source=user` later without a redesign. | No public write API in this slice |
 
 ## Feed ranking (non-ML)
 
-Candidates for a feed page come from two pools: **following** (authors the viewer follows) and **nearby** (posts within a configurable radius of the viewer). Pools are merged, de-duplicated, then sorted by score.
+**Home phase** candidates come from **following** (or global recent if the follow graph is empty) and optional **nearby**, within `lookback_days` (default 14). Pools are merged, de-duplicated, then sorted by score. When that set is empty or pagination runs out, the feed continues in a **suggested** phase: no age floor (any older post may appear), HN gravity without follow/geo, excluding home candidates. A candidate-pool size cap still limits how many posts are scored per request.
 
 Adopt a **Hacker News–style gravity** base (engagement decays with age), extended for YetBota:
 
@@ -390,9 +394,9 @@ Matching defaults (configurable): nearby radius ~100–150 m; embed min after ge
 ### UC-027 — Home feed
 
 - **Actor:** User
-- **Goal:** Browse posts from people they follow and from nearby places
-- **Main flow:** Client sends viewer location → content-service builds following + nearby candidate pools → ranks with the documented heuristic → returns a paginated feed.
-- **Related FRs:** FR-039, FR-040
+- **Goal:** Browse posts from people they follow and from nearby places, then keep scrolling into suggested discovery
+- **Main flow:** Client calls `GET /feed` (optional lat/lng) → content-service serves ranked **home** candidates → when exhausted/empty, cursor advances to **suggested** (trending-style) → response includes `phase` for optional UI labeling.
+- **Related FRs:** FR-039, FR-039a, FR-040
 
 ### UC-028 — Trending posts
 

@@ -7,7 +7,6 @@ import {
   Flame,
   Heart,
   MapPin,
-  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import {
 import UserAvatar from "@/components/shared/UserAvatar";
 import type { Post } from "@/lib/content/types";
 import { placeTitle } from "@/lib/content/helpers";
+import { useAppSelector } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 const RAIL_LIMIT = 5;
@@ -57,10 +57,7 @@ function CreatorsSkeleton({ count = 5 }: { count?: number }) {
       {Array.from({ length: count }, (_, i) => (
         <li key={i} className="flex items-center gap-2.5">
           <SkeletonPulse className="h-9 w-9 !rounded-full" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <SkeletonPulse className="h-3 w-24" />
-            <SkeletonPulse className="h-2.5 w-28" />
-          </div>
+          <SkeletonPulse className="h-3 w-28" />
         </li>
       ))}
     </ul>
@@ -69,15 +66,11 @@ function CreatorsSkeleton({ count = 5 }: { count?: number }) {
 
 function PostsSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <ul className="space-y-3" aria-hidden>
+    <ul className="space-y-2.5" aria-hidden>
       {Array.from({ length: count }, (_, i) => (
-        <li key={i} className="flex gap-3">
-          <SkeletonPulse className="h-16 w-16 shrink-0 rounded-lg" />
-          <div className="min-w-0 flex-1 space-y-2 pt-1">
-            <SkeletonPulse className="h-3 w-full" />
-            <SkeletonPulse className="h-3 w-2/3" />
-            <SkeletonPulse className="h-2.5 w-12" />
-          </div>
+        <li key={i} className="flex items-center gap-2.5">
+          <SkeletonPulse className="h-10 w-10 shrink-0 rounded-lg" />
+          <SkeletonPulse className="h-3 flex-1" />
         </li>
       ))}
     </ul>
@@ -93,26 +86,25 @@ function TrendingCreatorRow({
   dense?: boolean;
   onNavigate?: () => void;
 }) {
+  const accessToken = useAppSelector((s) => s.auth.accessToken);
   const { data: user, isLoading } = useGetUserProfileQuery(userId);
   const { data: followers } = useListFollowersQuery(
     { id: userId, limit: 1 },
-    { skip: !userId }
+    { skip: !userId || !accessToken }
   );
 
   if (isLoading && !user) {
     return (
       <div className={cn("flex items-center gap-2.5", dense ? "py-1" : "px-3 py-2.5")}>
         <SkeletonPulse className={cn("!rounded-full", dense ? "h-9 w-9" : "h-10 w-10")} />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <SkeletonPulse className="h-3 w-24" />
-          <SkeletonPulse className="h-2.5 w-28" />
-        </div>
+        <SkeletonPulse className="h-3 w-28" />
       </div>
     );
   }
 
   const level = user?.reputation_level?.trim() || "Explorer";
   const followerTotal = followers?.total;
+  const username = user?.username ?? "…";
 
   return (
     <Link
@@ -127,7 +119,7 @@ function TrendingCreatorRow({
         user={
           user ?? {
             full_name: "",
-            username: "…",
+            username,
             avatar_url: "",
           }
         }
@@ -136,7 +128,7 @@ function TrendingCreatorRow({
       />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-fg group-hover:text-brand">
-          {user?.full_name.trim() || user?.username || "Creator"}
+          {user?.full_name.trim() || username}
         </p>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-fg-faint">
           <span className="shrink-0 rounded bg-brand/15 px-1.5 py-0.5 font-bold tracking-wide text-brand uppercase">
@@ -246,59 +238,8 @@ function MoreButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function TrendingEmpty({
-  kind,
-}: {
-  kind: "creators" | "places";
-}) {
-  const isCreators = kind === "creators";
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-dashed border-border-subtle/90 bg-gradient-to-br from-brand/[0.07] via-transparent to-overlay px-3.5 py-4">
-      {isCreators ? (
-        <div className="mb-2.5 flex items-center" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-surface text-fg-faint",
-                i > 0 && "-ml-2"
-              )}
-            >
-              <Users className="h-3 w-3 opacity-70" />
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="mb-2.5 grid grid-cols-3 gap-1" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="flex aspect-square items-center justify-center rounded-md border border-border-subtle/80 bg-surface/80"
-            >
-              <MapPin
-                className={cn(
-                  "h-3 w-3",
-                  i === 1 ? "text-brand" : "text-fg-faint/70"
-                )}
-              />
-            </span>
-          ))}
-        </div>
-      )}
-
-      <p className="text-[12px] text-fg-muted">
-        {isCreators ? "No creators trending yet." : "No places trending yet."}
-      </p>
-      <Link
-        href="/compose"
-        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-brand hover:opacity-80"
-      >
-        <Sparkles className="h-3 w-3" aria-hidden />
-        Create a post
-      </Link>
-    </div>
-  );
+function TrendingEmpty() {
+  return <p className="py-1 text-[12px] text-fg-faint">None yet</p>;
 }
 
 function TrendingModalShell({
@@ -388,7 +329,7 @@ function TrendingCreatorsModal({
         </div>
       ) : creators.length === 0 ? (
         <div className="px-2 py-3">
-          <TrendingEmpty kind="creators" />
+          <TrendingEmpty />
         </div>
       ) : (
         <ul className="space-y-0.5">
@@ -479,7 +420,7 @@ function TrendingPostsModal({
         </div>
       ) : posts.length === 0 ? (
         <div className="px-2 py-3">
-          <TrendingEmpty kind="places" />
+          <TrendingEmpty />
         </div>
       ) : (
         <>
@@ -541,20 +482,17 @@ export default function TrendingRail({ className }: { className?: string }) {
         <section>
           <SectionHeading icon={Users}>Trending creators</SectionHeading>
           {creatorsQ.isError ? (
-            <div className="rounded-2xl border border-border-subtle/80 bg-overlay/40 px-3.5 py-4">
-              <p className="text-[12px] text-fg-muted">Couldn’t load</p>
-              <button
-                type="button"
-                onClick={() => void creatorsQ.refetch()}
-                className="mt-1.5 text-[11px] font-semibold text-brand hover:opacity-80"
-              >
-                Retry
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void creatorsQ.refetch()}
+              className="py-1 text-[12px] font-semibold text-brand hover:opacity-80"
+            >
+              Retry
+            </button>
           ) : creatorsQ.isLoading ? (
             <CreatorsSkeleton />
           ) : creators.length === 0 ? (
-            <TrendingEmpty kind="creators" />
+            <TrendingEmpty />
           ) : (
             <>
               <ul className="space-y-0.5">
@@ -574,20 +512,17 @@ export default function TrendingRail({ className }: { className?: string }) {
         <section>
           <SectionHeading icon={Flame}>Trending places</SectionHeading>
           {postsQ.isError ? (
-            <div className="rounded-2xl border border-border-subtle/80 bg-overlay/40 px-3.5 py-4">
-              <p className="text-[12px] text-fg-muted">Couldn’t load</p>
-              <button
-                type="button"
-                onClick={() => void postsQ.refetch()}
-                className="mt-1.5 text-[11px] font-semibold text-brand hover:opacity-80"
-              >
-                Retry
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void postsQ.refetch()}
+              className="py-1 text-[12px] font-semibold text-brand hover:opacity-80"
+            >
+              Retry
+            </button>
           ) : postsQ.isLoading ? (
             <PostsSkeleton />
           ) : posts.length === 0 ? (
-            <TrendingEmpty kind="places" />
+            <TrendingEmpty />
           ) : (
             <>
               <ul className="space-y-1">
@@ -602,6 +537,19 @@ export default function TrendingRail({ className }: { className?: string }) {
               ) : null}
             </>
           )}
+        </section>
+
+        <section className="border-t border-border-subtle pt-5">
+          <p className="text-[12px] leading-relaxed text-fg-muted">
+            New to Yet Bota?
+          </p>
+          <Link
+            href="/welcome"
+            className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-brand hover:opacity-80"
+          >
+            About the product
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
         </section>
       </aside>
 

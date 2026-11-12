@@ -9,6 +9,7 @@ import type {
   CreateQuestionRequest,
   MediaKind,
   Place,
+  FeedPage,
   PlaceEntriesPage,
   PlaceEntryCategory,
   PlacesPage,
@@ -140,7 +141,7 @@ export const contentApi = createApi({
       }),
       providesTags: (_r, _e, { id }) => [{ type: "RelatedPosts", id }],
     }),
-    getFeed: build.query<PostsPage, FeedArgs | void>({
+    getFeed: build.query<FeedPage, FeedArgs | void>({
       query: (args) => {
         const lat = args?.lat;
         const lng = args?.lng;
@@ -178,6 +179,28 @@ export const contentApi = createApi({
         },
       }),
       providesTags: ["TrendingCreators"],
+    }),
+    /** Absolute engagement ranking (not age-decayed trending). Public. */
+    listTopPosts: build.query<PostsPage, PageArgs | void>({
+      query: (args) => ({
+        url: "/posts/top",
+        params: {
+          limit: args?.limit ?? 12,
+          ...(args?.cursor ? { cursor: args.cursor } : {}),
+        },
+      }),
+      providesTags: ["TrendingPosts"],
+    }),
+    /** Places ranked by community engagement. Public. */
+    listTopPlaces: build.query<PlacesPage, PageArgs | void>({
+      query: (args) => ({
+        url: "/places/top",
+        params: {
+          limit: args?.limit ?? 8,
+          ...(args?.cursor ? { cursor: args.cursor } : {}),
+        },
+      }),
+      providesTags: ["Places"],
     }),
     searchPosts: build.query<PostsPage, SearchPostsArgs>({
       query: ({ q, limit = 20, cursor }) => ({
@@ -498,6 +521,8 @@ export const {
   useListTrendingPostsQuery,
   useLazyListTrendingPostsQuery,
   useListTrendingCreatorsQuery,
+  useListTopPostsQuery,
+  useListTopPlacesQuery,
   useSearchPostsQuery,
   useLazySearchPostsQuery,
   useListUserPostsQuery,

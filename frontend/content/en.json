@@ -4,6 +4,7 @@
     "map": "Map",
     "aiAssistant": "AI Assistant",
     "community": "Community",
+    "about": "About",
     "signIn": "Sign In",
     "joinCommunity": "Join Community",
     "profile": "Profile",
@@ -12,15 +13,15 @@
   },
   "hero": {
     "badge": "Community-Powered Discovery",
-    "title": "Local Knowledge",
-    "titleHighlight": "Maps Don't Have",
+    "title": "Local knowledge",
+    "titleHighlight": "maps don't have",
     "subtitle": "What's open, what's changed, what's worth knowing — from people on the ground.",
-    "ctaExplore": "Explore Local Gems",
-    "ctaContribute": "Contribute a Spot"
+    "ctaExplore": "Open the feed",
+    "ctaContribute": "Join the community"
   },
   "discovery": {
-    "title": "Trending in Ethiopia",
-    "subtitle": "Discover the most sought-after spots this week",
+    "title": "Highest engagement drops",
+    "subtitle": "Ranked by likes, comments, shares, and bookmarks — the community’s strongest signals.",
     "categories": {
       "coffeeHouses": "Popular Coffee Houses",
       "hiddenMarkets": "Hidden Markets",
@@ -30,7 +31,7 @@
       "curated": "Curated",
       "communityContributed": "Community Contributed"
     },
-    "viewFeed": "Discover",
+    "viewFeed": "View directory",
     "away": "km away"
   },
   "places": {
@@ -92,36 +93,18 @@
     ]
   },
   "accuracy": {
-    "badge": "Precision Mapping",
-    "title": "Crowdsourced Accuracy",
-    "description": "Every spot on Yet Bota is verified by the community. We use a multi-step verification process where locals confirm locations, upload photos, and update business hours in real-time.",
-    "stats": {
-      "verifiedSpots": "50k+",
-      "verifiedSpotsLabel": "Verified Spots",
-      "communityLed": "100%",
-      "communityLedLabel": "Community Led"
-    },
-    "verifiedBy": "Verified by 12 Locals",
-    "lastChecked": "Last checked: 2 hours ago"
+    "badge": "Ground truth",
+    "title": "Built from real visits",
+    "description": "Yet Bota is updated by people on the ground — with photos, coordinates, and notes that stay useful as streets and shops change."
   },
   "gamification": {
-    "badge": "Contribute & Win",
-    "title": "Gamified Community",
-    "description": "Every contribution counts. Earn points, unlock exclusive badges, and climb the leaderboard as you help map Ethiopia. From 'Newbie Explorer' to 'Legendary Guide', your impact is recognized.",
-    "badges": [
-      "Top Mapper Badge",
-      "Expert Reviewer",
-      "Photo Legend"
-    ],
-    "levels": {
-      "current": "Gold Level",
-      "currentXp": "2,500 XP",
-      "next": "Next: Platinum"
-    }
+    "badge": "Reputation",
+    "title": "Climb with real contributions",
+    "description": "Reputation comes from community engagement on your posts. Levels and milestone badges unlock as your score grows — from Explorer to Pathfinder."
   },
   "principles": {
     "title": "Core Principles",
-    "subtitle": "Why thousands of Ethiopians trust Yet Bota every day",
+    "subtitle": "Why locals trust Yet Bota for what’s actually happening nearby",
     "items": [
       {
         "id": "people",
@@ -136,30 +119,8 @@
     ]
   },
   "champions": {
-    "title": "Community Champions",
-    "subtitle": "The heroes mapping Ethiopia's digital future",
-    "users": [
-      {
-        "name": "Dawit Kebede",
-        "role": "Top Mapper",
-        "points": "1,250 pts"
-      },
-      {
-        "name": "Sara M.",
-        "role": "Expert Guide",
-        "points": "980 pts"
-      },
-      {
-        "name": "Elias Yared",
-        "role": "Lens Master",
-        "points": "845 pts"
-      },
-      {
-        "name": "Lulut A.",
-        "role": "QA Pro",
-        "points": "720 pts"
-      }
-    ]
+    "title": "Community champions",
+    "subtitle": "Top reputation scores — the people whose contributions the community values most."
   },
   "footer": {
     "tagline": "Community-contributed location discovery platform aligned with Ethiopia's Digital 2030 strategy.",
@@ -169,17 +130,17 @@
       "discovery": {
         "title": "Discovery",
         "links": [
-          "Local Gems Map",
-          "Neighborhood Directory",
-          "Community Feed"
+          { "label": "Home feed", "href": "/" },
+          { "label": "Places directory", "href": "/places" },
+          { "label": "Search", "href": "/search" }
         ]
       },
       "community": {
         "title": "Community",
         "links": [
-          "Guidelines",
-          "Champions",
-          "Local Q&A"
+          { "label": "About Yet Bota", "href": "/welcome" },
+          { "label": "Q&A", "href": "/qa" },
+          { "label": "Join", "href": "/signup" }
         ]
       }
     }

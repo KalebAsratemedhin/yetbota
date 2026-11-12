@@ -1325,6 +1325,60 @@ func (q *Queries) ListTopLevelCommentsByPost(ctx context.Context, arg ListTopLev
 	return items, nil
 }
 
+const listTopPosts = `-- name: ListTopPosts :many
+SELECT id, author_id, title, caption, lat, lng, media_mode, like_count, dislike_count, comment_count, share_count, bookmark_count, created_at FROM posts
+WHERE (
+    $1::bigint IS NULL
+    OR (
+      (like_count + comment_count + share_count + bookmark_count, id)
+      < ($1::bigint, $2::uuid)
+    )
+  )
+ORDER BY (like_count + comment_count + share_count + bookmark_count) DESC, id DESC
+LIMIT $3
+`
+
+type ListTopPostsParams struct {
+	CursorEngagement pgtype.Int8 `json:"cursor_engagement"`
+	CursorID         pgtype.UUID `json:"cursor_id"`
+	ResultLimit      int32       `json:"result_limit"`
+}
+
+// Absolute engagement (likes+comments+shares+bookmarks), not age-decayed trending.
+func (q *Queries) ListTopPosts(ctx context.Context, arg ListTopPostsParams) ([]Post, error) {
+	rows, err := q.db.Query(ctx, listTopPosts, arg.CursorEngagement, arg.CursorID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Post{}
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Title,
+			&i.Caption,
+			&i.Lat,
+			&i.Lng,
+			&i.MediaMode,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CommentCount,
+			&i.ShareCount,
+			&i.BookmarkCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeBookmark = `-- name: RemoveBookmark :execrows
 DELETE FROM post_bookmarks WHERE user_id = $1 AND post_id = $2
 `

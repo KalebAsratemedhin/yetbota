@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { HelpCircle, MessageSquare, Plus } from "lucide-react";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import UserAvatar from "@/components/shared/UserAvatar";
 import {
@@ -184,13 +183,11 @@ function QaList() {
 
 export default function QaPage() {
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <QaList />
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <QaList />
+      </div>
+    </main>
   );
 }

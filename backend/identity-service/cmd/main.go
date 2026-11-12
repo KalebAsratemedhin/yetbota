@@ -116,12 +116,13 @@ func main() {
 		DeleteAccount:  endpoint.MakeDeleteAccountEndpoint(authSvc),
 	}
 	userEps := usershttp.Endpoints{
-		GetProfile: endpoint.MakeGetPublicProfileEndpoint(socialSvc),
-		Search:     endpoint.MakeSearchUsersEndpoint(socialSvc),
-		Follow:     endpoint.MakeFollowEndpoint(socialSvc),
-		Unfollow:   endpoint.MakeUnfollowEndpoint(socialSvc),
-		Followers:  endpoint.MakeFollowersEndpoint(socialSvc),
-		Following:  endpoint.MakeFollowingEndpoint(socialSvc),
+		GetProfile:  endpoint.MakeGetPublicProfileEndpoint(socialSvc),
+		Leaderboard: endpoint.MakeLeaderboardEndpoint(socialSvc),
+		Search:      endpoint.MakeSearchUsersEndpoint(socialSvc),
+		Follow:      endpoint.MakeFollowEndpoint(socialSvc),
+		Unfollow:    endpoint.MakeUnfollowEndpoint(socialSvc),
+		Followers:   endpoint.MakeFollowersEndpoint(socialSvc),
+		Following:   endpoint.MakeFollowingEndpoint(socialSvc),
 	}
 
 	router := httptransport.NewRouter(

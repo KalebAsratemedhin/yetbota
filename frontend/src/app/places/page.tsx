@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LocateFixed, MapPin, Search } from "lucide-react";
 import { toast } from "sonner";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { Navbar } from "@/components/landing";
 import PlaceCard from "@/components/places/PlaceCard";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -206,19 +205,17 @@ function PlacesBrowse() {
 
 export default function PlacesPage() {
   return (
-    <RequireAuth>
-      <main className="min-h-screen overflow-x-clip bg-bg text-fg">
-        <Navbar />
-        <div className="pt-20">
-          <Suspense
-            fallback={
-              <p className="py-20 text-center text-sm text-fg-faint">Loading…</p>
-            }
-          >
-            <PlacesBrowse />
-          </Suspense>
-        </div>
-      </main>
-    </RequireAuth>
+    <main className="min-h-screen overflow-x-clip bg-bg text-fg">
+      <Navbar />
+      <div className="pt-20">
+        <Suspense
+          fallback={
+            <p className="py-20 text-center text-sm text-fg-faint">Loading…</p>
+          }
+        >
+          <PlacesBrowse />
+        </Suspense>
+      </div>
+    </main>
   );
 }

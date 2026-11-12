@@ -120,8 +120,9 @@ func main() {
 			FollowBoost:      cfg.Feed.FollowBoost,
 			GeoD0Km:          cfg.Feed.GeoD0Km,
 			NearbyRadiusKm:   cfg.Feed.NearbyRadiusKm,
-			CandidateLimit:   cfg.Feed.CandidateLimit,
-			LookbackDays:     cfg.Feed.LookbackDays,
+			CandidateLimit:          cfg.Feed.CandidateLimit,
+			LookbackDays:            cfg.Feed.LookbackDays,
+			SuggestedCandidateLimit: cfg.Feed.SuggestedCandidateLimit,
 		},
 		postuc.TrendingConfig{
 			LookbackDays:      cfg.Trending.LookbackDays,
@@ -170,6 +171,7 @@ func main() {
 		Feed:               endpoint.MakeFeedEndpoint(svc),
 		Related:            endpoint.MakeRelatedEndpoint(svc),
 		TrendingPosts:      endpoint.MakeTrendingPostsEndpoint(svc),
+		TopPosts:           endpoint.MakeTopPostsEndpoint(svc),
 		TrendingCreators:   endpoint.MakeTrendingCreatorsEndpoint(svc),
 	}
 
@@ -191,6 +193,7 @@ func main() {
 	placeSvc := placeuc.NewService(placeStore, postStore, cfg.Media.DefaultPageSize, cfg.Media.MaxPageSize)
 	placesEps := placeshttp.Endpoints{
 		List:    endpoint.MakeListPlacesEndpoint(placeSvc),
+		Top:     endpoint.MakeListTopPlacesEndpoint(placeSvc),
 		Get:     endpoint.MakeGetPlaceEndpoint(placeSvc),
 		Posts:   endpoint.MakeListPlacePostsEndpoint(placeSvc),
 		Entries: endpoint.MakeListPlaceEntriesEndpoint(placeSvc),

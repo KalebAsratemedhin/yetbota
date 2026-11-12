@@ -35,6 +35,7 @@ export default function Navbar() {
     { id: "explore", label: t.nav.explore, href: "/places" },
     { id: "assistant", label: t.nav.aiAssistant, href: "/assistant" },
     { id: "community", label: t.nav.community, href: "/qa" },
+    { id: "about", label: t.nav.about, href: "/welcome" },
   ];
 
   const avatarUser = me ?? {
@@ -120,12 +121,20 @@ export default function Navbar() {
               </>
             ) : (
               <>
+                <Link
+                  href="/search"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-subtle bg-overlay text-fg-muted transition-colors hover:bg-overlay-strong hover:text-fg"
+                  title="Search"
+                  aria-label="Search"
+                >
+                  <Search className="h-4 w-4" />
+                </Link>
                 <Link href="/signin" className="text-sm text-fg-muted transition-colors hover:text-fg">
                   {t.nav.signIn}
                 </Link>
                 <Link
                   href="/signup"
-                  className="inline-flex h-8 items-center rounded-full bg-brand px-5 text-sm font-semibold text-black transition-colors hover:bg-brand-dark"
+                  className="inline-flex h-8 items-center rounded-full bg-brand px-5 text-sm font-semibold text-black hover:bg-brand-dark"
                 >
                   {t.nav.joinCommunity}
                 </Link>
@@ -134,15 +143,13 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2 lg:hidden">
-            {isSignedIn && (
-              <Link
-                href="/search"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-fg-muted transition-colors hover:border-fg-muted hover:text-fg"
-                aria-label="Search people"
-              >
-                <Search className="h-4 w-4" />
-              </Link>
-            )}
+            <Link
+              href="/search"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle text-fg-muted transition-colors hover:border-fg-muted hover:text-fg"
+              aria-label="Search"
+            >
+              <Search className="h-4 w-4" />
+            </Link>
             {!isSignedIn && (
               <Link
                 href="/signin"

@@ -81,6 +81,23 @@ type PlacePage struct {
 	NextCursor *PageCursor
 }
 
+// RankedPlace is a place with absolute engagement for /places/top.
+type RankedPlace struct {
+	Place
+	EngagementScore int64
+	CoverURL        string
+}
+
+type EngagementCursor struct {
+	Engagement int64
+	ID         uuid.UUID
+}
+
+type RankedPlacePage struct {
+	Places     []RankedPlace
+	NextCursor *EngagementCursor
+}
+
 type EntryPage struct {
 	Entries    []Entry
 	NextCursor *PageCursor
@@ -131,6 +148,7 @@ type Repository interface {
 	Get(ctx context.Context, id uuid.UUID) (Place, error)
 	GetByPostID(ctx context.Context, postID uuid.UUID) (Place, error)
 	List(ctx context.Context, p ListParams) (PlacePage, error)
+	ListTopByEngagement(ctx context.Context, cursor *EngagementCursor, limit int) (RankedPlacePage, error)
 	ListNearby(ctx context.Context, p NearbyParams) ([]Place, error)
 	AttachPost(ctx context.Context, in AttachInput) (Place, error)
 	CreateAndAttach(ctx context.Context, in CreateAndAttachInput) (Place, error)

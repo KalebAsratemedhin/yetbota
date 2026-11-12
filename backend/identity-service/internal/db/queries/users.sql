@@ -48,6 +48,12 @@ LIMIT sqlc.arg(result_limit);
 SELECT * FROM users
 WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
+-- name: ListLeaderboard :many
+-- Public reputation ranking (denormalized score on users).
+SELECT * FROM users
+ORDER BY reputation_score DESC, id DESC
+LIMIT sqlc.arg(result_limit);
+
 -- name: DeleteUser :exec
 DELETE FROM users
 WHERE id = $1;

@@ -230,6 +230,19 @@ WHERE created_at >= sqlc.arg(since)::timestamptz
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(result_limit);
 
+-- name: ListTopPosts :many
+-- Absolute engagement (likes+comments+shares+bookmarks), not age-decayed trending.
+SELECT * FROM posts
+WHERE (
+    sqlc.narg(cursor_engagement)::bigint IS NULL
+    OR (
+      (like_count + comment_count + share_count + bookmark_count, id)
+      < (sqlc.narg(cursor_engagement)::bigint, sqlc.narg(cursor_id)::uuid)
+    )
+  )
+ORDER BY (like_count + comment_count + share_count + bookmark_count) DESC, id DESC
+LIMIT sqlc.arg(result_limit);
+
 -- name: ListPostsByIDs :many
 SELECT * FROM posts
 WHERE id = ANY(sqlc.arg(ids)::uuid[]);

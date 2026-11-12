@@ -37,6 +37,7 @@ type Repository interface {
 	UpdateProfile(ctx context.Context, id uuid.UUID, patch ProfileUpdate) (User, error)
 	UpdateAvatar(ctx context.Context, id uuid.UUID, avatarURL, publicID string) (User, error)
 	Search(ctx context.Context, query string, excludeID uuid.UUID, limit int32) ([]User, error)
+	ListByReputation(ctx context.Context, limit int32) ([]User, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 

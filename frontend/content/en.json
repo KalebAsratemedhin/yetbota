@@ -131,7 +131,7 @@
         "title": "Discovery",
         "links": [
           { "label": "Home feed", "href": "/" },
-          { "label": "Places directory", "href": "/places" },
+          { "label": "Places directory", "href": "/?tab=directory" },
           { "label": "Search", "href": "/search" }
         ]
       },

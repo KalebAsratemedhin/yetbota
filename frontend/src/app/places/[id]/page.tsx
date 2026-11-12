@@ -19,7 +19,7 @@ import {
   useListPlacePostsQuery,
 } from "@/lib/api/contentApi";
 import { getApiErrorMessage } from "@/lib/auth/errors";
-import { formatCoord, relativeTime } from "@/lib/content/helpers";
+import { relativeTime } from "@/lib/content/helpers";
 import type { PlaceEntry, PlaceEntryCategory } from "@/lib/content/types";
 import { cn } from "@/lib/utils";
 
@@ -155,7 +155,7 @@ function PlaceDetail({ placeId }: { placeId: string }) {
           {getApiErrorMessage(placeQ.error) || "Place not found."}
         </p>
         <Link
-          href="/places"
+          href="/?tab=directory"
           className="mt-3 inline-block text-sm font-semibold text-brand hover:underline"
         >
           Back to places
@@ -170,7 +170,7 @@ function PlaceDetail({ placeId }: { placeId: string }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pt-8 pb-16 sm:px-6 sm:pt-10">
       <Link
-        href="/places"
+        href="/?tab=directory"
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -190,10 +190,11 @@ function PlaceDetail({ placeId }: { placeId: string }) {
           href={`https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=17/${place.lat}/${place.lng}`}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+          className="mt-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-brand hover:bg-brand/10"
+          aria-label="Open on map"
+          title="Open map"
         >
-          <MapPin className="h-4 w-4 text-brand" />
-          {formatCoord(place.lat, place.lng)}
+          <MapPin className="h-4 w-4" />
         </a>
 
         <section className="mt-5 border-t border-border-subtle pt-5">

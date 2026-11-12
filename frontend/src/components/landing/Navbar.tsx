@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { LogOut, Menu, Plus, Search, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { useContent } from "@/lib/useContent";
@@ -15,14 +15,34 @@ import UserAvatar from "@/components/shared/UserAvatar";
 import { APP_SHELL_CLASS } from "@/lib/layout";
 import { cn } from "@/lib/utils";
 
-function navLinkActive(pathname: string, href: string): boolean {
+function navLinkActive(
+  pathname: string,
+  href: string,
+  searchParams: URLSearchParams
+): boolean {
+  if (href.startsWith("/?tab=directory")) {
+    return (
+      (pathname === "/" && searchParams.get("tab") === "directory") ||
+      pathname === "/places" ||
+      pathname.startsWith("/places/")
+    );
+  }
   if (pathname === href) return true;
   return pathname.startsWith(`${href}/`);
 }
 
 export default function Navbar() {
+  return (
+    <Suspense fallback={<header className="fixed top-0 right-0 left-0 z-50 h-20 border-b border-border-subtle bg-bg/95" />}>
+      <NavbarInner />
+    </Suspense>
+  );
+}
+
+function NavbarInner() {
   const t = useContent();
   const pathname = usePathname() ?? "";
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const hydrated = useHydrated();
   const accessToken = useAppSelector((s) => s.auth.accessToken);
@@ -32,7 +52,7 @@ export default function Navbar() {
   const { data: me } = useMeQuery(undefined, { skip: !isSignedIn });
 
   const navLinks = [
-    { id: "explore", label: t.nav.explore, href: "/places" },
+    { id: "explore", label: t.nav.explore, href: "/?tab=directory" },
     { id: "assistant", label: t.nav.aiAssistant, href: "/assistant" },
     { id: "community", label: t.nav.community, href: "/qa" },
     { id: "about", label: t.nav.about, href: "/welcome" },
@@ -76,7 +96,7 @@ export default function Navbar() {
               <HeaderNavLink
                 key={link.id}
                 href={link.href}
-                active={navLinkActive(pathname, link.href)}
+                active={navLinkActive(pathname, link.href, searchParams)}
               >
                 {link.label}
               </HeaderNavLink>
@@ -178,7 +198,7 @@ export default function Navbar() {
         <div className="border-t border-border-subtle bg-surface px-4 pt-3 pb-5 lg:hidden">
           <nav className="mb-3 flex flex-col gap-1">
             {navLinks.map((link) => {
-              const active = navLinkActive(pathname, link.href);
+              const active = navLinkActive(pathname, link.href, searchParams);
               return (
                 <Link
                   key={link.id}

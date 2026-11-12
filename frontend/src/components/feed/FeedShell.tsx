@@ -11,9 +11,12 @@ import { cn } from "@/lib/utils";
 export default function FeedShell({
   children,
   className,
+  railTop,
 }: {
   children: ReactNode;
   className?: string;
+  /** Rendered at the top of the trending sidebar (home explore tabs). */
+  railTop?: ReactNode;
 }) {
   return (
     <div
@@ -24,7 +27,7 @@ export default function FeedShell({
       )}
     >
       <div className="sticky top-24 hidden w-60 shrink-0 self-start xl:block">
-        <TrendingRail />
+        <TrendingRail top={railTop} />
       </div>
       <div className="min-w-0 flex-1">{children}</div>
     </div>

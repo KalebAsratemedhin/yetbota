@@ -456,7 +456,14 @@ const railScrollClass =
   "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-fg/15 " +
   "hover:[&::-webkit-scrollbar-thumb]:bg-fg/28";
 
-export default function TrendingRail({ className }: { className?: string }) {
+export default function TrendingRail({
+  className,
+  top,
+}: {
+  className?: string;
+  /** Optional control rendered above trending sections (e.g. explore tabs). */
+  top?: ReactNode;
+}) {
   const [creatorsOpen, setCreatorsOpen] = useState(false);
   const [postsOpen, setPostsOpen] = useState(false);
 
@@ -479,6 +486,8 @@ export default function TrendingRail({ className }: { className?: string }) {
           className
         )}
       >
+        {top ? <div className="shrink-0">{top}</div> : null}
+
         <section>
           <SectionHeading icon={Users}>Trending creators</SectionHeading>
           {creatorsQ.isError ? (

@@ -1,8 +1,8 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Navbar } from "@/components/landing";
-import HomeFeed from "@/components/feed/HomeFeed";
+import ExploreHome from "@/components/feed/ExploreHome";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 function HomeShell({ children }: { children: ReactNode }) {
@@ -14,7 +14,7 @@ function HomeShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Home feed is public; guests get anonymous /feed (recent → suggested). */
+/** Home: Posts feed + Place Directory tabs; sidebar always visible. */
 export default function HomePage() {
   const hydrated = useHydrated();
 
@@ -31,7 +31,15 @@ export default function HomePage() {
   return (
     <HomeShell>
       <div className="pt-20">
-        <HomeFeed />
+        <Suspense
+          fallback={
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-fg-faint">
+              Loading…
+            </div>
+          }
+        >
+          <ExploreHome />
+        </Suspense>
       </div>
     </HomeShell>
   );

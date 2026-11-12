@@ -46,7 +46,7 @@ function readGeo(): Promise<{ lat: number; lng: number }> {
   });
 }
 
-export default function HomeFeed() {
+export default function HomeFeed({ bare = false }: { bare?: boolean }) {
   const { enabled: locationEnabled } = useLocationPreference();
   const [geo, setGeo] = useState<GeoState>({ status: "pending" });
   const [geoTick, setGeoTick] = useState(0);
@@ -147,16 +147,17 @@ export default function HomeFeed() {
         ? "no-geo"
         : "loc-off";
 
-  return (
-    <FeedShell>
-      <SnapFeed
-        key={feedKey}
-        embedded
-        initialPosts={feedData.posts}
-        initialPhase={feedData.phase}
-        nextCursor={feedData.next_cursor}
-        onLoadMore={onLoadMore}
-      />
-    </FeedShell>
+  const feed = (
+    <SnapFeed
+      key={feedKey}
+      embedded
+      initialPosts={feedData.posts}
+      initialPhase={feedData.phase}
+      nextCursor={feedData.next_cursor}
+      onLoadMore={onLoadMore}
+    />
   );
+
+  if (bare) return feed;
+  return <FeedShell>{feed}</FeedShell>;
 }

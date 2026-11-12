@@ -1,24 +1,10 @@
 # YetBota
 
-Crowdsourced **location discovery** — people pin real places with photos, short video, or audio, follow each other, ask questions, and browse a place directory that AI keeps organized over time.
+YetBota is a crowdsourced **location discovery** platform: people publish place-first reports (a place name, map pin, caption/hashtags, and photos, short video, or audio) so others can learn what a spot is actually like before they go.
 
-Guests can explore feeds, profiles, places, and Q&A. Signing in unlocks compose, follow, reactions, bookmarks, and reputation.
+It is not a generic social network with optional geo. Every post is about a real place. Those reports power a ranked feed (people you follow and places near you, then broader discovery), a **place directory** that merges same-location posts and keeps AI summaries and tip/change/important notes up to date, Stack Overflow-style **Q&A** tied to posts or map pins, and a **reputation** system so useful local contributors rise. An **assistant** answers questions using the community corpus (posts, comments, questions, answers) via RAG.
 
----
-
-## Product idea
-
-YetBota treats every post as a **place-first** report: a title (place name), coordinates, caption/hashtags, and media. The product is not a generic social feed with optional location — location *is* the content model.
-
-Around that core:
-
-- **Social graph** — follow people whose places you care about; home feed blends in-network and nearby posts, then falls through to suggested ranking.
-- **Engagement & reputation** — likes, comments, shares, and bookmarks feed both post ranking and a user reputation ledger with levels and badges.
-- **Community Q&A** — Stack Overflow–style questions (optionally tied to a post or map pin) with answers and votes.
-- **Place directory** — one Place per real-world location; posts attach via geo + name + embedding match; AI summaries and tip/change/important entries stay current as new reports land.
-- **Assistant** — RAG chat grounded in ingested posts, comments, questions, and answers.
-
-The product target is practical local knowledge (hotels, cafés, civic landmarks, “what changed”) more than viral short-form for its own sake.
+The goal is practical local knowledge (hotels, cafés, landmarks, “what changed”), not viral short-form for its own sake.
 
 ---
 
@@ -87,10 +73,10 @@ Cross-service auth: content and AI validate access tokens by calling identity **
 
 | Store | Role |
 | --- | --- |
-| **PostgreSQL** | Shared cluster, service-owned tables — users/auth/reputation (identity); posts, media, engagement, Q&A, places (content); AI-side relational needs |
-| **SurrealDB** | Shared graph — `user→follows→user`; post embeddings and `similar` edges; content embeddings for chat RAG |
+| **PostgreSQL** | Shared cluster, service-owned tables: users/auth/reputation (identity); posts, media, engagement, Q&A, places (content); AI-side relational needs |
+| **SurrealDB** | Shared graph: `user→follows→user`; post embeddings and `similar` edges; content embeddings for chat RAG |
 | **RabbitMQ** | `*.created` / `*.updated` (post, comment, question, answer) → `ai.content.ingest` |
-| **Cloudinary** | Binary media — client uploads with signatures from identity (avatars) or content (`/media/sign`) |
+| **Cloudinary** | Binary media: client uploads with signatures from identity (avatars) or content (`/media/sign`) |
 
 ### Go service shape
 
@@ -134,14 +120,14 @@ Next.js App Router, TypeScript, Tailwind, RTK Query talking **directly** to iden
 
 ## Deep dive: feed ranking
 
-Home discovery is a **two-phase, non-ML** ranker on content-service (`GET /feed`). No personalized model — configurable heuristics only.
+Home discovery is a **two-phase, non-ML** ranker on content-service (`GET /feed`). No personalized model: configurable heuristics only.
 
 **Phase `home`.** Candidate pools are merged and de-duplicated:
 
 1. Posts from people you follow (Surreal follow graph; empty graph → recent global), and  
 2. Optional **nearby** posts within a configurable radius when the client sends lat/lng.
 
-Candidates are limited by a lookback window (default ~14 days) and a pool-size cap, then scored with Hacker News–style gravity plus YetBota boosts:
+Candidates are limited by a lookback window (default ~14 days) and a pool-size cap, then scored with Hacker News-style gravity plus YetBota boosts:
 
 ```text
 engagement = likes + w_c·comments + w_s·shares (+ bookmark weight where configured)
@@ -174,7 +160,7 @@ Reputation is **earned from how others engage with your posts**, not from self-a
 
 Intuition: fresher, higher-signal actions (comment / share / bookmark weighted above a like) move the needle more than old likes. Feed ranking still uses denormalized post counters; reputation is a separate author-level ledger.
 
-Levels are display bands over the synced score (e.g. Contributor / Local Guide / Pathfinder thresholds). Identity never re-derives the event log — content remains the source of interaction truth.
+Levels are display bands over the synced score (e.g. Contributor / Local Guide / Pathfinder thresholds). Identity never re-derives the event log; content remains the source of interaction truth.
 
 ---
 
@@ -187,7 +173,7 @@ AI work is **event-driven**. content-service publishes `*.created` / `*.updated`
 1. Load the entity from Postgres (post, comment, question, or answer).  
 2. Embed text (default Gemini embeddings; optional local MiniLM).  
 3. Upsert into Surreal `content_embedding` (typed by `kind` / `entity_id` / parent) for **RAG chat**.  
-4. For **posts only**, also upsert `post_embedding`, find cosine neighbors above a min score, and replace outbound `similar` edges — this powers **Related posts**, separate from place identity.
+4. For **posts only**, also upsert `post_embedding`, find cosine neighbors above a min score, and replace outbound `similar` edges; this powers **Related posts**, separate from place identity.
 
 **Place directory (posts)**
 
@@ -207,7 +193,7 @@ On attach (and when membership/entries change), AI refreshes the Place **summary
 # Infra
 cd backend && make db-up
 
-# APIs (identity :8081, content :8082, ai :8083) — hot reload
+# APIs (identity :8081, content :8082, ai :8083) - hot reload
 make up
 # or: make run   # if deps already up
 
